@@ -1,0 +1,447 @@
+import { db } from './index.js';
+import { createField, createTemplate, setActiveTemplate, type FieldInput } from '../repo/templates.js';
+
+/**
+ * Fiche d'exploitation livrée par défaut.
+ *
+ * Elle couvre la trame classique d'une thèse de médecine (identité,
+ * antécédents, clinique, paraclinique, prise en charge, évolution) et sert
+ * surtout d'exemple de paramétrage : chaque type de règle y est illustré.
+ * Elle est entièrement modifiable depuis l'interface.
+ */
+/**
+ * Mentions qui ne concernent pas le patient : antécédents familiaux, proches.
+ * « Sa mère est diabétique » ne dit rien du diabète du patient, et ne doit pas
+ * non plus valoir « Non » comme une négation — d'où `skip`, distinct de `none`.
+ */
+const PROCHES = [
+  'mere', 'pere', 'frere', 'soeur', 'fils', 'fille', 'parents', 'enfants', 'epouse', 'epoux',
+  'grand-pere', 'grand-mere', 'oncle', 'tante', 'famille', 'familial', 'familiale', 'familiaux',
+];
+
+/** Négations qui précèdent un terme dans un compte rendu (« non diabétique », « ni HTA »). */
+const NEGATIONS = ['pas de', 'absence de', 'sans', 'aucun', 'aucune', 'non', 'ni', 'jamais'];
+
+const DEFAULT_FIELDS: FieldInput[] = [
+  // ---------------------------------------------------------------- Identité
+  {
+    key: 'numero_dossier',
+    label: 'Numéro de dossier',
+    type: 'text',
+    section: 'Identité',
+    description: "Identifiant du dossier tel qu'il figure sur le compte rendu.",
+    extraction: {
+      enabled: true,
+      rules: [
+        { kind: 'label', labels: ['N° dossier', 'Numéro de dossier', 'Dossier n°', 'IPP'], maxLength: 30 },
+        { kind: 'dicom', tag: 'PatientID' },
+      ],
+    },
+  },
+  {
+    key: 'age',
+    label: 'Âge',
+    type: 'integer',
+    section: 'Identité',
+    unit: 'ans',
+    required: true,
+    extraction: {
+      enabled: true,
+      rules: [
+        { kind: 'label', labels: ['Âge', 'Age'], maxLength: 20 },
+        { kind: 'regex', pattern: '(?:patient|patiente|malade)\\s+(?:âgée?\\s+)?de\\s+(\\d{1,3})\\s*ans' },
+        // Repli : « 54 ans » seul. Ne lit ni « depuis 5 ans », ni « il y a 5 ans », ni
+        // « 20 ans de tabagisme » : ce sont des durées, pas l'âge du patient.
+        { kind: 'regex', pattern: '(?<!\\d)(?<!depuis\\s|il y a\\s|pendant\\s|pour\\s|evoluant depuis\\s)(\\d{1,3})\\s*ans\\b(?!\\s+(?:d\\x27|de\\s|d\\s|d\\u2019))' },
+        { kind: 'dicom', tag: 'PatientAge' },
+      ],
+      // Bornes de plausibilité : évite de capturer « 120 ans d'évolution ».
+      postProcess: { min: 0, max: 120 },
+    },
+  },
+  {
+    key: 'sexe',
+    label: 'Sexe',
+    type: 'enum',
+    section: 'Identité',
+    options: ['Masculin', 'Féminin'],
+    required: true,
+    extraction: {
+      enabled: true,
+      rules: [
+        { kind: 'label', labels: ['Sexe', 'Genre'], maxLength: 20 },
+        { kind: 'dicom', tag: 'PatientSex' },
+        // Mots entiers : « mme » ne se lit plus dans « homme ». « patient » seul est
+        // omis : le masculin y est générique, et un sexe inventé vaut moins qu'un vide.
+        { kind: 'keyword', any: ['patiente', 'madame', 'mme', 'une femme', 'femme de', 'femme enceinte'], emit: 'Féminin' },
+        { kind: 'keyword', any: ['monsieur', 'mr', 'm.', 'un homme', 'homme de'], emit: 'Masculin' },
+      ],
+      postProcess: {
+        valueMap: {
+          m: 'Masculin', h: 'Masculin', homme: 'Masculin', masculin: 'Masculin', male: 'Masculin',
+          f: 'Féminin', femme: 'Féminin', feminin: 'Féminin', female: 'Féminin',
+        },
+      },
+    },
+  },
+  {
+    key: 'date_admission',
+    label: "Date d'admission",
+    type: 'date',
+    section: 'Identité',
+    extraction: {
+      enabled: true,
+      rules: [
+        { kind: 'label', labels: ["Date d'admission", 'Admission le', 'Admis le', 'Admise le', "Date d'entrée"], maxLength: 40 },
+        { kind: 'dicom', tag: 'StudyDate' },
+      ],
+    },
+  },
+
+  // ----------------------------------------------------------- Antécédents
+  {
+    key: 'diabete',
+    label: 'Diabète',
+    type: 'boolean',
+    section: 'Antécédents',
+    extraction: {
+      enabled: true,
+      rules: [
+        { kind: 'label', labels: ['Diabète', 'Diabete'], maxLength: 30 },
+        {
+          kind: 'keyword',
+          any: ['diabete', 'diabétique', 'diabetique'],
+          // Évite le faux positif sur « pas de diabète », très fréquent.
+          none: NEGATIONS,
+          skip: PROCHES,
+          emit: true,
+          // « Pas de diabète » documente une absence : c'est un « Non », pas
+          // une donnée manquante.
+          emitIfNegated: false,
+        },
+      ],
+    },
+  },
+  {
+    key: 'hta',
+    label: 'HTA',
+    type: 'boolean',
+    section: 'Antécédents',
+    description: 'Hypertension artérielle connue.',
+    extraction: {
+      enabled: true,
+      rules: [
+        { kind: 'label', labels: ['HTA', 'Hypertension'], maxLength: 30 },
+        {
+          kind: 'keyword',
+          any: ['hta', 'hypertension arterielle', 'hypertendu', 'hypertendue'],
+          none: NEGATIONS,
+          skip: PROCHES,
+          emit: true,
+          emitIfNegated: false,
+        },
+      ],
+    },
+  },
+  {
+    key: 'tabagisme',
+    label: 'Tabagisme',
+    type: 'boolean',
+    section: 'Antécédents',
+    extraction: {
+      enabled: true,
+      rules: [
+        { kind: 'label', labels: ['Tabagisme', 'Tabac'], maxLength: 30 },
+        {
+          kind: 'keyword',
+          any: ['tabagique', 'tabagisme', 'fumeur', 'fumeuse'],
+          none: [...NEGATIONS, 'sevre'],
+          skip: PROCHES,
+          emit: true,
+          emitIfNegated: false,
+        },
+      ],
+    },
+  },
+  {
+    key: 'antecedents_libre',
+    label: 'Antécédents (texte libre)',
+    type: 'text',
+    section: 'Antécédents',
+    extraction: {
+      enabled: true,
+      rules: [
+        { kind: 'label', labels: ['Antécédents', 'Antecedents', 'ATCD', 'Antécédents personnels'], maxLength: 300 },
+      ],
+    },
+  },
+
+  // -------------------------------------------------------------- Clinique
+  {
+    key: 'motif_consultation',
+    label: 'Motif de consultation',
+    type: 'text',
+    section: 'Clinique',
+    extraction: {
+      enabled: true,
+      rules: [
+        { kind: 'label', labels: ["Motif d'hospitalisation", 'Motif de consultation', 'Motif', "Motif d'admission"], maxLength: 200 },
+      ],
+    },
+  },
+  {
+    key: 'delai_consultation',
+    label: 'Délai de consultation',
+    type: 'number',
+    section: 'Clinique',
+    unit: 'jours',
+    extraction: {
+      enabled: true,
+      rules: [
+        { kind: 'label', labels: ['Délai de consultation', 'Délai'], maxLength: 30 },
+        { kind: 'regex', pattern: 'évoluant\\s+depuis\\s+(\\d+)\\s*jours?' },
+      ],
+    },
+  },
+  {
+    key: 'fievre',
+    label: 'Fièvre',
+    type: 'boolean',
+    section: 'Clinique',
+    extraction: {
+      enabled: true,
+      rules: [
+        { kind: 'label', labels: ['Fièvre', 'Fievre'], maxLength: 30 },
+        {
+          kind: 'keyword',
+          any: ['fievre', 'febrile', 'fébrile'],
+          none: [...NEGATIONS, 'apyre'],
+          emit: true,
+          emitIfNegated: false,
+        },
+      ],
+    },
+  },
+  {
+    key: 'temperature',
+    label: 'Température',
+    type: 'number',
+    section: 'Clinique',
+    unit: '°C',
+    extraction: {
+      enabled: true,
+      rules: [
+        { kind: 'label', labels: ['Température', 'Temperature', 'T°', 'TC'], maxLength: 20 },
+        { kind: 'regex', pattern: '(\\d{2}[.,]\\d)\\s*°?\\s*c\\b' },
+      ],
+      postProcess: { min: 30, max: 45 },
+    },
+  },
+
+  // ---------------------------------------------------------- Paraclinique
+  {
+    key: 'hemoglobine',
+    label: 'Hémoglobine',
+    type: 'number',
+    section: 'Paraclinique',
+    unit: 'g/dL',
+    extraction: {
+      enabled: true,
+      rules: [
+        { kind: 'label', labels: ['Hémoglobine', 'Hemoglobine', 'Hb', 'HGB'], maxLength: 25 },
+      ],
+      postProcess: { min: 1, max: 25 },
+    },
+  },
+  {
+    key: 'globules_blancs',
+    label: 'Globules blancs',
+    type: 'number',
+    section: 'Paraclinique',
+    unit: '10³/mm³',
+    extraction: {
+      enabled: true,
+      rules: [
+        { kind: 'label', labels: ['Globules blancs', 'GB', 'Leucocytes', 'WBC'], maxLength: 25 },
+      ],
+      postProcess: { min: 0, max: 200 },
+    },
+  },
+  {
+    key: 'crp',
+    label: 'CRP',
+    type: 'number',
+    section: 'Paraclinique',
+    unit: 'mg/L',
+    extraction: {
+      enabled: true,
+      rules: [
+        { kind: 'label', labels: ['CRP', 'C-réactive', 'Protéine C réactive'], maxLength: 25 },
+      ],
+      postProcess: { min: 0, max: 600 },
+    },
+  },
+  {
+    key: 'creatinine',
+    label: 'Créatinine',
+    type: 'number',
+    section: 'Paraclinique',
+    unit: 'mg/L',
+    extraction: {
+      enabled: true,
+      rules: [{ kind: 'label', labels: ['Créatinine', 'Creatinine', 'Créat'], maxLength: 25 }],
+      postProcess: { min: 0, max: 200 },
+    },
+  },
+  {
+    key: 'modalite_imagerie',
+    label: 'Modalité d’imagerie',
+    type: 'multi',
+    section: 'Paraclinique',
+    options: ['Radiographie', 'Échographie', 'Scanner', 'IRM', 'Scintigraphie', 'TEP'],
+    description: "Renseignée automatiquement à partir des fichiers DICOM importés.",
+    extraction: {
+      enabled: true,
+      rules: [
+        { kind: 'dicom', tag: 'Modality' },
+        { kind: 'label', labels: ['Imagerie', 'Examen réalisé'], maxLength: 120 },
+        { kind: 'keyword', any: ['scanner', 'tdm', 'tomodensitometrie'], emit: 'Scanner' },
+        { kind: 'keyword', any: ['irm', 'imagerie par resonance'], emit: 'IRM' },
+        { kind: 'keyword', any: ['echographie', 'echo-doppler'], emit: 'Échographie' },
+      ],
+      postProcess: {
+        // Codes de modalité DICOM vers libellés de la fiche.
+        valueMap: {
+          CT: 'Scanner', MR: 'IRM', US: 'Échographie', CR: 'Radiographie',
+          DX: 'Radiographie', RF: 'Radiographie', XA: 'Radiographie',
+          NM: 'Scintigraphie', PT: 'TEP', MG: 'Radiographie',
+          TDM: 'Scanner', scanner: 'Scanner', irm: 'IRM',
+        },
+      },
+    },
+  },
+  {
+    key: 'date_imagerie',
+    label: "Date de l'imagerie",
+    type: 'date',
+    section: 'Paraclinique',
+    extraction: {
+      enabled: true,
+      rules: [
+        { kind: 'dicom', tag: 'StudyDate' },
+        { kind: 'label', labels: ["Date de l'examen", "Date de l'imagerie"], maxLength: 40 },
+      ],
+    },
+  },
+
+  // ------------------------------------------------------- Prise en charge
+  {
+    key: 'traitement',
+    label: 'Traitement',
+    type: 'multi',
+    section: 'Prise en charge',
+    options: ['Médical', 'Chirurgical', 'Endoscopique', 'Radiothérapie', 'Chimiothérapie', 'Abstention'],
+    extraction: {
+      enabled: true,
+      rules: [
+        { kind: 'label', labels: ['Traitement', 'Prise en charge', 'Conduite à tenir', 'CAT'], maxLength: 200 },
+        {
+          kind: 'keyword',
+          any: ['intervention chirurgicale', 'opere', 'operee', 'chirurgie'],
+          // « Antécédent de chirurgie » n'est pas le traitement de cette prise en charge.
+          skip: ['antecedent', 'antecedents', 'atcd', 'ancien', 'ancienne'],
+          emit: 'Chirurgical',
+        },
+        { kind: 'keyword', any: ['chimiotherapie'], emit: 'Chimiothérapie' },
+        { kind: 'keyword', any: ['radiotherapie'], emit: 'Radiothérapie' },
+      ],
+      postProcess: {
+        valueMap: {
+          medical: 'Médical', chirurgie: 'Chirurgical', chirurgical: 'Chirurgical',
+          operatoire: 'Chirurgical', endoscopie: 'Endoscopique', surveillance: 'Abstention',
+        },
+      },
+    },
+  },
+  {
+    key: 'duree_hospitalisation',
+    label: "Durée d'hospitalisation",
+    type: 'number',
+    section: 'Évolution',
+    unit: 'jours',
+    extraction: {
+      enabled: true,
+      rules: [
+        { kind: 'label', labels: ["Durée d'hospitalisation", 'Durée de séjour', 'Séjour'], maxLength: 30 },
+        { kind: 'regex', pattern: 'hospitalis[ée]{1,2}\\s+pendant\\s+(\\d+)\\s*jours?' },
+      ],
+      postProcess: { min: 0, max: 400 },
+    },
+  },
+  {
+    key: 'complications',
+    label: 'Complications',
+    type: 'boolean',
+    section: 'Évolution',
+    extraction: {
+      enabled: true,
+      rules: [
+        { kind: 'label', labels: ['Complications', 'Complication'], maxLength: 120 },
+        {
+          kind: 'keyword',
+          any: ['complication'],
+          none: NEGATIONS,
+          emit: true,
+          emitIfNegated: false,
+        },
+      ],
+    },
+  },
+  {
+    key: 'evolution',
+    label: 'Évolution',
+    type: 'enum',
+    section: 'Évolution',
+    options: ['Favorable', 'Stationnaire', 'Défavorable', 'Décès', 'Perdu de vue'],
+    extraction: {
+      enabled: true,
+      rules: [
+        { kind: 'label', labels: ['Évolution', 'Evolution', 'Devenir'], maxLength: 80 },
+        {
+          kind: 'keyword',
+          any: ['deces', 'décédé', 'decede', 'decedee'],
+          none: ['pas de', 'aucun', 'sans', 'risque de', 'non'],
+          skip: PROCHES,
+          emit: 'Décès',
+        },
+        { kind: 'keyword', any: ['perdu de vue'], emit: 'Perdu de vue' },
+      ],
+      postProcess: {
+        valueMap: {
+          bonne: 'Favorable', favorable: 'Favorable', simple: 'Favorable',
+          stable: 'Stationnaire', stationnaire: 'Stationnaire',
+          defavorable: 'Défavorable', mauvaise: 'Défavorable',
+          deces: 'Décès', mort: 'Décès',
+        },
+      },
+    },
+  },
+];
+
+/** Crée la fiche par défaut au premier démarrage, sur une base vide. */
+export function seedIfEmpty(): void {
+  const count = (db.prepare('SELECT COUNT(*) AS n FROM templates').get() as { n: number }).n;
+  if (count > 0) return;
+
+  const template = createTemplate({
+    name: "Fiche d'exploitation générale",
+    description:
+      "Trame par défaut : identité, antécédents, clinique, paraclinique, prise en charge et évolution. " +
+      'À adapter au protocole de votre étude.',
+  });
+
+  for (const field of DEFAULT_FIELDS) {
+    createField(template.id, field);
+  }
+  setActiveTemplate(template.id);
+}

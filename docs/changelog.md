@@ -1,0 +1,131 @@
+# Journal des versions
+
+Le format suit l'ordre des versions, de la plus récente à la plus ancienne ; l'historique git de ce dépôt commence à la 1.2.0, les versions antérieures n'y sont décrites qu'ici. Les numéros de version sont ceux de `package.json` ; le rapport « Méthodes et traçabilité » consigne la version qui a produit un jeu de données.
+
+## 1.2.0 — 10 octobre 2026
+
+**PubResearcher.** L'application change de nom — « Research Tool » dans les paquets, la bannière de démarrage et le domaine d'authentification, « Espace de recherche » à l'écran — et d'identité visuelle : indigo nuit, poussière d'or, bleu pervenche, police Poppins. [Description de la charte](identite-visuelle.md).
+
+**Aucun changement du moteur d'extraction, du schéma de la base, ni des routes de l'API** (seul le nom du domaine d'authentification change, voir plus bas). Une base, une fiche ou une sauvegarde de la 1.1.0 s'ouvre telle quelle ; les noms de fichiers de données (`research-tool.db`, `.research-tool.lock`, `research-tool-sauvegarde-…`) sont conservés pour cela. Les extractions refaites donnent les mêmes valeurs qu'en 1.1.0.
+
+### Interface
+
+- **Charte** refondue : jetons de couleur des deux thèmes, police **Poppins** embarquée (quatre graisses, licence SIL OFL jointe : rien n'est téléchargé), cartes à grands rayons, ombres diffuses teintées d'indigo, étiquettes en capitales espacées.
+- **Carte d'en-tête** du plan de travail : dégradé indigo traversé d'un arc d'or poudré (image générée de façon déterministe : `scripts/make-hero-art.mjs`), mode d'extraction en pastille, chiffres-clés en pastilles de verre.
+- **Rail d'outils** en pastille de verre sombre, l'outil courant allumé en bleu pervenche. Sous 1 000 px, il devient une **pastille flottante** au bas de l'écran (libellés courts, défilement horizontal, outil courant recentré) ; les zones collées au bas de l'écran (barre d'enregistrement, saisie de la rédaction, notifications) se décalent d'autant.
+- **Tuiles de chiffres** : valeur en gras et centrée, libellé dessous ; deux par ligne sur écran étroit.
+- **Marque** : médaillon et mot-symbole « Pub » / « Researcher » dessinés en SVG, icône d'onglet. Le mécanisme de logo institutionnel (`web/public/logo-hopital.*`) est retiré : le dépôt ne contient plus aucune marque tierce.
+- La barre supérieure et les titres d'onglet portent le nouveau nom.
+
+### Textes et exports
+
+- Bannière de démarrage « PubResearcher 1.2.0 — prêt sur … » ; domaine d'authentification HTTP Basic `PubResearcher`.
+- Le rapport « Méthodes et traçabilité » nomme l'application **PubResearcher** (paragraphe « Méthodes » et tableau des versions) : un rapport généré par la 1.1.0 dit « Research Tool ».
+- Le diaporama de figures (PPTX) et le rapport HTML reprennent les couleurs de la charte (bleu pervenche à la place du vert).
+
+### Paquets et outillage
+
+- Paquets npm renommés `pubresearcher`, `@pubresearcher/server`, `@pubresearcher/web` ; commandes inchangées (`npm start`, `npm test`…).
+- Tests : le contrôle des contrastes couvre désormais le rail, la carte d'en-tête, les boutons pleins et les couples propres aux composants (13 tests au lieu de 7) ; 690 tests en tout (684 en 1.1.0).
+- Les sorties Apify enregistrées pour les tests (`server/test/apify-fixtures/`) ne contiennent plus les adresses électroniques d'auteurs qu'elles portaient : des données de tiers, inutiles aux tests.
+- Nouveau : `docs/identite-visuelle.md` (la charte), `scripts/make-hero-art.mjs` (l'illustration d'en-tête, déterministe), `docs/img/social-preview.png` (carte de partage du dépôt).
+- Validation : le rapport (`docs/validation.md`) distingue les mesures de la 1.1.0 de ce qui a été rejoué pour la 1.2.0 (§ 1.2) et décrit la refonte (§ 9). Parmi les défauts que ces contrôles ont fait corriger, un contraste de 3,3:1 sur le compteur de l'outil actif du rail, que l'audit automatisé ne détecte pas (fond en dégradé translucide).
+
+## 1.1.0 — 9 octobre 2026
+
+Révision complète pour l'usage en recherche : fiabilité des données, durcissement, accessibilité, documentation.
+
+**Un changement de comportement à connaître.** L'outil n'écoute plus que sur le poste (`HOST=127.0.0.1`) ; la 1.0.0 écoutait sur toutes les interfaces. Pour l'ouvrir au réseau, il faut le demander (`HOST=0.0.0.0`) et, de préférence, fixer `APP_PASSWORD` (guide de l'administrateur, § 5). Derrière un proxy inverse qui relaie vers le poste, le nom public doit être déclaré (`ALLOWED_HOSTS`), sans quoi l'outil répond 403.
+
+**Côté données, aucune rupture** : une base créée par la 1.0.0 monte seule vers le schéma 1 au premier démarrage, et reste relisible par la 1.0.0 (une migration ajoute des colonnes facultatives et des tables, elle ne retire ni ne renomme rien).
+
+**Des extractions plus justes, donc parfois différentes.** Le moteur est plus strict (mots entiers, négations, valeurs seuil, unités) : réextraire un corpus avec la 1.1.0 peut donner d'autres valeurs que la 1.0.0, et c'est voulu. Le rapport « Méthodes et traçabilité » consigne la version de l'outil de chaque passe.
+
+### Ce que le chercheur y gagne
+
+**Relecture traçable.**
+- *Confirmer*, *corriger*, *vider* ou *rendre la main* à l'extraction : une valeur relue garde ce que la machine avait proposé. Vider une valeur est une décision qui survit aux passes suivantes.
+- **Historique** par variable : chaque événement (passe, relecture) avec l'ancienne et la nouvelle valeur.
+- Saisie contrôlée : entier à virgule refusé (plus d'arrondi silencieux), dates du calendrier réel (pas de 31 février), nombres avec virgule ou point quelle que soit la langue du navigateur (« 12,5 » n'est plus lu 125), **bornes de plausibilité à confirmer** (« Valeur inhabituelle »), brouillons conservés, garde à la fermeture.
+- **Une passe ne retire que ce qu'elle a pu produire** : une passe « règles seules » laisse intactes les valeurs proposées par Claude, et un appel à Claude qui échoue n'efface pas celles d'une passe précédente.
+
+**Mesure de la fiabilité.**
+- Page *Fiabilité* : concordance (précision) et rappel, avec intervalle de Wilson à 95 %, global et par variable, calculés à partir des gestes de relecture.
+- Rapport **« Méthodes et traçabilité »** (Markdown, HTML autonome, JSON ; français, anglais) : corpus, fiche et son **empreinte SHA-256**, passes (nombre total, première et dernière, moteurs et modèles employés, détail des 25 plus récentes), origine des valeurs, fiabilité, journal, versions logicielles, limites, et un paragraphe « Méthodes » rédigé avec les chiffres de la base.
+- **Journal d'audit** (CSV) : chaque changement de valeur, avant/après, origine, passe. Aucune fonction de l'outil ne le modifie ; il ne disparaît qu'avec le dossier, la variable ou la fiche concernés.
+- **Journal des passes** : fiche (empreinte), mode, modèle, version de l'outil, effectifs.
+
+**Moteur d'extraction plus juste.**
+- Mots entiers pour les sigles (« mme » n'est plus trouvé dans « homme », « hta » n'est plus « HTAP »).
+- Négations : limitées à la proposition, prolongées par « ni », lues aussi après le terme (« diabète : non », « HTA exclue »), sans contaminer « non insulinodépendant ».
+- **Contextes à ignorer** (antécédents familiaux) : ni affirmés ni niés.
+- **Valeurs seuil** (« CRP < 5 ») écartées au lieu d'être lues « 5 » ; **unités de temps** différentes (« 6 mois » pour des ans) écartées ; **unités courantes différentes** (« 85 µmol/L » pour du mg/L) écartées et signalées ; entier décimal écarté.
+- Choix multiples reconnus avec leurs liaisons (« scanner et IRM »), sans doublon d'une option contenue dans une autre.
+- **Valeurs écartées visibles** : le banc d'essai de l'éditeur, le bilan de passe (page Extraction et page Dossiers) et la relecture montrent ce qui a été trouvé puis refusé, avec la raison — une variable vide n'est plus ambiguë. Le banc d'essai applique l'unité en cours d'édition, même non enregistrée.
+- Nombres : `1.200,5`, `1,200.5`, `12 500` ; signe moins collé conservé (« -3,2 »).
+- Apostrophes : l'apostrophe droite et celle que Word insère (’) sont équivalentes dans les libellés, les termes et les expressions régulières.
+- **Expressions régulières surveillées** : un motif catastrophique (`(\w+\s?)+:`) ne fige plus le serveur ; interrompu, il est écarté avec sa raison.
+
+**Import.**
+- **OCR des pages scannées d'un PDF** (jusqu'à 30 pages par document, réglable), avec bandeau « texte reconnu par OCR » à la relecture.
+- Texte brut, RTF, HTML ; encodage détecté (UTF-8, Windows-1252, UTF-16).
+- Noms de fichier en UTF-8 (« opératoire », plus « opÃ©ratoire »).
+- Dossiers déposés : détection d'une **cohorte** (un sous-dossier = un patient) et choix explicite si la forme est ambiguë.
+- Doublons par empreinte, y compris sur deux envois simultanés. **Supprimer un dossier supprime aussi ses fichiers.**
+- Fichier vide refusé ; messages d'échec de lecture traduits et sans fuite technique.
+- **Un document lu en partie le dit** (texte tronqué au plafond, pages PDF non lues) : au bilan d'import (« Importés, mais lus en partie »), puis en bandeau « Lecture incomplète » à la relecture — une coupure ne passe plus pour une absence de valeur.
+- **Un fichier trop gros ne fait plus échouer les autres** : si le serveur refuse un lot en bloc, ses fichiers repartent un par un ; seul le fautif est signalé, avec la variable à relever (`MAX_UPLOAD_BYTES`).
+
+**Exports.**
+- Virgule décimale cohérente (CSV, Excel, graphiques, diaporama), en-têtes en clair complets (y compris les trois premières colonnes), dictionnaire avec type lisible (`type_libelle`), noms de fichiers sans répétition.
+- Exports bibliographiques **complets** (au-delà de 1 000 notices) et nommés d'après leur contenu.
+- Le rapport « Méthodes et traçabilité » et le journal d'audit rejoignent les exports ; le compteur « formats de sortie » du plan de travail est tiré de la liste réelle.
+
+**Revue bibliographique.** Recherche dans la bibliothèque en plusieurs mots, sans accents ni casse, entre guillemets pour une expression ; sources et exports mieux libellés.
+
+### Ce que l'administrateur y gagne
+
+- **Écoute sur le poste par défaut** (`HOST=127.0.0.1`) ; avertissement net si le réseau est ouvert sans mot de passe ; **`APP_PASSWORD`** (HTTP Basic, comparaison à temps constant, blocage après dix échecs en cinq minutes) ; `TRUST_PROXY`, `ALLOWED_HOSTS`, `ALLOWED_ORIGINS`.
+- **Garde des requêtes** : liste blanche des noms d'hôte (anti « DNS rebinding »), refus des écritures venues d'un autre site (anti-CSRF).
+- En-têtes de sécurité et CSP stricte ; `Cache-Control: no-store` sur l'API.
+- **Sauvegarde et restauration vérifiables** (`npm run backup` / `restore`, disponibles aussi depuis la racine du projet, ainsi que `npm run demo`) : instantané cohérent pendant que l'outil tourne, manifeste d'empreintes, restauration refusée si la sauvegarde est altérée, données remplacées mises de côté.
+- **Démarrage sans piège** : `npm start` vérifie la version de Node et compile l'application à la première utilisation (avant, démarrer sans avoir compilé donnait une trace « Cannot find module » que rien n'expliquait) ; `lancer.bat` (Windows) et `lancer.command` (macOS, Linux) installent, démarrent et ouvrent le navigateur en un double-clic (essayés sous Linux seulement).
+- **Un seul processus par dossier de données** (verrou) ; démarrage vérifié (Node ≥ 22.13, dossier inscriptible, base ouvrable, configuration valide) avec un message qui dit quoi corriger plutôt qu'une trace de pile ; `GET /api/health` qui interroge réellement la base.
+- **Arrêt propre** : à `SIGTERM` ou `SIGINT`, le serveur cesse d'accepter, laisse cinq secondes aux requêtes en cours, arrête les fils d'analyse et l'OCR, puis ramène le journal de la base dans le fichier principal. Après un arrêt normal, `research-tool.db` seul est complet (ni `-wal` ni `-shm`) : on peut le copier tel quel.
+- **Analyse des fichiers dans des fils séparés** : délai ferme, mémoire bornée, surveillance de croissance ; un PDF piégé (arbre de pages bouclé, flux qui se gonfle) échoue seul. Un document dont l'analyse échoue est enregistré en erreur **avec le motif**.
+- Plafonds explicites et réglables (pages PDF, texte, taille décompressée Word, mégapixels, simultanéité), chacun avec un message qui dit lequel et comment le relever. Les tailles s'écrivent en clair (« 20 ko », « 3,4 Mo »), jamais « 0 Mo ».
+- **Réglages d'environnement validés** : les 21 réglages numériques ont des bornes (`PORT=abc`, `MAX_TEXT_CHARS=0` ou `OCR_PDF_SCALE=9` arrêtent le démarrage avec la liste des valeurs refusées, au lieu d'être ignorés ou de produire un comportement imprévisible), ainsi que `LLM_EFFORT` ; identifiants d'URL strictement décimaux ; JSON trop gros → 413 ; corps mal formés → 400, jamais 500.
+- **Écritures atomiques** : une passe d'extraction ou une série de corrections tient en une transaction par dossier ; un arrêt brutal ne laisse jamais une fiche à moitié écrite (vérifié par 25 arrêts `kill -9`).
+- Migrations de schéma versionnées (`PRAGMA user_version`), base plus récente que l'outil refusée.
+- Réponses d'erreur **sans message SQL ni chemin disque** ; jeton Apify masqué sous toutes ses formes, clé de l'API Claude masquée dans les erreurs.
+- Délais HTTP adaptés (envoi de 200 Mo sur liaison lente : 30 min ; en-têtes : 60 s).
+- **Ce qui part chez Anthropic est réduit à l'utile** : le texte des documents est présenté à Claude comme « Document 1 », « Document 2 »… (ni code de dossier ni nom de fichier) ; l'assistant de rédaction ne reçoit que des agrégats, et pour une variable en texte libre, seulement des effectifs (« valeurs non transmises »). Le texte des documents, lui, part tel quel : il peut contenir des identifiants (voir [Sécurité et données personnelles](securite-et-donnees.md)).
+- **Versions de Node** : essayé de 22.13.0 à 26.11.1 (22.13.0, 22.22.2, 22.23.3, 24.21.0, 26.11.1). Deux défauts propres aux versions anciennes ont été corrigés : le décodeur `windows-1252` de Node 22.13 à 22.21 renvoie des caractères de contrôle pour les octets 0x80 à 0x9F (€, œ, guillemets…) — l'outil a sa propre table ; et l'ordre des événements d'un fil d'analyse n'est pas garanti, ce qui pouvait faire déclarer « indisponible » un fil qui démarrait.
+
+### Accessibilité et interface
+
+- Cible **WCAG 2.2 AA**, vérifiée par axe-core sur 8 pages × 4 largeurs (320, 390, 768, 1440 px) × 2 thèmes : 0 violation, 0 débordement horizontal, 0 erreur de console. Le contraste des jetons de couleur est vérifié par un test (texte ≥ 4,5:1 sur les six surfaces, bordure des champs et anneau de focus ≥ 3:1, thèmes clair, sombre et sombre du système identiques).
+- Lien d'évitement, un `h1` par vue, **onglets au clavier** (flèches, Début, Fin), fenêtres modales qui piègent le focus et le rendent, noms accessibles contextuels (« Supprimer le dossier PAT-001 »), zones de défilement focalisables et nommées, cibles ≥ 24 px, annonces vocales, titre d'onglet par outil et par dossier, `lang="en"` sur les résumés anglais, `prefers-reduced-motion`.
+- Libellés revus : apostrophe typographique (’) partout dans l'interface, accords (« 1 source testée »), plus de « Détail : » qui répète la consigne, plus de « Réessayer » sous « Dossier introuvable ».
+- Thème clair/sombre appliqué **avant** le premier rendu ; stockage du navigateur protégé (plus de page blanche en navigation privée stricte).
+- Double clic sur « Supprimer » : le second clic n'est plus une confirmation.
+- Pagination des listes longues (dossiers, bilans, tableau) ; 2 000 dossiers se chargent en 1 à 1,6 s.
+- Gros documents : le serveur reste réactif pendant l'extraction d'un texte de 50 Mo (gel maximal du serveur 23 s → 0,4 s et mémoire de pointe 3,3 Go → 346 Mo, mesurés avant et après correction ; le texte conservé est plafonné à 8 millions de caractères et signalé).
+
+### Dépendances
+
+`multer` 2.4, `@xmldom/xmldom` 0.8.15, `proxy-addr` 2.0.8, `qs`, `postcss`… : 9 avis → 3, les trois restants (modérés) viennent de la chaîne `mammoth` → `argparse` → `sprintf-js`, sans chemin atteignable. `react-router` reste en 7.18.2. Au 9 octobre 2026, `npm audit` : 3 modérés, 0 élevé.
+
+### Tests
+
+De 173 (README d'origine) à 684 tests répartis en 35 fichiers, dont 55 de durcissement de l'API (~3 000 requêtes hostiles), 33 d'isolation (sur de vrais fichiers piégés, puis sur des événements de fil simulés dans tous les ordres), 10 de démarrage en processus réel, un banc d'essai du moteur (88 cas à réponse connue, 0 valeur fausse). Voir le [rapport de validation](validation.md).
+
+### Documentation
+
+Guides du chercheur et de l'administrateur, référence de l'API, architecture, sécurité et données personnelles, méthodes et reproductibilité, rapport de validation, ce journal.
+
+---
+
+## 1.0.0 — 8 octobre 2026 (état reçu)
+
+Application d'exploitation de dossiers patients : import (Word, PDF, images, DICOM), fiche d'exploitation paramétrable, extraction par règles ou par Claude avec vérification des citations, relecture, résultats, export CSV, classeur Excel typé, diaporama de figures, dictionnaire des variables, fiche au format JSON, plus la page **Revue bibliographique** (PubMed et Google Scholar par acteurs Apify, dédoublonnage, tri PRISMA, exports RIS/BibTeX/CSV).

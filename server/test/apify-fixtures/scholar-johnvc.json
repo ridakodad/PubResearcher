@@ -1,0 +1,146 @@
+[
+  {
+    "_mode": "search",
+    "search_timestamp": "2026-10-08T19:35:37.006171Z",
+    "search_parameters": { "max_pages": 1, "mode": "search", "num": 5, "q": "HoLEP versus TURP benign prostatic hyperplasia", "hl": "en", "scisbd": "0", "as_sdt": "0", "filter": "1", "as_vis": "0", "as_rr": "0" },
+    "search_metadata_status": "Success",
+    "_query_index": 1,
+    "position": 1,
+    "result_id": "xym_Er5wurwJ",
+    "paper_title": "HoLEP: the gold standard for the surgical management of BPH in the 21st century",
+    "link": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4446381/",
+    "snippet": "… years, transurethral resection of the prostate (TURP) has … dysfunction in men with benign prostatic hyperplasia (BPH). … be lower for HoLEP compared to TURP, and post-HoLEP TUR …",
+    "publication_info": {
+      "summary": "J Michalak, D Tzou, J Funk - American journal of clinical and …, 2015 - pmc.ncbi.nlm.nih.gov",
+      "authors": [
+        { "name": "J Michalak" },
+        { "name": "D Tzou", "link": "https://scholar.google.com/citations?user=7QHfP9kAAAAJ&hl=en&num=5&oi=sra", "author_id": "7QHfP9kAAAAJ" },
+        { "name": "J Funk" }
+      ]
+    },
+    "resources": [
+      { "title": "", "file_format": "PDF" },
+      { "title": "nih.gov", "file_format": "PDF", "link": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4446381/pdf/ajceu0003-0036.pdf" }
+    ],
+    "inline_links": {
+      "cited_by_total": 239,
+      "cited_by_link": "https://scholar.google.com/scholar?cites=13599305986459249095&as_sdt=2005&sciodt=0,5&hl=en&num=5",
+      "cited_by_cites_id": "13599305986459249095",
+      "versions_total": 5,
+      "versions_link": "https://scholar.google.com/scholar?cluster=13599305986459249095&hl=en&num=5&as_sdt=0,5",
+      "versions_cluster_id": "13599305986459249095",
+      "related_pages_link": "https://scholar.google.com/scholar?q=related:xym_Er5wurwJ:scholar.google.com/&scioq=HoLEP+versus+TURP+benign+prostatic+hyperplasia&hl=en&num=5&as_sdt=0,5"
+    },
+    "_tier": "free",
+    "_tier_notice": "Free Apify account preview: 1 upstream API call, reduced result counts, and some fields or modes limited.",
+    "lite_actor_url": "https://apify.com/johnvc/google-scholar-lite-api"
+  },
+  {
+    "_mode": "search",
+    "search_timestamp": "2026-10-08T19:35:37.875711Z",
+    "search_metadata_status": "Success",
+    "_query_index": 1,
+    "position": 2,
+    "result_id": "yn-PnSKbf-8J",
+    "paper_title": "Comparison of holmium laser enucleation and transurethral resection of prostate in benign prostatic hyperplasia: a systematic review and meta-analysis",
+    "link": "https://journals.sagepub.com/doi/abs/10.1177/03000605231190763",
+    "snippet": "… of HoLEP and TURP. Their results showed that … 1 December 2022 that compared HOLEP and TURP. The search was … prostate” (or “HoLEP”), “transurethral resection of the prostate” (or “…",
+    "publication_info": {
+      "summary": "F Chen, Y Chen, Y Zou, Y Wang… - Journal of …, 2023 - journals.sagepub.com",
+      "authors": [{ "name": "F Chen" }, { "name": "Y Chen" }, { "name": "Y Zou" }, { "name": "Y Wang" }]
+    },
+    "resources": [
+      { "title": "", "file_format": "PDF" },
+      { "title": "sagepub.com", "file_format": "PDF", "link": "https://journals.sagepub.com/doi/pdf/10.1177/03000605231190763" },
+      { "title": "Full View", "link": "https://scholar.google.com/scholar?output=instlink&q=info:yn-PnSKbf-8J:scholar.google.com/&hl=en&num=5&as_sdt=0,5&scillfp=5337082980038294783&oi=lle" }
+    ],
+    "inline_links": {
+      "cited_by_total": 60,
+      "cited_by_link": "https://scholar.google.com/scholar?cites=17257682870081650634&as_sdt=2005&sciodt=0,5&hl=en&num=5",
+      "cited_by_cites_id": "17257682870081650634",
+      "versions_total": 4,
+      "versions_cluster_id": "17257682870081650634"
+    },
+    "_tier": "free"
+  },
+  {
+    "_mode": "search",
+    "search_timestamp": "2026-10-08T19:35:38.146059Z",
+    "search_metadata_status": "Success",
+    "_query_index": 1,
+    "position": 3,
+    "result_id": "_lPoDv86mtAJ",
+    "paper_title": "HoLEP: the new gold standard for surgical treatment of benign prostatic hyperplasia",
+    "link": "https://canjurol.com/html/free-articles/Cdn_JU28_I4S2_06_DrShveroS.pdf",
+    "snippet": "… -party administered survey among patients who underwent surgical treatment for BPH – HoLEP, TURP, photoselective vaporization of the prostate (PVP), transurethral incision of the …",
+    "publication_info": {
+      "summary": "A Shvero, B Calio, MR Humphreys, AK Das - Can J Urol, 2021 - canjurol.com",
+      "authors": [
+        { "name": "A Shvero", "link": "https://scholar.google.com/citations?user=L5NW-4sAAAAJ&hl=en&num=5&oi=sra", "author_id": "L5NW-4sAAAAJ" },
+        { "name": "B Calio" },
+        { "name": "MR Humphreys" },
+        { "name": "AK Das" }
+      ]
+    },
+    "resources": [
+      { "title": "", "file_format": "PDF" },
+      { "title": "canjurol.com", "file_format": "PDF", "link": "https://canjurol.com/html/free-articles/Cdn_JU28_I4S2_06_DrShveroS.pdf" }
+    ],
+    "inline_links": {
+      "cited_by_total": 171,
+      "cited_by_cites_id": "15031391573443630078",
+      "versions_total": 10,
+      "versions_cluster_id": "15031391573443630078"
+    },
+    "_tier": "free"
+  },
+  {
+    "_mode": "search",
+    "search_timestamp": "2026-10-08T19:35:38.234389Z",
+    "search_metadata_status": "Success",
+    "_query_index": 1,
+    "position": 4,
+    "result_id": "RTW8ldt8qZYJ",
+    "paper_title": "The efficacy and safety of HoLEP for benign prostatic hyperplasia with large volume: a systematic review and meta-analysis",
+    "link": "https://journals.sagepub.com/doi/abs/10.1177/15579883221113203",
+    "snippet": "… holmium laser enucleation of prostate (HoLEP) in the treatment of benign prostatic hyperplasia (BPH) … In our analysis, compared with B-TURP, HoLEP also presented better outcomes in …",
+    "publication_info": {
+      "summary": "F Sun, H Yao, X Bao, X Wang, D Wang… - American journal of …, 2022 - journals.sagepub.com",
+      "authors": [{ "name": "F Sun" }, { "name": "H Yao" }, { "name": "X Bao" }, { "name": "X Wang" }, { "name": "D Wang" }]
+    },
+    "resources": [
+      { "title": "", "file_format": "PDF" },
+      { "title": "sagepub.com", "file_format": "PDF", "link": "https://journals.sagepub.com/doi/pdf/10.1177/15579883221113203" }
+    ],
+    "inline_links": {
+      "cited_by_total": 75,
+      "cited_by_cites_id": "10856345659305112901",
+      "versions_total": 6,
+      "versions_cluster_id": "10856345659305112901"
+    },
+    "_tier": "free"
+  },
+  {
+    "_mode": "search",
+    "search_timestamp": "2026-10-08T19:35:38.371547Z",
+    "search_metadata_status": "Success",
+    "_query_index": 1,
+    "position": 5,
+    "result_id": "bRmlsjktvR0J",
+    "paper_title": "Current role of lasers in the treatment of benign prostatic hyperplasia (BPH)",
+    "link": "https://www.sciencedirect.com/science/article/pii/S0302283806003575",
+    "snippet": "… The rates of recatherisation, dysuria, urinary tract infection, incontinence, urethral strictures, and bladder-neck contractures are low and in the same range as in TURP and HoLEP. A …",
+    "publication_info": {
+      "summary": "RM Kuntz - European urology, 2006 - Elsevier",
+      "authors": [{ "name": "RM Kuntz" }]
+    },
+    "resources": [],
+    "inline_links": {
+      "cited_by_total": 368,
+      "cited_by_cites_id": "2142918723531774317",
+      "versions_total": 10,
+      "versions_cluster_id": "2142918723531774317"
+    },
+    "_tier": "free"
+  }
+]
