@@ -64,7 +64,7 @@ server/
     biblio/             Client Apify, adaptateurs par acteur, normalisation, exports RIS/BibTeX/CSV
     lib/                http, schemas (zod), security, csv, xlsx, pptx, zip, backup, data-lock, stats, report…
   scripts/              generate-demo.ts, backup.ts, restore.ts
-  test/                 35 fichiers de test (node:test)
+  test/                 37 fichiers de test (node:test), dont la logique de la page d'accueil
 web/
   src/
     App.tsx             Coquille : rail d'outils (pastille flottante sur écran étroit), routes
@@ -72,9 +72,16 @@ web/
     fonts/              Poppins (woff2, quatre graisses) et sa licence
     assets/             hero-dust.svg : illustration de la carte d'en-tête (générée)
     pages/              Une page par outil
-    components/         Marque, éditeurs (variable, règle, valeur), visionneuse de document, graphiques, biblio
-    lib/                Client d'API, types (dupliqués du serveur), formats, regroupement des dossiers déposés
+    components/         Marque, éditeurs (variable, règle, valeur), visionneuse de document, graphiques, biblio,
+                        AnonymisationGate (la charte devant tout import)
+    lib/                Client d'API, types (dupliqués du serveur), formats, regroupement des dossiers déposés,
+                        anonymisation.ts (texte et version de la charte, mémorisation de l'engagement)
   public/               Icône (favicon.svg), theme-init.js (thème avant le premier rendu)
+landing/                Site public, déployé à part (Vercel) — voir page-d-accueil.md
+  src/lib/              Logique pure (charte, formulaires, parcours, adresses), session Supabase, profil
+  src/pages/            Accueil, inscription, connexion, parcours d'accueil, accès, mot de passe, confidentialité
+  supabase/migrations/  Tables profiles et consents, règles d'accès par ligne
+  e2e/                  Parcours dans un navigateur, contre un faux Supabase
 scripts/                ensure-build.mjs (démarrage), make-hero-art.mjs (illustration d'en-tête)
 docs/                   Cette documentation
 ```
@@ -214,13 +221,16 @@ Détail et modèle de menaces : [Sécurité et données](securite-et-donnees.md)
 - **Accessibilité** (cible WCAG 2.2 AA, vérifiée par axe-core sur toutes les pages) : lien d'évitement, un `h1` par vue, onglets au clavier (rôles ARIA, flèches, Début/Fin), noms accessibles contextuels (« Supprimer le dossier PAT-004 »), zones de défilement focalisables et nommées, cibles ≥ 24 px, annonces vocales des actions, titre de page par route, langue des résumés anglais, `prefers-reduced-motion`, aucun reflux horizontal jusqu'à 320 px.
 - **Thèmes** clair/sombre/système, appliqué par un script avant le premier rendu (pas d'éclair), préférence mémorisée dans `localStorage` avec repli si le stockage est bloqué.
 - **Volumes** : les listes longues sont paginées côté client (dossiers : 200 lignes ; tableau : 100) ; 2 000 dossiers se chargent en 1 à 1,6 s.
+- **Charte d'anonymisation** (`components/AnonymisationGate.tsx`) : elle enveloppe le composant d'import (`FolderUploader`) ; tant que l'engagement n'est pas mémorisé pour la version courante du texte (`localStorage`, `anonymisation:ack`), elle s'affiche **à la place** de la zone de dépôt — le composant d'import n'est pas monté. Le texte et sa version vivent dans `lib/anonymisation.ts`, dont la page d'accueil garde une copie que `landing-logic.test.ts` compare.
 
 ## 10. Stratégie de test
 
-35 fichiers sous `server/test`, chacun exécuté dans son **propre processus** (l'environnement — dossier de données, OCR — est fixé avant l'import de l'application). Deux familles :
+37 fichiers sous `server/test`, chacun exécuté dans son **propre processus** (l'environnement — dossier de données, OCR — est fixé avant l'import de l'application). Deux familles :
 
 - **Unitaires** : moteur (repliage, typage, règles, négation, regex surveillées), formats d'import, exports, statistiques.
 - **Intégration** : l'application complète sur de vrais fichiers PDF, DOCX, images et DICOM fabriqués par les fixtures ; un **vrai processus serveur** (démarrage, verrou, réglages invalides, arrêt par signal ; les arrêts brutaux `kill -9` sont rejoués par un script de la validation, non par la suite) ; le SDK d'Anthropic contre un **faux serveur HTTP** ; l'isolation sur de vrais fichiers piégés ; l'API de la revue bibliographique contre un **faux serveur Apify** qui rejoue des sorties réelles enregistrées.
+
+La page d'accueil (`landing/`) a ses propres parcours de bout en bout, dans un vrai navigateur, contre un **faux Supabase** en mémoire (`landing/e2e/`, Playwright) ; sa logique pure, sa migration et sa configuration de déploiement sont testées depuis `server/test/landing-logic.test.ts`, avec le reste de la suite.
 
 Voir le [rapport de validation](validation.md) pour les résultats, ce qui est couvert et ce qui ne l'est pas.
 

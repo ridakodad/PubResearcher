@@ -1,6 +1,6 @@
-# Rapport de validation — PubResearcher 1.2.0
+# Rapport de validation — PubResearcher 1.3.0
 
-*Établi le 9 octobre 2026 pour la version 1.1.0 (alors nommée « Research Tool »), complété le 10 octobre 2026 pour la 1.2.0 (changement de nom et refonte visuelle). Les mesures des § 3 à 8 sont celles de la **1.1.0** : la 1.2.0 ne modifie ni le moteur d'extraction, ni le schéma de la base, ni les routes de l'API (voir le [journal des versions](changelog.md)) ; ce qui a été **rejoué** pour elle, et ce qui ne l'a pas été, est au § 1.2 et au § 9. Les mesures du code et de l'interface de la 1.1.0 (§ 5 à 8) ont été faites sur la version compilée dans l'environnement décrit au § 2 ; la suite de tests et les versions de Node (§ 3) sur une copie neuve du dépôt. Les scripts qui produisent les chiffres (dossier `qa/`, cité dans tout le rapport) ont été écrits pour cet environnement de validation, avec des chemins absolus : **ils ne sont pas publiés dans ce dépôt** (§ 12).*
+*Établi le 9 octobre 2026 pour la version 1.1.0 (alors nommée « Research Tool »), complété le 10 octobre 2026 pour la 1.2.0 (changement de nom et refonte visuelle) et le 11 octobre 2026 pour la 1.3.0 (charte d'anonymisation devant l'import, page d'accueil publique : § 1.3 et § 13). Les mesures des § 3 à 8 sont celles de la **1.1.0** : la 1.2.0 ne modifie ni le moteur d'extraction, ni le schéma de la base, ni les routes de l'API (voir le [journal des versions](changelog.md)) ; ce qui a été **rejoué** pour elle, et ce qui ne l'a pas été, est au § 1.2 et au § 9. Les mesures du code et de l'interface de la 1.1.0 (§ 5 à 8) ont été faites sur la version compilée dans l'environnement décrit au § 2 ; la suite de tests et les versions de Node (§ 3) sur une copie neuve du dépôt. Les scripts qui produisent les chiffres (dossier `qa/`, cité dans tout le rapport) ont été écrits pour cet environnement de validation, avec des chemins absolus : **ils ne sont pas publiés dans ce dépôt** (§ 12).*
 
 **Ce que ce rapport est** : la liste de ce qui a été exécuté, de ce que cela a donné, et de ce qui n'a pas été vérifié.
 **Ce qu'il n'est pas** : une validation clinique, ni une certification. Aucun dossier patient réel n'a servi : tout le corpus est synthétique ou fabriqué pour l'essai.
@@ -47,6 +47,23 @@ La 1.2.0 change le nom, la charte et quelques textes ; elle ne touche ni le mote
 | `npm audit` | 3 avis modérés, 0 élevé (les mêmes qu'en 1.1.0 : `mammoth` → `argparse` → `sprintf-js`), sans chemin atteignable |
 
 **Non rejoué pour la 1.2.0** : les deux contre-expertises indépendantes (API et interface) et les deux relectures de la documentation (§ 10) — elles portent sur des versions antérieures ; les passages de la documentation modifiés pour le nouveau nom ont été relus à la main et leurs liens vérifiés (93 liens internes, 0 défaut).
+
+### 1.3 Rejeu pour la version 1.3.0
+
+La 1.3.0 ajoute la **charte d'anonymisation** devant l'import (interface seulement) et la **page d'accueil** (`landing/`, un site à part). `server/src` et `server/scripts` sont **inchangés** (seule la version, lue dans `package.json`, change) : le moteur, l'import, la base et l'API sont ceux de la 1.2.0, et les mesures des § 5 à 7 restent valables.
+
+| Contrôle | Résultat (1.3.0) |
+|---|---|
+| Typage (serveur, interface, page d'accueil), compilation | Sans erreur. Interface : 74 modules, 370 Ko de script (114 Ko compressés). Page d'accueil : script initial 263 Ko (84 Ko compressés), client Supabase chargé à la demande 228 Ko (59 Ko), feuille de style 38 Ko (8 Ko) |
+| Tests automatisés | **781 / 781 réussis** (690 en 1.2.0 ; +7 charte de l'application, +71 page d'accueil, +13 contrastes de sa feuille de style), 37 fichiers |
+| Charte de l'application, dans le navigateur | **78 vérifications** (aucun champ de fichier avant la confirmation, 3 engagements sur 5 ne suffisent pas, mémorisation avec version et date, rappel dépliable, non redemandée pour la même version, redemandée pour une version périmée, même charte dans « Ajouter des documents ») et **30 audits axe** — 3 largeurs × 2 thèmes : **0 constat** |
+| Interface de l'application (axe-core, 8 pages × 4 largeurs × 2 thèmes) | **0 violation**, 0 débordement horizontal, 0 erreur de console (64 combinaisons, comme en 1.2.0) |
+| Page d'accueil : parcours de bout en bout (faux Supabase) | **19 / 19** (§ 13.2) |
+| Page d'accueil : accessibilité (axe-core, WCAG 2.2 AA + bonnes pratiques) | **248 audits, 0 violation**, 0 débordement horizontal (§ 13.3) |
+| Page d'accueil : contraste du texte **rendu** | **5 984 mesures**, 0 sous le seuil ; la plus faible 4,96:1 (§ 13.3) |
+| Page d'accueil : clavier | 392 arrêts de tabulation : tous avec un anneau de focus visible, aucun élément focalisable invisible (§ 13.3) |
+
+**Non rejoué pour la 1.3.0**, parce que le code concerné n'a pas changé : corpus de fichiers hostiles, arrêts brutaux, gros document, montée en charge, suite sous cinq versions de Node (la suite complète a tourné sous Node 22.22.2 seulement). **Vérifié sur le projet Supabase réel** : règles d'accès, droits et réponses de l'API (§ 13.4). **Non vérifié** : un parcours dans un navigateur contre ce projet, un vrai client Google, un vrai envoi de courriels, et un vrai déploiement Vercel (§ 13.5).
 
 ## 2. Environnement de test
 
@@ -406,7 +423,8 @@ Depuis la racine du projet :
 npm ci
 npm run typecheck
 npm run build
-npm test                 # 690 tests, un processus par fichier
+npm test                 # 781 tests, un processus par fichier
+cd landing && npm ci && node --test e2e/flows.test.mjs    # 20 parcours de la page d'accueil (Playwright requis)
 ```
 
 Les scripts qui ont produit les mesures ci-dessus (dossier `qa/` cité dans tout le rapport) ont été écrits pour l'environnement de validation : chemins absolus, serveurs d'essai sur des ports fixes, binaires de Node et Chromium installés à part. **Ils ne sont pas publiés dans ce dépôt** ; leur rôle est donné ici pour qui voudrait les reconstituer :
@@ -421,3 +439,55 @@ Les scripts qui ont produit les mesures ci-dessus (dossier `qa/` cité dans tout
 | `qa/node-matrix/run-matrix.sh <versions…>` | La suite sous plusieurs versions de Node (binaires installés à part) |
 | `qa/docs-shots.mjs` | Les captures de la documentation |
 | `qa/factcheck/` | Les rapports condensés des deux relectures de la documentation (§ 10.3) |
+
+## 13. Page d'accueil et charte d'anonymisation (1.3.0)
+
+### 13.1 Ce qui est testé dans le dépôt
+
+`server/test/landing-logic.test.ts` (71 tests, avec le reste de la suite) : validation des formulaires, traduction des erreurs du service d'authentification (aucun texte technique à l'écran), reprise du parcours, lignes écrites dans la base, adresses de configuration et de retour (pas de redirection ouverte) ; **la charte du site est celle de l'application, mot pour mot**, version comprise ; **les jetons de couleur, les polices et l'illustration sont identiques** ; **les listes d'options du parcours sont les contraintes `check` de la migration** ; la migration elle-même (règles d'accès par ligne ; retrait de tous les droits **avant** de rendre les droits utiles, colonne par colonne ; aucun droit pour un visiteur ; dates et identifiant d'un engagement posés par la base ; journal des engagements en ajout seul ; aucune colonne pouvant recevoir une donnée de patient) ; **le site n'écrit que des colonnes qu'il a le droit d'écrire**, en création comme en mise à jour ; `.env.production` ne contient que l'adresse du projet et une clé `sb_publishable_…`, et les compilations d'essai ne le lisent pas ; la politique de sécurité du contenu et les en-têtes de `vercel.json` ; l'absence de script ou de style en ligne, de secret, d'API d'injection de HTML, de lien interne mort, d'apostrophe droite dans les textes. `web-contrast.test.ts` lit désormais les deux feuilles de style.
+
+### 13.2 Parcours de bout en bout
+
+`landing/e2e/flows.test.mjs`, dans Chromium, contre un **faux Supabase** en mémoire (`fake-supabase.mjs`) qui imite le protocole : formats de réponse et codes d'erreur de l'API `2024-01-01`, **PKCE vérifié** (le défi est recalculé à partir du vérificateur), jeton obligatoire sur les tables, règles d'accès par ligne, contraintes **et droits par colonne** lus dans la migration (une colonne non accordée est refusée par `42501`, comme sur le projet réel). Le site est servi avec les en-têtes de `vercel.json` : une ressource interdite par la politique de sécurité ferait échouer le parcours. Deux compilations : **configurée** (18 scénarios : inscription avec confirmation et renvoi du lien ; lien ouvert dans un autre navigateur ; parcours complet avec contrôle de chaque écriture ; Google ; Google pas encore activé dans le projet (message sur le site, aucun départ), puis réglages injoignables (la connexion part quand même) ; connexion en échec puis réussie ; adresse non confirmée ; pages protégées et cinq tentatives de redirection ouverte ; retours d'erreur dans la requête et dans le fragment ; mot de passe oublié — même réponse pour toute adresse — et nouveau mot de passe ; reprise ; modification ; pannes 500 et coupure réseau ; déconnexion et changement d'utilisateur ; valeurs refusées par la base ; clavier ; aucun défilement horizontal de 320 à 1 440 px sur six pages) et **aperçu** (2 scénarios : bandeau sur chaque page, **aucune requête hors du site**, rien de conservé après la fermeture de l'onglet). **20 / 20**, deux exécutions consécutives.
+
+### 13.3 Contrôles visuels et d'accessibilité (scripts non publiés)
+
+| Contrôle | Résultat |
+|---|---|
+| axe-core (WCAG 2.2 AA + bonnes pratiques) : 11 pages ou états de parcours (dont formulaires en erreur, charte cochée, rappel d'autorisation, tout déplié, menu ouvert) en mode aperçu, et 6 états propres au service (inscription envoyée, adresse non confirmée, mot de passe faux, retour refusé, lien de réinitialisation envoyé, nouveau mot de passe) — 5 largeurs (320 à 1 440 px) × 2 thèmes | **248 audits : 0 violation**, 0 débordement horizontal |
+| Contraste du texte **rendu** (échantillonnage des pixels sous chaque ligne, dégradés, verre et images compris), 3 largeurs × 2 thèmes, pages publiques et pages connectées (accès, parcours aux étapes 1, 2 et 3) | **5 984 mesures, 0 sous le seuil** ; la plus faible 4,96:1 (le « Pub » de la marque, pastille de navigation sur la carte d'ouverture, 390 px, thème clair) ; partout ailleurs au-dessus de 5,2:1 |
+| Parcours au clavier : chaque arrêt de tabulation | **392 arrêts** (4 pages × 2 largeurs × 2 thèmes) : tous portent un anneau de focus visible, aucun élément focalisable n'est invisible. Les seules cibles de moins de 24 px de haut sont 8 liens **insérés dans une phrase** (« Déjà un compte ? Se connecter »…), que le critère 2.5.8 exempte |
+| Débordement horizontal | 0, de 320 à 1 440 px, sur toutes les pages et tous les états audités |
+
+**Défauts trouvés par ces contrôles, et corrigés** (avant publication) :
+
+- **Course entre deux redirections à la déconnexion** (parcours de bout en bout) : se déconnecter depuis une page protégée menait tantôt à l'accueil, tantôt à la connexion, selon la redirection arrivée la dernière. La déconnexion passe désormais par une page à elle (`/deconnexion`) : trajet toujours identique.
+- **Pastille de navigation** sur les cartes sombres : en défilant, le bleu de la marque n'y tenait que **3,69:1** (contraste du rendu ; un audit sur les jetons ne peut pas le voir, le fond étant du verre translucide). Verre plus opaque : 4,96:1 au plus bas.
+- **Débordement de 24 px** de la page d'accès à 320 px (une grille dont la colonne minimale dépassait la largeur disponible) : toutes les grilles adaptatives bornent désormais leur colonne à la largeur disponible.
+- **Bandeau du mode aperçu** hors de toute région de la page ; **tableau défilant** de la page de confidentialité inaccessible au clavier (axe) : corrigés.
+- **Champs de saisie sans style** (inscription, parcours) : un champ sans attribut `type` échappait à la feuille de style (captures).
+- **Bouton « Copier »** posé sur les longues commandes, **arc d'or** traversant les paragraphes (captures) : corrigés (barre au-dessus du code ; arc estompé du côté du texte).
+- **Lien de confirmation ouvert dans un autre navigateur** que celui de l'inscription (relecture du flux PKCE) : l'échange du code ne peut pas aboutir, et l'utilisateur était renvoyé sans un mot vers la connexion. Un message dit désormais quoi faire ; le scénario est dans la suite de bout en bout.
+- **Dates d'engagement fournies par le navigateur** (relecture de la migration avant son application) : les droits par défaut de Supabase laissaient un utilisateur écrire `accepted_at`, donc antidater son engagement. Les droits sont désormais accordés colonne par colonne ; refus vérifié sur le projet réel (§ 13.4).
+- **« Continuer avec Google » avant l'activation de Google** (sonde du projet réel) : le service répond par une page d'erreur JSON, en anglais, hors du site. Le site vérifie désormais les réglages publics du service avant de partir.
+
+### 13.4 Projet Supabase réel (11 octobre 2026)
+
+Projet « PubResearcher », référence `oyzhlclaniaykyixhsjy`, région `eu-west-3`, Postgres 17. Migration appliquée sous la version `20261011011740` (l'outil d'application refuse toute instruction `drop`, même sans effet : la version appliquée est celle du dépôt sans ses lignes `drop … if exists`, identique sur une base neuve).
+
+| Contrôle | Résultat |
+|---|---|
+| Tables, règles, droits relus dans le catalogue | RLS active sur les deux tables ; 5 règles, toutes `to authenticated` avec `(select auth.uid()) = user_id` ; `authenticated` : `SELECT` sur les deux tables, `INSERT`/`UPDATE` sur les seules colonnes du site ; `anon` : rien |
+| Deux comptes simulés (`set role authenticated` + identité du jeton), transaction annulée | **17 / 17 conformes** : création et mise à jour de son profil par l'« upsert » du site, inscription de son engagement — acceptées ; écriture chez l'autre, lecture des lignes de l'autre (1 ligne visible sur 2), antidatage d'un engagement ou d'un profil, modification et effacement d'un engagement, effacement de son profil, transfert de son profil, `truncate`, lecture et écriture sans connexion — refusées (`42501`, ou 0 ligne touchée). Base vide après coup |
+| HTTP, clé publique, sans connexion | lecture de `profiles`, écriture dans `consents` : `401` « permission denied » |
+| HTTP, connexion à un compte inexistant | `400`, code `invalid_credentials` (traduit par le site : « E-mail ou mot de passe incorrect. ») |
+| HTTP, réglages publics | e-mail activé, confirmation obligatoire, Google **non activé** (d'où le correctif ci-dessus) ; CORS : origine du site admise, en-tête `apikey` admis |
+| Conseillers Supabase | sécurité : **aucune remarque** ; performance : « index inutilisé » sur `consents_user_kind_idx`, attendu sur une table vide |
+
+**Non éprouvé ici** : un parcours complet dans un navigateur contre le projet réel. Le navigateur de l'environnement de préparation ne pouvait pas établir de connexion HTTPS vers l'extérieur ; la vérification TLS n'a pas été contournée. La première inscription réelle, selon la liste de la [mise en service](page-d-accueil.md#54-contrôle-de-mise-en-service), en tient lieu.
+
+### 13.5 Ce qui n'a pas été vérifié
+
+- **Aucun parcours dans un navigateur contre le projet réel, aucun vrai client Google, aucun vrai envoi de courriel, aucun déploiement Vercel réel** : le projet Supabase réel n'a été éprouvé qu'au niveau de la base et de son API (§ 13.4) ; le faux service imite le protocole de Supabase tel que le client 2.117 l'emploie ; les réglages du tableau de bord (adresses de retour, fournisseurs, courriels, limites de débit) ne sont éprouvés que par la liste de contrôle de mise en service ([Page d'accueil, § 5.4](page-d-accueil.md#54-contrôle-de-mise-en-service)), à faire une fois.
+- Chromium seulement ; aucun lecteur d'écran.
+- La page d'accueil ne protège pas l'application, et la charte ne vérifie pas l'anonymisation des documents : ce sont des choix, décrits dans [Page d'accueil](page-d-accueil.md), pas des défauts découverts.

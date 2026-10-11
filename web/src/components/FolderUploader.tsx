@@ -3,6 +3,7 @@ import { api, ApiError } from '../lib/api';
 import { formatBytes, plural } from '../lib/format';
 import { detectStructure, groupItems, type Layout } from '../lib/grouping';
 import { useToast } from './ui';
+import { AnonymisationGate } from './AnonymisationGate';
 import { IconAlert } from './icons';
 import type { UploadOutcome } from '../lib/types';
 
@@ -35,14 +36,23 @@ interface GroupResult {
  * le code du dossier, ce qui permet de déverser d'un coup l'ensemble d'une
  * série. Les fichiers déposés seuls sont regroupés sous un code à saisir.
  */
-export function FolderUploader({
-  onDone,
-  /** Impose un dossier de destination (import depuis la fiche d'un patient). */
-  fixedPatient,
-}: {
+export function FolderUploader(props: UploaderProps) {
+  // La charte d'anonymisation se confirme avant que l'on puisse choisir un fichier ; l'état de l'import
+  // (fichiers choisis, résultats) n'existe qu'une fois l'engagement pris.
+  return (
+    <AnonymisationGate>
+      <FolderUploaderBody {...props} />
+    </AnonymisationGate>
+  );
+}
+
+interface UploaderProps {
   onDone: () => void;
+  /** Impose un dossier de destination (import depuis la fiche d'un patient). */
   fixedPatient?: { id: number; code: string };
-}) {
+}
+
+function FolderUploaderBody({ onDone, fixedPatient }: UploaderProps) {
   const toast = useToast();
   const [picked, setPicked] = useState<PickedFile[]>([]);
   const [looseCode, setLooseCode] = useState('');

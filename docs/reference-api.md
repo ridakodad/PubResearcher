@@ -69,10 +69,10 @@ Sans HTTPS, le mot de passe circule en clair : placez l'outil derrière un proxy
 Interroge réellement la base : un serveur qui répond mais ne peut plus lire ses données n'est pas « en bonne santé ». Aucune donnée de patient ni chemin dans la réponse.
 
 ```json
-{ "status": "ok", "version": "1.2.0", "schemaVersion": 1, "uptimeSeconds": 80, "time": "2026-10-09T02:28:49.188Z" }
+{ "status": "ok", "version": "1.3.0", "schemaVersion": 1, "uptimeSeconds": 80, "time": "2026-10-09T02:28:49.188Z" }
 ```
 
-`503 { "status": "degraded", "version": "1.2.0", "error": "Base de données inaccessible." }` si la base ne répond pas. Accessible sans mot de passe.
+`503 { "status": "degraded", "version": "1.3.0", "error": "Base de données inaccessible." }` si la base ne répond pas. Accessible sans mot de passe.
 
 ---
 
@@ -342,7 +342,7 @@ Les passes d'extraction, de la plus récente à la plus ancienne (50 par défaut
   "runs": [
     { "id": 4, "templateId": 1, "templateName": "Fiche d'exploitation générale",
       "templateFingerprint": "7fc4005260e60df63fe46dd30cbc7beef70b33c53efaaccea499fe3e87bab521",
-      "mode": "rules", "model": null, "overwriteManual": false, "appVersion": "1.2.0",
+      "mode": "rules", "model": null, "overwriteManual": false, "appVersion": "1.3.0",
       "startedAt": "2026-10-09T02:31:22.806Z", "finishedAt": "2026-10-09T02:31:22.844Z", "status": "done",
       "patients": 1, "documents": 1, "extracted": 1, "notFound": 20, "keptManual": 1, "rejected": 0 }
   ]

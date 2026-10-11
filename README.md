@@ -8,9 +8,9 @@ L'espace de travail d'une étude rétrospective, sur votre poste. D'un côté, c
 
 Pensée pour un travail de thèse ou une étude rétrospective : on part d'une pile de dossiers, on obtient un tableau exploitable dans Excel, R ou SPSS — sans ressaisir chaque variable à la main, et sans perdre la trace de l'origine de chaque valeur.
 
-**Version 1.2.0** · Node.js ≥ 22.13 · un seul processus, aucun module natif à compiler · 690 tests
+**Version 1.3.0** · Node.js ≥ 22.13 · un seul processus, aucun module natif à compiler · 781 tests
 
-> **Données de santé.** Par défaut l'outil n'écoute que sur le poste et n'envoie **rien** hors de la machine. Il n'anonymise pas : importez des documents pseudonymisés. Lisez [Sécurité et données](docs/securite-et-donnees.md) avant la première étude.
+> **Données de santé.** Par défaut l'outil n'écoute que sur le poste et n'envoie **rien** hors de la machine. Il n'anonymise pas : importez des documents pseudonymisés. Avant tout import, l'application demande de **confirmer une charte d'anonymisation** (cinq engagements, rappelés à chaque nouvelle version du texte). Lisez [Sécurité et données](docs/securite-et-donnees.md) avant la première étude.
 
 ## Aperçu
 
@@ -32,8 +32,21 @@ Pensée pour un travail de thèse ou une étude rétrospective : on part d'une p
 | Comprendre ou modifier le code | [Architecture](docs/architecture.md) |
 | Savoir ce qui a été testé, et ce qui ne l'a pas été | [Rapport de validation](docs/validation.md) |
 | Interroger PubMed et Google Scholar | [Revue bibliographique](docs/revue-bibliographique.md) |
+| Mettre en ligne le site d'accueil (Supabase, Google, Vercel), comprendre la charte d'anonymisation | [Page d'accueil](docs/page-d-accueil.md) |
 | Voir ce qui a changé | [Journal des versions](docs/changelog.md) |
 | Connaître la charte graphique (couleurs, police, composants, accessibilité) | [Identité visuelle](docs/identite-visuelle.md) |
+
+---
+
+## Page d'accueil et charte d'anonymisation
+
+Le dossier [`landing/`](landing/) contient le **site public** de l'outil, à déployer séparément de l'application (sur Vercel) : il la présente, propose de créer un accès (**Google** ou adresse e-mail), mène l'utilisateur dans un court parcours d'accueil — profil, étude, **engagement d'anonymisation avant d'importer des données de patients** — puis l'oriente vers l'application. L'application, de son côté, **redemande cet engagement avant tout import** : tant qu'il n'est pas pris, l'écran de dépôt des fichiers n'existe pas.
+
+```bash
+cd landing && npm ci && npm run dev      # http://localhost:5174 — « mode aperçu » : rien n'est envoyé ni conservé
+```
+
+Le site est une **porte d'entrée, pas une serrure** : il ne protège pas l'application, qui tourne sur le poste de l'utilisateur. Il ne reçoit aucune donnée de patient (seulement un profil professionnel et la trace de l'engagement pris). Mise en service pas à pas (Supabase, Google, Vercel), données conservées, limites : [Page d'accueil](docs/page-d-accueil.md).
 
 ---
 
@@ -234,8 +247,10 @@ server/          API Node/TypeScript, SQLite (module intégré `node:sqlite`)
   src/biblio/    Revue bibliographique : client Apify, adaptateurs, exports RIS / BibTeX / CSV
   src/repo/      Accès aux données (dont fiabilité et rapport « Méthodes »)
   src/routes/    API HTTP
-  test/          35 fichiers de test
+  test/          37 fichiers de test (dont la logique et la configuration de la page d'accueil)
 web/             Interface React/TypeScript (Vite) : styles à la main, police et illustrations embarquées
+landing/         Site public, déployé à part (Vercel) : présentation, inscription Google ou e-mail,
+                 parcours d'accueil, charte d'anonymisation ; tables Supabase (migration), parcours e2e
 scripts/         Démarrage (`ensure-build.mjs`) et génération de l'illustration d'en-tête
 docs/            La documentation
 ```
@@ -248,11 +263,12 @@ En production, l'API sert aussi le front compilé : un seul processus, une seule
 
 ```bash
 npm run typecheck
-npm test             # 690 tests, un processus par fichier
+npm test             # 781 tests, un processus par fichier
+cd landing && node --test e2e/flows.test.mjs   # 20 parcours de la page d'accueil (Playwright requis)
 ```
 
 Les tests couvrent le moteur (repliage, typage, chaque famille de règles, négation, unités, expressions surveillées), la chaîne complète — import, extraction, relecture, export — sur de vrais fichiers PDF, DOCX, DICOM et images (PNG, JPEG avec EXIF, TIFF) construits par les fixtures, un **vrai processus serveur** (démarrage, verrou, réglages invalides, arrêt par signal), l'isolation sur de vrais fichiers piégés, le SDK d'Anthropic contre un faux serveur, et la revue bibliographique contre un faux serveur Apify qui rejoue de vraies sorties.
 
-Le [rapport de validation](docs/validation.md) donne les mesures (banc d'essai du moteur, 97 fichiers hostiles, 25 arrêts brutaux, 1 000 à 5 000 dossiers, 64 combinaisons d'accessibilité, la suite sous cinq versions de Node — mesurées sur la 1.1.0, le moteur étant inchangé ; le § 1.2 dit ce qui a été rejoué pour la 1.2.0) **et ce qui n'a pas été vérifié** : aucun corpus clinique réel, le mode « Claude » jamais exécuté contre l'API réelle, Excel et PowerPoint jamais ouverts, Chromium seulement.
+Le [rapport de validation](docs/validation.md) donne les mesures (banc d'essai du moteur, 97 fichiers hostiles, 25 arrêts brutaux, 1 000 à 5 000 dossiers, 64 combinaisons d'accessibilité, la suite sous cinq versions de Node — mesurées sur la 1.1.0, le moteur étant inchangé ; les § 1.2 et 1.3 disent ce qui a été rejoué pour la 1.2.0 et la 1.3.0, le § 13 ce qui a été mesuré sur la page d'accueil) **et ce qui n'a pas été vérifié** : aucun corpus clinique réel, le mode « Claude » jamais exécuté contre l'API réelle, Excel et PowerPoint jamais ouverts, Chromium seulement.
 
 `npm audit` (10 octobre 2026) : 3 avis modérés, dans la seule chaîne `mammoth` → `argparse` → `sprintf-js`, sans chemin atteignable avec une entrée utilisateur ; la « correction » proposée est un retour en arrière de `mammoth` — ne la lancez pas.

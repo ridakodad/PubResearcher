@@ -108,7 +108,8 @@ Le thème sombre n'est pas une inversion : les surfaces sont un indigo nuit, le 
 
 ## 7. Ce qui garde la charte lisible
 
-- `server/test/web-contrast.test.ts` : contrastes de chaque jeton (13 tests), parité des deux blocs sombres.
+- `server/test/web-contrast.test.ts` : contrastes de chaque jeton (13 tests par feuille de style — celle de l'application et celle de la page d'accueil), parité des deux blocs sombres.
+- `server/test/landing-logic.test.ts` : la page d'accueil reprend les jetons, les `@font-face`, les quatre polices et l'arc d'or de l'application **octet pour octet**.
 - Audit d'accessibilité automatisé (axe-core, WCAG 2.2 AA) sur 8 pages × 4 largeurs × 2 thèmes, parcours au clavier, cibles tactiles, mouvement réduit : voir le [rapport de validation](validation.md), § 1.2.
 - Aucune information portée par la couleur seule : états doublés d'un libellé ou d'une forme, séries à une teinte.
 
@@ -119,5 +120,16 @@ Le thème sombre n'est pas une inversion : les surfaces sont un indigo nuit, le 
 3. L'illustration d'en-tête : `scripts/make-hero-art.mjs` (graine, géométrie de l'arc, nombre de grains), puis `node scripts/make-hero-art.mjs`.
 4. La police : remplacez les quatre `woff2` de `web/src/fonts/` et les `@font-face` en tête de feuille ; joignez la licence de la nouvelle police.
 5. Compilez (`npm run build`) et regardez les deux thèmes, à 1 440 et 390 px.
+6. **Reportez la modification sur la page d'accueil** (`landing/src/styles.css` : mêmes trois blocs de jetons ; `landing/src/fonts/`, `landing/src/assets/hero-dust.svg`, `landing/src/components/Brand.tsx`, `landing/public/favicon.svg`) : elle se déploie seule et ne peut pas importer la feuille de l'application. `npm test` échoue tant que les deux divergent.
 
 La carte de partage du dépôt (`docs/img/social-preview.png`, 1 280 × 640) reprend la carte d'en-tête ; à téléverser dans les réglages du dépôt GitHub (*Social preview*) — elle ne se règle pas depuis le code.
+
+## 9. La page d'accueil
+
+Le site public (`landing/`, voir [Page d'accueil](page-d-accueil.md)) porte la même identité, avec trois libertés propres à une page que l'on lit plutôt qu'un outil que l'on manipule :
+
+- **La navigation** est une pastille de verre flottante en haut de page, et non un rail : quelques ancres et deux boutons de compte. Elle prend le verre « lourd » (`--glass-heavy`) : en défilant, elle passe sur des cartes sombres, et avec le verre léger le bleu de la marque n'y tenait que 3,7:1 (mesuré sur le rendu).
+- **Les cartes sombres** reprennent la carte d'en-tête : la carte d'ouverture (avec un exemple fictif de valeur et de sa source, en verre), « PubResearcher n'anonymise rien », l'appel final, le panneau de l'inscription, l'accès. L'arc d'or y est estompé par un masque du côté du texte (`--arc-from`, `--arc-to`) : la poussière ne passe jamais sous un paragraphe.
+- **Les captures de l'application** existent en deux versions, claire et sombre (WebP, `landing/public/img/`) ; seule celle du thème courant s'affiche et se télécharge.
+
+Aucune police, aucune image, aucun style ne vient d'ailleurs que du site : sa politique de sécurité (`style-src 'self'`, `font-src 'self'`) l'interdit, et aucun style n'est écrit dans les pages.

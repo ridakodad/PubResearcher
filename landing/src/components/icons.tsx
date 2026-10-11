@@ -1,0 +1,408 @@
+/**
+ * Jeu d'icônes, dessiné en SVG plutôt qu'emprunté aux émojis.
+ *
+ * Un émoji change de dessin selon le système, ne suit pas la couleur du texte
+ * et se lit à voix haute par les lecteurs d'écran. Ces tracés héritent de
+ * `currentColor`, se redimensionnent proprement, et restent muets : le libellé
+ * voisin porte le sens.
+ */
+
+interface IconProps {
+  size?: number;
+  className?: string;
+}
+
+function Svg({
+  size = 20,
+  className,
+  children,
+}: IconProps & { children: React.ReactNode }) {
+  return (
+    <svg
+      className={className ? `icon ${className}` : 'icon'}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      {children}
+    </svg>
+  );
+}
+
+/** Plan de travail : la vue d'ensemble des outils. */
+export function IconWorkspace(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="3" y="3" width="7.5" height="7.5" rx="1.6" />
+      <rect x="13.5" y="3" width="7.5" height="7.5" rx="1.6" />
+      <rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6" />
+      <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.6" />
+    </Svg>
+  );
+}
+
+/** Dossiers patients. */
+export function IconFolders(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M3 7.5a2 2 0 0 1 2-2h3.4a2 2 0 0 1 1.6.8l.9 1.2H19a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+      <path d="M3 11h18" />
+    </Svg>
+  );
+}
+
+/** Fiche d'exploitation : la liste des variables de l'étude. */
+export function IconForm(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="4.5" y="3" width="15" height="18" rx="2" />
+      <path d="M9 3.8V5a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1V3.8" />
+      <path d="M8.5 11h7M8.5 15h4.5" />
+    </Svg>
+  );
+}
+
+/** Extraction : la passe qui remplit la fiche à partir des documents. */
+export function IconExtract(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M5 3.5 6 6.2 8.7 7.2 6 8.2 5 11 4 8.2 1.3 7.2 4 6.2Z" />
+      <path d="M16 3.5 16.7 5.4 18.6 6.1 16.7 6.8 16 8.7 15.3 6.8 13.4 6.1 15.3 5.4Z" />
+      <path d="M12.5 10.5 14 14.5 18 16 14 17.5 12.5 21.5 11 17.5 7 16 11 14.5Z" />
+    </Svg>
+  );
+}
+
+/** Tableau de données brut. */
+export function IconTable(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M3 9.5h18M9.5 9.5V20M3 14.8h18" />
+    </Svg>
+  );
+}
+
+/** Distributions : un bâton par classe. */
+export function IconChart(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M4 20V4" />
+      <path d="M4 20h16" />
+      <rect x="7.5" y="12" width="3.2" height="5" rx="1" />
+      <rect x="13" y="8" width="3.2" height="9" rx="1" />
+      <rect x="18.5" y="14" width="0.1" height="3" rx="0.05" />
+    </Svg>
+  );
+}
+
+/** Complétude : où porter l'effort de relecture. */
+export function IconGauge(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M4 17a8 8 0 1 1 16 0" />
+      <path d="M12 17l4-4.5" />
+      <circle cx="12" cy="17" r="1.4" />
+    </Svg>
+  );
+}
+
+/** Export du jeu de données. */
+export function IconExport(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M12 3.5v10.5" />
+      <path d="m8 10.5 4 4 4-4" />
+      <path d="M4.5 16.5v2a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-2" />
+    </Svg>
+  );
+}
+
+/** Document importé. */
+export function IconDocument(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M13.5 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8.5Z" />
+      <path d="M13.5 3v4.5a1 1 0 0 0 1 1H19" />
+    </Svg>
+  );
+}
+
+/** Revue bibliographique : un livre ouvert sur une loupe — chercher, puis lire. */
+export function IconBook(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M4 5.2A1.2 1.2 0 0 1 5.2 4H10a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H5.2A1.2 1.2 0 0 1 4 15.8Z" />
+      <path d="M20 5.2A1.2 1.2 0 0 0 18.8 4H14a2 2 0 0 0-2 2v13a2 2 0 0 1 2-2h4.8a1.2 1.2 0 0 0 1.2-1.2Z" />
+      <path d="M7 8.5h2M7 11.5h2M15 8.5h2M15 11.5h2" />
+    </Svg>
+  );
+}
+
+/** Lien sortant : ouvre la source dans un nouvel onglet. */
+export function IconExternal(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M14 4.5h5.5V10" />
+      <path d="M19.5 4.5 11 13" />
+      <path d="M17.5 14v3.5a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2H10" />
+    </Svg>
+  );
+}
+
+/** Passage à l'outil : le chevron des cartes du plan de travail. */
+export function IconArrow(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M5 12h13" />
+      <path d="m12.5 6.5 5.5 5.5-5.5 5.5" />
+    </Svg>
+  );
+}
+
+/** Avertissement : accompagne un message, ne le remplace jamais. */
+export function IconAlert(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M10.3 3.9 2.6 17.2a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+      <path d="M12 9.5v4" />
+      <path d="M12 17h.01" />
+    </Svg>
+  );
+}
+
+/** Protection des données : l'écusson qui accompagne la charte d'anonymisation. */
+export function IconShield(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M12 3 5 6v5.2c0 4.5 3 8.2 7 9.8 4-1.6 7-5.3 7-9.8V6l-7-3Z" />
+      <path d="m9 12 2 2 4-4" />
+    </Svg>
+  );
+}
+
+/** Chevron d'ouverture : pointe à droite fermé, vers le bas ouvert. */
+export function IconChevron(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="m9 5.5 6.5 6.5L9 18.5" />
+    </Svg>
+  );
+}
+
+/** Repli et déploiement du rail d'outils. */
+export function IconSidebar(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M9.5 4v16" />
+    </Svg>
+  );
+}
+
+/** Renommage d'un document. */
+export function IconRename(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M14.5 4.5 19.5 9.5" />
+      <path d="M4 20h4l11-11a2.1 2.1 0 0 0-3-3L5 17Z" />
+    </Svg>
+  );
+}
+
+/** Rédaction assistée : l'échange avec le modèle. */
+export function IconWrite(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M20.5 12a8 8 0 0 1-8 8H4.5l2-3a8 8 0 1 1 14-5Z" />
+      <path d="M8.5 10h8M8.5 14h5" />
+    </Svg>
+  );
+}
+
+/** Information de contexte, sans caractère d'alerte. */
+export function IconInfo(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 11v5.5" />
+      <path d="M12 7.8h.01" />
+    </Svg>
+  );
+}
+
+/** Résultat trouvé au banc d'essai. */
+export function IconCheck(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="m4.5 12.5 5 5 10-11" />
+    </Svg>
+  );
+}
+
+/** Aucun résultat : la règle n'a rien accroché. */
+export function IconEmpty(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="m6 6 12 12" />
+    </Svg>
+  );
+}
+
+/** Fermeture d'une fenêtre modale. */
+export function IconClose(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="m6.5 6.5 11 11M17.5 6.5l-11 11" />
+    </Svg>
+  );
+}
+
+export function IconSun(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4" />
+    </Svg>
+  );
+}
+
+export function IconMoon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z" />
+    </Svg>
+  );
+}
+
+/** Thème suivant le système : un disque à moitié plein. */
+export function IconAuto(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 3.5a8.5 8.5 0 0 1 0 17Z" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
+
+/** Menu des écrans étroits : trois traits. */
+export function IconMenu(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M4 7h16M4 12h16M4 17h16" />
+    </Svg>
+  );
+}
+
+/** Ordinateur : l'outil tourne sur le poste de l'utilisateur. */
+export function IconLaptop(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="5" y="5" width="14" height="10" rx="1.6" />
+      <path d="M3 19h18" />
+    </Svg>
+  );
+}
+
+/** Cadenas : ce qui est protégé. */
+export function IconLock(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="5" y="10.5" width="14" height="10" rx="2" />
+      <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" />
+    </Svg>
+  );
+}
+
+/** Courrier : le lien de confirmation part par e-mail. */
+export function IconMail(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="3" y="5.5" width="18" height="13" rx="2" />
+      <path d="m3.8 7.5 8.2 6 8.2-6" />
+    </Svg>
+  );
+}
+
+/** Afficher le mot de passe saisi. */
+export function IconEye(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+      <circle cx="12" cy="12" r="2.8" />
+    </Svg>
+  );
+}
+
+/** Masquer le mot de passe saisi. */
+export function IconEyeOff(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M9.9 5.8A9.6 9.6 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a16 16 0 0 1-3 3.8" />
+      <path d="M6.3 7.6A15.7 15.7 0 0 0 2.5 12S6 18.5 12 18.5a9.4 9.4 0 0 0 3.6-.7" />
+      <path d="M9.9 9.9a2.8 2.8 0 0 0 4 4" />
+      <path d="m4 4 16 16" />
+    </Svg>
+  );
+}
+
+/** Copier une commande. */
+export function IconCopy(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="8.5" y="8.5" width="12" height="12" rx="2" />
+      <path d="M15.5 8.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5" />
+    </Svg>
+  );
+}
+
+/** Pied de page, liens : le dépôt de code. */
+export function IconCode(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="m8.5 8-4 4 4 4M15.5 8l4 4-4 4M13.5 5.5l-3 13" />
+    </Svg>
+  );
+}
+
+/**
+ * Le « G » de Google, aux couleurs d'origine. C'est la seule icône qui ne suit pas `currentColor` : la marque de
+ * Google impose son dessin et ses couleurs, sur fond clair comme sur fond sombre (pas de variante monochrome).
+ */
+export function IconGoogle({ size = 20, className }: IconProps) {
+  return (
+    <svg
+      className={className ? `icon ${className}` : 'icon'}
+      width={size}
+      height={size}
+      viewBox="0 0 48 48"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path
+        fill="#EA4335"
+        d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
+      />
+      <path
+        fill="#4285F4"
+        d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
+      />
+      <path
+        fill="#34A853"
+        d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
+      />
+    </svg>
+  );
+}

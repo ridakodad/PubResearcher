@@ -99,6 +99,8 @@ Chaque passe d'extraction enregistre l'**empreinte** (SHA-256) des règles de la
 
 *Dossiers patients › Importer des dossiers*, puis déposez un dossier ou des fichiers.
 
+**D'abord, la charte d'anonymisation.** La première fois — et à chaque nouvelle version du texte —, la fenêtre d'import affiche, à la place de la zone de dépôt, « Avant d'importer des données de patients » : *PubResearcher n'anonymise rien*, puis cinq engagements à cocher : identifiants directs retirés ; endroits que l'on oublie vérifiés (en-têtes et pieds de page, tampons, noms de fichiers, texte incrusté dans les scans, balises DICOM) ; un code d'étude sans lien avec l'identité, la table de correspondance gardée ailleurs ; la base légale et les autorisations ; pas de mode « Claude » sans autorisation, et aucune donnée de patient dans une équation de recherche. **« Je confirme et je continue »** ne s'active qu'une fois les cinq cochés. L'engagement est retenu dans ce navigateur ; ensuite, une ligne de rappel reste au-dessus de la zone de dépôt (« Revoir mes engagements » les déplie). Cocher ne vérifie rien — l'outil ne sait pas si un document est anonymisé : c'est à faire **avant**, voir la [liste de contrôle](securite-et-donnees.md#6-avant-de-démarrer-une-étude--liste-de-contrôle). Si votre établissement a mis en ligne la [page d'accueil](page-d-accueil.md) de l'outil, l'engagement que vous y avez pris porte sur le même texte.
+
 | Format | Ce qui est exploité |
 |---|---|
 | PDF | Couche texte, lignes reconstituées par position. Une page sans texte (scan) passe à l'OCR |

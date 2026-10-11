@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /bienvenue
+Disallow: /acces
+Disallow: /mot-de-passe
+Disallow: /deconnexion

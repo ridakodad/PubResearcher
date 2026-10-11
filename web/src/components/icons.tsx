@@ -178,6 +178,16 @@ export function IconAlert(props: IconProps) {
   );
 }
 
+/** Protection des données : l'écusson qui accompagne la charte d'anonymisation. */
+export function IconShield(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M12 3 5 6v5.2c0 4.5 3 8.2 7 9.8 4-1.6 7-5.3 7-9.8V6l-7-3Z" />
+      <path d="m9 12 2 2 4-4" />
+    </Svg>
+  );
+}
+
 /** Chevron d'ouverture : pointe à droite fermé, vers le bas ouvert. */
 export function IconChevron(props: IconProps) {
   return (

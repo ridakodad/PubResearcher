@@ -2,6 +2,39 @@
 
 Le format suit l'ordre des versions, de la plus récente à la plus ancienne ; l'historique git de ce dépôt commence à la 1.2.0, les versions antérieures n'y sont décrites qu'ici. Les numéros de version sont ceux de `package.json` ; le rapport « Méthodes et traçabilité » consigne la version qui a produit un jeu de données.
 
+## 1.3.0 — 11 octobre 2026
+
+**Une charte d'anonymisation avant tout import, et une page d'accueil publique.** L'application demande désormais, avant de laisser déposer le moindre fichier, de confirmer cinq engagements d'anonymisation. Un site public (`landing/`, à déployer sur Vercel) présente l'outil, permet de créer un accès avec Google ou une adresse e-mail et mène, par un court parcours d'accueil, jusqu'à ce même engagement. [Mise en service et fonctionnement](page-d-accueil.md).
+
+**Aucun changement du moteur d'extraction, du schéma de la base, ni des routes de l'API** : `server/src` est inchangé. Une base, une fiche ou une sauvegarde de la 1.2.0 s'ouvre telle quelle.
+
+### Application
+
+- **Charte d'anonymisation devant l'import** (« Importer des dossiers », « Ajouter des documents ») : *PubResearcher n'anonymise rien* ; cinq engagements à cocher — identifiants directs retirés, angles morts vérifiés (en-têtes, tampons, noms de fichiers, texte des images, balises DICOM), code d'étude sans lien avec l'identité, base légale et autorisations, aucun envoi à une API sans autorisation. Tant qu'ils ne sont pas tous cochés, l'écran de dépôt n'existe pas. L'engagement est mémorisé dans le navigateur, **pour une version du texte** : quand le texte change, il est redemandé. Ensuite, un rappel d'une ligne reste affiché au-dessus de l'import et se déplie pour relire les engagements. C'est un rappel, pas un contrôle : l'outil ne peut pas savoir si un document est anonymisé.
+- Le libellé facultatif d'un dossier rappelle de n'y mettre ni nom, ni initiales, ni date de naissance (il s'affiche dans les listes et les exports).
+
+### Page d'accueil (nouveau : `landing/`)
+
+- Site autonome (React, Vite), **même identité visuelle** que l'application : les jetons de couleur, les polices et l'illustration sont des copies exactes, qu'un test compare.
+- **Pages** : accueil (les outils, deux captures de l'application en thème clair et sombre, le parcours, « PubResearcher n'anonymise rien », l'installation, les questions) ; inscription et connexion (**Google** ou e-mail et mot de passe) ; parcours d'accueil en trois étapes (profil, étude, **engagement**) ; accès (« Ouvrir l'application », premier lancement, récapitulatif, rappel adapté à l'état de l'autorisation éthique) ; mot de passe oublié ; confidentialité ; déconnexion.
+- **Données** : Supabase Auth (flux PKCE) et deux tables, `profiles` et `consents` — ce dernier en **ajout seul**, une ligne par engagement avec la version du texte — protégées par des règles d'accès par ligne et des **droits accordés colonne par colonne** (migration SQL fournie) : les dates sont posées par la base, un engagement ne peut pas être antidaté. Aucune donnée de patient : aucune colonne ne peut en recevoir.
+- **Projet Supabase en place** : « PubResearcher » (région `eu-west-3`, Paris), migration appliquée et vérifiée sur le projet réel (17 contrôles des règles et des droits, conseiller de sécurité sans remarque) ; son adresse et sa clé publique sont dans `landing/.env.production`. Restent les réglages du tableau de bord (adresses de retour, Google, envoi des courriels) et le déploiement Vercel : [mise en service](page-d-accueil.md#5-mettre-le-site-en-ligne--pas-à-pas).
+- Tant que Google n'est pas activé dans le projet, « Continuer avec Google » le dit sur le site au lieu de mener à la page d'erreur brute du service.
+- **Mode aperçu** sans configuration : tout le parcours se visite, rien n'est envoyé ni conservé, un bandeau le dit sur chaque page.
+- **Sécurité** : politique de sécurité du contenu stricte (aucun script ni style en ligne ; connexions limitées au site et à Supabase ; `frame-ancestors 'none'`), pas de redirection ouverte après connexion, messages du service d'authentification toujours traduits (jamais de texte technique à l'écran), aucun secret dans le code.
+- **Accessibilité** : WCAG 2.2 AA (axe-core, contraste mesuré sur le rendu), parcours au clavier, lien d'évitement, focus déplacé à chaque changement de page, de 320 à 1 440 px.
+
+### Tests et outillage
+
+- **781 tests** (690 en 1.2.0) : +7 pour la charte de l'application, +71 pour la logique, la migration et la configuration de déploiement de la page d'accueil (dont : la charte du site = celle de l'application mot pour mot, les options du parcours = les contraintes SQL, les jetons de couleur identiques), +13 pour les contrastes de la feuille de style de la page d'accueil.
+- **Parcours de bout en bout** de la page d'accueil (`landing/e2e/`, 20 scénarios, Playwright) contre un **faux Supabase** en mémoire qui vérifie le PKCE, les jetons, les règles d'accès par ligne et les droits par colonne de la migration ; le site y est servi avec les en-têtes de `vercel.json`.
+- Versions : `pubresearcher`, `@pubresearcher/server`, `@pubresearcher/web`, `@pubresearcher/landing` en 1.3.0.
+
+### Documentation
+
+- Nouveau : [Page d'accueil](page-d-accueil.md) — ce que le site conserve et ne reçoit jamais, la charte et sa version, mise en service pas à pas (Supabase, Google, Vercel), modèles de courriels en français, contrôles, limites, dépannage.
+- Mis à jour : README, [Sécurité et données personnelles](securite-et-donnees.md) (la charte, le site), [Guide du chercheur](guide-chercheur.md) (l'import), [Identité visuelle](identite-visuelle.md) (le site), [Rapport de validation](validation.md) (§ 1.3 et § 13).
+
 ## 1.2.0 — 10 octobre 2026
 
 **PubResearcher.** L'application change de nom — « Research Tool » dans les paquets, la bannière de démarrage et le domaine d'authentification, « Espace de recherche » à l'écran — et d'identité visuelle : indigo nuit, poussière d'or, bleu pervenche, police Poppins. [Description de la charte](identite-visuelle.md).

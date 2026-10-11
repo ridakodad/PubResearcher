@@ -1638,3 +1638,53 @@ td strong, td .truncate-wrap { overflow-wrap: anywhere; }
   background: var(--surface-1); border: 1px solid var(--border-strong); border-left: 3px solid var(--warning);
   border-radius: var(--radius-sm); box-shadow: var(--shadow-2);
 }
+
+/* ===================================================== charte d'anonymisation ==== */
+
+/*
+ * Devant tout import de documents de patients : les engagements à confirmer (AnonymisationGate). L'or d'encre
+ * (`--accent`) et son fond doux portent l'avertissement ; le bleu de la marque, l'engagement pris. Aucun des deux
+ * ne repose sur la couleur seule : chaque ligne est un texte, chaque état une case cochée.
+ */
+.charter {
+  display: flex; flex-direction: column; gap: var(--s4);
+  padding: var(--s5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-1);
+}
+.charter-head { display: flex; gap: var(--s3); align-items: flex-start; }
+.charter-head h3 { font-size: 1.1rem; }
+.charter-badge {
+  flex: none; display: grid; place-items: center;
+  width: 44px; height: 44px; border-radius: 50%;
+  background: var(--accent-soft); color: var(--accent);
+}
+.charter-lead { margin-top: var(--s1); color: var(--text-secondary); font-size: 0.92rem; max-width: 62ch; }
+
+.charter-list { display: flex; flex-direction: column; gap: var(--s2); border: 0; padding: 0; margin: 0; min-width: 0; }
+.charter-item {
+  display: flex; gap: var(--s3); align-items: flex-start;
+  margin: 0; padding: var(--s3);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: 0.88rem; font-weight: 400; line-height: 1.5; color: var(--text-primary);
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+.charter-item:hover { border-color: var(--control-border); }
+.charter-item input { flex: none; margin: 0; }
+.charter-item:has(input:checked) { background: var(--brand-soft); border-color: var(--brand); }
+
+/* Une fois la charte confirmée : un rappel d'une ligne, qui se déplie. */
+.charter-reminder {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3);
+  margin-bottom: var(--s3); padding: var(--s2) var(--s3);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft); color: var(--text-primary);
+  font-size: 0.85rem;
+}
+.charter-reminder > .icon { color: var(--accent); flex: none; }
+.charter-reminder > span { flex: 1 1 260px; min-width: 0; }
+.charter-recall { flex-basis: 100%; margin: 0; padding-left: var(--s5); display: flex; flex-direction: column; gap: var(--s2); color: var(--text-secondary); }

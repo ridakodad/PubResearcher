@@ -6,7 +6,7 @@ Cet outil manipule des comptes rendus de patients. Ce document dit ce qu'il prot
 
 1. **Par défaut, rien ne sort de la machine et rien n'y entre depuis le réseau.** L'outil écoute sur `127.0.0.1`, extrait par des règles locales, fait son OCR hors connexion.
 2. **Trois fonctions peuvent faire sortir des données, et seulement si vous les configurez** : l'extraction par Claude (envoie le texte des documents à l'API d'Anthropic), la rédaction assistée (lui envoie des agrégats de la cohorte) et la revue bibliographique (envoie l'équation de recherche à Apify). Voir § 2.
-3. **L'outil n'anonymise rien.** Ce qu'il lit est ce qu'il stocke et, le cas échéant, ce qu'il envoie. Importez des documents **pseudonymisés**, avec des codes de dossier sans lien avec l'identité.
+3. **L'outil n'anonymise rien.** Ce qu'il lit est ce qu'il stocke et, le cas échéant, ce qu'il envoie. Importez des documents **pseudonymisés**, avec des codes de dossier sans lien avec l'identité. Avant tout import, l'interface fait confirmer une **charte d'anonymisation** (cinq engagements, redemandés à chaque nouvelle version du texte) : c'est un rappel, pas un contrôle (§ 5).
 4. **Il n'y a ni chiffrement au repos, ni comptes individuels.** La base et les fichiers sont en clair dans `DATA_DIR`. Un mot de passe unique, partagé, peut protéger l'accès réseau. Le reste relève du poste : disque chiffré, droits du système de fichiers, sauvegardes protégées.
 5. **Sur un réseau, mettez-le derrière HTTPS.** Le mot de passe HTTP Basic circule en clair sans TLS.
 
@@ -56,7 +56,7 @@ Posés sur toutes les réponses : `X-Content-Type-Options: nosniff`, `X-Frame-Op
 
 ## 5. Ce que l'outil ne fait pas
 
-- **Anonymiser ou pseudonymiser.** Il n'y a aucune détection de noms, de dates de naissance ni d'identifiants dans le texte. Un document nominatif importé reste nominatif.
+- **Anonymiser ou pseudonymiser.** Il n'y a aucune détection de noms, de dates de naissance ni d'identifiants dans le texte. Un document nominatif importé reste nominatif. La **charte d'anonymisation** que l'interface fait confirmer avant l'import (« Avant d'importer des données de patients ») rend l'engagement de l'utilisateur explicite et daté — dans le navigateur, pour une version du texte — ; elle ne vérifie rien de ce que contiennent les fichiers.
 - **Chiffrer la base ou les fichiers.** Utilisez le chiffrement du disque (BitLocker, FileVault, LUKS) du poste ou du serveur.
 - **Gérer des comptes, des rôles, un journal d'accès.** Un mot de passe unique ; le journal des *valeurs* dit ce qui a changé et quand, mais pas **qui** l'a changé.
 - **Servir en HTTPS** lui-même. Placez un proxy TLS devant (voir le [guide de l'administrateur](guide-administrateur.md#5-exposer-loutil-sur-un-réseau)).
@@ -82,6 +82,7 @@ Posés sur toutes les réponses : `X-Content-Type-Options: nosniff`, `X-Frame-Op
 **Données**
 
 - [ ] Les documents sont **pseudonymisés avant** l'import ; les codes de dossier n'ont aucun lien avec l'identité (ni numéro de dossier hospitalier, ni initiales, ni date de naissance).
+- [ ] Chaque personne qui importe des documents a lu et confirmé la charte d'anonymisation de l'interface — et sait ce qu'elle engage : en-têtes, tampons, noms de fichiers, texte incrusté dans les scans et balises DICOM compris.
 - [ ] La table de correspondance code ↔ identité est **ailleurs**, sous le contrôle de l'investigateur.
 - [ ] Une **sauvegarde** est planifiée, rangée à part, chiffrée, et sa restauration a été essayée une fois (`npm run restore --workspace server -- <sauvegarde> --verify`).
 - [ ] La durée de conservation est fixée ; la procédure de destruction (dossier de données, sauvegardes, exports) est écrite.
@@ -106,3 +107,7 @@ Posés sur toutes les réponses : `X-Content-Type-Options: nosniff`, `X-Frame-Op
 `npm audit` au 9 octobre 2026 : **3 avis, tous modérés**, dans une même chaîne (`mammoth` → `argparse` → `sprintf-js` : déni de service par précision non bornée d'un format `sprintf`). Aucun chemin ne l'atteint avec une entrée utilisateur dans cette application ; la « correction » proposée par `npm audit fix --force` est un **retour en arrière** de `mammoth` (0.3.29), qui réintroduirait d'autres défauts : ne la lancez pas. À revérifier à chaque mise à jour (`npm audit`).
 
 Aucune dépendance native n'est compilée à l'installation ; aucun script `preinstall`/`postinstall` n'est exécuté par le projet lui-même.
+
+## 9. La page d'accueil publique (`landing/`)
+
+Le dépôt contient aussi un **site public**, déployé à part (sur Vercel) : présentation, création d'un accès (Google ou e-mail), parcours d'accueil, engagement d'anonymisation. Il **ne reçoit aucune donnée de patient** et ne communique pas avec l'application : il conserve, dans un projet Supabase du responsable du site, le profil professionnel de l'utilisateur (nom, adresse, fonction, établissement, pays, type d'étude, état de l'autorisation) et la trace de l'engagement pris (version du texte, date), protégés par des règles d'accès par ligne et des droits accordés colonne par colonne (la date d'un engagement est posée par la base : il ne peut pas être antidaté). Il **ne protège pas l'application** : c'est une porte d'entrée, pas une serrure. Ce qu'il conserve, chez qui, comment le mettre en service et ses limites : [Page d'accueil](page-d-accueil.md).

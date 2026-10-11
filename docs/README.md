@@ -1,6 +1,6 @@
 # Documentation
 
-Version 1.2.0 · octobre 2026 · en français, comme l'interface.
+Version 1.3.0 · octobre 2026 · en français, comme l'interface.
 
 | Document | Pour qui | Contenu |
 |---|---|---|
@@ -12,8 +12,9 @@ Version 1.2.0 · octobre 2026 · en français, comme l'interface.
 | [Architecture](architecture.md) | Qui modifie ou audite le code | Composants, flux, moteur d'extraction, isolation des fichiers, modèle de données, décisions et compromis |
 | [Rapport de validation](validation.md) | Tous | Ce qui a été exécuté, les mesures, et **ce qui n'a pas été vérifié** |
 | [Revue bibliographique](revue-bibliographique.md) | Chercheur | PubMed et Google Scholar par acteurs Apify : sources, coût, tri, diagramme de flux, exports |
+| [Page d'accueil](page-d-accueil.md) | Qui met en ligne le site public ; délégué à la protection des données | Le site `landing/` (inscription Google ou e-mail, parcours d'accueil, **charte d'anonymisation**), ce qu'il conserve et ne reçoit jamais, mise en service pas à pas (Supabase, Google, Vercel), variables, contrôles, limites, dépannage |
 | [Identité visuelle](identite-visuelle.md) | Qui modifie l'interface | Couleurs et contrastes mesurés, police, formes, composants (carte d'en-tête, rail, tuiles), thèmes clair et sombre, comment modifier la charte |
-| [Journal des versions](changelog.md) | Tous | Ce qui a changé de la 1.0.0 à la 1.2.0, dont l'unique changement de comportement à connaître (écoute locale par défaut, depuis la 1.1.0) |
+| [Journal des versions](changelog.md) | Tous | Ce qui a changé de la 1.0.0 à la 1.3.0, dont l'unique changement de comportement à connaître (écoute locale par défaut, depuis la 1.1.0) |
 
 Les captures (`img/`) montrent les 24 dossiers fictifs de démonstration (`npm run demo`) ; la relecture y est simulée.
 

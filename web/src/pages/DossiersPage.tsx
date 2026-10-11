@@ -498,8 +498,12 @@ function CreatePatientModal({
           value={label}
           placeholder="Groupe témoin, inclusion mars 2024…"
           maxLength={200}
+          aria-describedby="patient-label-hint"
           onChange={(e) => setLabel(e.target.value)}
         />
+        <div className="field-hint" id="patient-label-hint">
+          Ni nom, ni initiales, ni date de naissance : ce libellé s’affiche dans les listes et les exports.
+        </div>
       </div>
     </Modal>
   );
