@@ -38,7 +38,8 @@ create table if not exists public.consents (
   kind text not null check (kind in ('anonymisation')),
   -- Version du texte confirmé (voir ANONYMISATION_VERSION dans landing/src/lib/charter.ts).
   version text not null check (char_length(version) between 1 and 40),
-  -- Identifiants des engagements cochés (CHARTER_ITEMS) : la preuve que chacun l'a été.
+  -- Identifiants des engagements cochés (CHARTER_ITEMS), tels que le site les envoie : une trace déclarative — la base
+  -- vérifie leur forme, pas leur contenu, ni que la case a été cochée par une personne.
   items text[] not null check (cardinality(items) between 1 and 20),
   accepted_at timestamptz not null default now()
 );

@@ -1,6 +1,7 @@
 import { useEffect, useId, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
+import { SIGN_OUT } from '../pages/SignOutPage';
 import { Brand } from './Brand';
 import { IconClose, IconMenu } from './icons';
 import { ThemeToggle } from './ThemeToggle';
@@ -25,7 +26,7 @@ function AccountLinks({ onNavigate }: { onNavigate?: () => void }) {
         <Link className="btn btn-primary" to="/acces" onClick={onNavigate}>
           Mon accès
         </Link>
-        <Link className="btn btn-quiet" to="/deconnexion" onClick={onNavigate}>
+        <Link className="btn btn-quiet" to="/deconnexion" state={SIGN_OUT} onClick={onNavigate}>
           Se déconnecter
         </Link>
       </>

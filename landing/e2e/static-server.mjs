@@ -41,7 +41,15 @@ export async function serveDist(dir) {
       res.writeHead(403).end();
       return;
     }
-    if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(dist, 'index.html');
+    if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) {
+      // Comme la réécriture de vercel.json : toute adresse inconnue sert la page… sauf sous /assets/, où un fichier
+      // manquant est une vraie erreur 404 (et non une page HTML mise en cache un an sous un nom de script).
+      if (url.pathname.startsWith('/assets/')) {
+        res.writeHead(404, { ...global, 'Content-Type': 'text/plain' }).end('404');
+        return;
+      }
+      file = path.join(dist, 'index.html');
+    }
     const headers = { ...global, 'Content-Type': TYPES[path.extname(file)] ?? 'application/octet-stream' };
     if (url.pathname.startsWith('/assets/')) Object.assign(headers, assets);
     res.writeHead(200, headers);

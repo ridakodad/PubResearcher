@@ -109,6 +109,10 @@ export function AuthPage({ mode }: { mode: 'signup' | 'login' }) {
             reviendrez ici, connecté, pour décrire votre étude.
           </p>
           <p className="small muted">Il n’arrive pas ? Regardez dans les courriers indésirables, puis demandez un nouvel envoi.</p>
+          <p className="small muted">
+            Cette adresse avait déjà un compte, par e-mail ou avec Google ? Aucun lien n’est alors envoyé :{' '}
+            <Link to="/connexion">connectez-vous</Link>.
+          </p>
           {formError && (
             <div className="notice notice-error" role="alert">
               <IconInfo size={18} />
@@ -190,7 +194,16 @@ export function AuthPage({ mode }: { mode: 'signup' | 'login' }) {
           </p>
         )}
 
-        <GoogleButton label="Continuer avec Google" onError={(message) => setFormError(message)} />
+        <GoogleButton
+          label="Continuer avec Google"
+          onError={(message) => {
+            // Une nouvelle erreur remplace les précédentes (retour d'un lien, adresse non confirmée…).
+            clearReturnError();
+            setErrorCode('');
+            setResent(false);
+            setFormError(message);
+          }}
+        />
 
         <div className="divider-or" aria-hidden="true">
           <span>ou avec une adresse e-mail</span>

@@ -8,6 +8,7 @@ import { config } from '../lib/config';
 import { ETHICS, ethicsAdvice, HOSTINGS, labelOf, nextStep, ROLES, STUDY_TYPES, VOLUMES } from '../lib/onboarding';
 import { usePageTitle } from '../lib/usePageTitle';
 import { useOnboardingState } from '../lib/useOnboarding';
+import { SIGN_OUT } from './SignOutPage';
 
 function formatDate(iso: string | null | undefined): string {
   if (!iso) return '';
@@ -185,7 +186,9 @@ export function AccessPage() {
         <Link to="/">
           <IconArrow size={16} className="flip" /> Retour à l’accueil
         </Link>
-        <Link to="/deconnexion">Se déconnecter</Link>
+        <Link to="/deconnexion" state={SIGN_OUT}>
+          Se déconnecter
+        </Link>
       </p>
     </div>
   );

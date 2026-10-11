@@ -67,8 +67,11 @@ export function validateNewPassword(input: { password: string; confirm: string }
 
 /** Code machine d'une erreur du service d'authentification (`email_not_confirmed`…), ou une chaîne vide. */
 export function authErrorCode(error: unknown): string {
-  const code = (error as { code?: unknown } | null)?.code;
-  return typeof code === 'string' ? code : '';
+  const e = (error ?? {}) as { code?: unknown; message?: unknown };
+  if (typeof e.code === 'string') return e.code;
+  // Sans code (ancien format de réponse) : le seul cas qui change l'écran se reconnaît à son message.
+  if (typeof e.message === 'string' && e.message.toLowerCase().includes('email not confirmed')) return 'email_not_confirmed';
+  return '';
 }
 
 /** Message d'erreur du service d'authentification, traduit et sans jargon. Ne laisse jamais passer le texte brut. */
@@ -91,6 +94,11 @@ export function frenchAuthError(error: unknown): string {
     case 'signup_disabled':
     case 'email_provider_disabled':
       return 'Les inscriptions par e-mail sont fermées sur ce site.';
+    case 'email_address_not_authorized':
+      // Le projet envoie encore ses courriels par le serveur de démonstration de Supabase (voir la documentation).
+      return 'Ce site ne peut pas encore envoyer de courriel à cette adresse. Utilisez « Continuer avec Google », ou réessayez plus tard.';
+    case 'email_address_invalid':
+      return 'Cette adresse e-mail n’est pas acceptée : vérifiez-la, ou utilisez-en une autre.';
     case 'provider_disabled':
     case 'oauth_provider_not_supported':
       return 'La connexion avec Google n’est pas encore activée sur ce site : utilisez votre adresse e-mail.';
@@ -105,6 +113,13 @@ export function frenchAuthError(error: unknown): string {
     case 'refresh_token_not_found':
       return 'Votre session a expiré : reconnectez-vous.';
     default:
+  }
+
+  // Le client transforme lui-même certaines erreurs, sans code : reconnues à leur nom ou à leur message.
+  if (e.name === 'AuthSessionMissingError') return 'Votre session a expiré : reconnectez-vous.';
+  if (message.includes('email not confirmed')) return 'Adresse e-mail non confirmée : ouvrez le lien que nous vous avons envoyé.';
+  if (message.includes('not authorized') && message.includes('email address')) {
+    return 'Ce site ne peut pas encore envoyer de courriel à cette adresse. Utilisez « Continuer avec Google », ou réessayez plus tard.';
   }
 
   if (status === 429 || message.includes('rate limit')) return 'Trop de tentatives en peu de temps : patientez une minute, puis réessayez.';

@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { focusFirstError, PasswordField, TextField } from '../components/fields';
 import { IconCheck, IconInfo } from '../components/icons';
@@ -11,10 +11,12 @@ import { usePageTitle } from '../lib/usePageTitle';
  *
  * Déconnecté : on demande un lien par e-mail. La réponse est toujours la même, que l'adresse existe ou non — sinon la
  * page servirait à savoir qui a un compte. Connecté (y compris en arrivant par le lien reçu) : on choisit le nouveau.
+ * Un lien reçu qui n'a pas pu servir (expiré, déjà utilisé, ouvert ailleurs) est expliqué ici, au-dessus du formulaire
+ * qui permet d'en demander un autre.
  */
 export function PasswordPage() {
   usePageTitle('Mot de passe', { noindex: true });
-  const { status, user, recovery, requestPasswordReset, updatePassword } = useAuth();
+  const { status, user, recovery, returnError, clearReturnError, requestPasswordReset, updatePassword } = useAuth();
   const formRef = useRef<HTMLFormElement>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -23,6 +25,14 @@ export function PasswordPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [done, setDone] = useState<'sent' | 'changed' | null>(null);
   const [busy, setBusy] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
+
+  // Le message du lien est repris ici, puis effacé du contexte : il ne doit pas reparaître plus tard, sur la connexion.
+  useEffect(() => {
+    if (!returnError) return;
+    setLinkError(returnError);
+    clearReturnError();
+  }, [returnError, clearReturnError]);
 
   if (status === 'loading') {
     return (
@@ -39,6 +49,7 @@ export function PasswordPage() {
     event.preventDefault();
     if (busy) return;
     setFormError(null);
+    setLinkError(null);
 
     const found: FieldErrors<'email' | 'password' | 'confirm'> = updating
       ? validateNewPassword({ password, confirm }, user?.email ?? '')
@@ -103,10 +114,10 @@ export function PasswordPage() {
                 : 'Indiquez l’adresse de votre compte : nous vous envoyons un lien pour en choisir un nouveau.'}
             </p>
 
-            {formError && (
+            {(linkError || formError) && (
               <div className="notice notice-error" role="alert">
                 <IconInfo size={18} />
-                <div>{formError}</div>
+                <div>{formError ?? linkError}</div>
               </div>
             )}
 

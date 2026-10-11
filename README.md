@@ -8,7 +8,7 @@ L'espace de travail d'une étude rétrospective, sur votre poste. D'un côté, c
 
 Pensée pour un travail de thèse ou une étude rétrospective : on part d'une pile de dossiers, on obtient un tableau exploitable dans Excel, R ou SPSS — sans ressaisir chaque variable à la main, et sans perdre la trace de l'origine de chaque valeur.
 
-**Version 1.3.0** · Node.js ≥ 22.13 · un seul processus, aucun module natif à compiler · 781 tests
+**Version 1.3.0** · Node.js ≥ 22.13 · un seul processus, aucun module natif à compiler · 793 tests
 
 > **Données de santé.** Par défaut l'outil n'écoute que sur le poste et n'envoie **rien** hors de la machine. Il n'anonymise pas : importez des documents pseudonymisés. Avant tout import, l'application demande de **confirmer une charte d'anonymisation** (cinq engagements, rappelés à chaque nouvelle version du texte). Lisez [Sécurité et données](docs/securite-et-donnees.md) avant la première étude.
 
@@ -263,8 +263,8 @@ En production, l'API sert aussi le front compilé : un seul processus, une seule
 
 ```bash
 npm run typecheck
-npm test             # 781 tests, un processus par fichier
-cd landing && node --test e2e/flows.test.mjs   # 20 parcours de la page d'accueil (Playwright requis)
+npm test             # 793 tests, un processus par fichier
+cd landing && node --test e2e/flows.test.mjs   # 25 parcours de la page d'accueil (Playwright requis)
 ```
 
 Les tests couvrent le moteur (repliage, typage, chaque famille de règles, négation, unités, expressions surveillées), la chaîne complète — import, extraction, relecture, export — sur de vrais fichiers PDF, DOCX, DICOM et images (PNG, JPEG avec EXIF, TIFF) construits par les fixtures, un **vrai processus serveur** (démarrage, verrou, réglages invalides, arrêt par signal), l'isolation sur de vrais fichiers piégés, le SDK d'Anthropic contre un faux serveur, et la revue bibliographique contre un faux serveur Apify qui rejoue de vraies sorties.

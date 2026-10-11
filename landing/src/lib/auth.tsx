@@ -1,6 +1,16 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { Session, User } from '@supabase/supabase-js';
-import { LINK_NOT_COMPLETED, parseAuthReturn, stripAuthReturn } from './authReturn';
+import type { Session, SupabaseClient, User } from '@supabase/supabase-js';
+import {
+  EMAIL_LINK_FAILED,
+  hasImplicitTokens,
+  LINK_NOT_COMPLETED,
+  parseAuthReturn,
+  parseEmailLink,
+  RECOVERY_LINK_FAILED,
+  stripAuthReturn,
+  stripEmailLink,
+  type ReturnContext,
+} from './authReturn';
 import { providerEnabled } from './authSettings';
 import { config } from './config';
 import { supabase } from './supabase';
@@ -95,18 +105,49 @@ function writePreviewUser(user: AppUser | null): void {
   }
 }
 
+/**
+ * Ce que l'adresse portait à l'ouverture de la page. Relevé une fois, au chargement : le client Supabase nettoie
+ * ensuite l'adresse (il retire le code qu'il échange), et en développement React joue les effets deux fois.
+ */
+const ARRIVAL = {
+  code: new URLSearchParams(window.location.search).has('code'),
+  implicitTokens: hasImplicitTokens(window.location.hash),
+  // La page « mot de passe » reçoit les liens de réinitialisation : un échec s'y explique autrement.
+  context: (window.location.pathname === '/mot-de-passe' ? 'recovery' : 'default') as ReturnContext,
+};
+
+let emailLinkOnce: Promise<string | null> | null = null;
+
+/**
+ * Échange le lien « token_hash » reçu par e-mail (voir authReturn.ts) contre une session, une seule fois par
+ * chargement de page. Renvoie le message à montrer si le service le refuse, sinon `null`.
+ */
+function consumeEmailLink(client: SupabaseClient): Promise<string | null> {
+  emailLinkOnce ??= (async () => {
+    const link = parseEmailLink(window.location.search);
+    if (!link) return null;
+    // Le jeton ne sert qu'une fois : il quitte l'adresse avant même d'être échangé.
+    window.history.replaceState(window.history.state, '', stripEmailLink(window.location.href));
+    const { error } = await client.auth.verifyOtp({ token_hash: link.tokenHash, type: link.type });
+    if (!error) return null;
+    console.error('[pubresearcher] lien reçu par e-mail', error.code ?? error.message);
+    return link.type === 'recovery' ? RECOVERY_LINK_FAILED : EMAIL_LINK_FAILED;
+  })();
+  return emailLinkOnce;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<Status>('loading');
   const [user, setUser] = useState<AppUser | null>(null);
   const [recovery, setRecovery] = useState(false);
   const [returnError, setReturnError] = useState<string | null>(() =>
-    parseAuthReturn(window.location.search, window.location.hash),
+    parseAuthReturn(window.location.search, window.location.hash, ARRIVAL.context),
   );
   const preview = !config.authConfigured;
 
   // L'erreur est lue une fois, puis retirée de l'adresse : un rechargement ne doit pas la rejouer.
   useEffect(() => {
-    if (returnError) window.history.replaceState(null, '', stripAuthReturn(window.location.href));
+    if (returnError) window.history.replaceState(window.history.state, '', stripAuthReturn(window.location.href));
   }, [returnError]);
 
   const apply = useCallback((session: Session | null) => {
@@ -129,8 +170,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     let cancelled = false;
     let unsubscribe = () => {};
-    // Le client retire le code de l'adresse en l'échangeant : on note avant lui s'il y en avait un.
-    const arrivedWithCode = new URLSearchParams(window.location.search).has('code');
     supabase()
       .then(async (client) => {
         if (cancelled) return;
@@ -143,11 +182,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
         unsubscribe = () => sub.subscription.unsubscribe();
         // `getSession` attend la fin de l'initialisation du client : si l'adresse porte un code de retour
-        // (Google, lien de confirmation, réinitialisation), il est échangé avant que l'on lise la session.
+        // (Google, lien par défaut des courriels), il est échangé avant que l'on aille plus loin.
+        await client.auth.getSession();
+        // Puis le lien « token_hash », s'il y en a un : la session qu'il ouvre remplace celle du navigateur.
+        const linkError = await consumeEmailLink(client);
         const { data } = await client.auth.getSession();
         if (cancelled) return;
         apply(data.session);
-        if (!data.session && arrivedWithCode) setReturnError((current) => current ?? LINK_NOT_COMPLETED);
+        // Un code ou des jetons dans l'adresse, et pourtant aucune session : le lien n'a pas pu servir ici.
+        const unusable = !data.session && (ARRIVAL.code || ARRIVAL.implicitTokens);
+        const failure = linkError ?? (unusable ? (ARRIVAL.context === 'recovery' ? RECOVERY_LINK_FAILED : LINK_NOT_COMPLETED) : null);
+        if (failure) setReturnError((current) => current ?? failure);
+        // Des jetons refusés (ancien format de lien) ne restent pas dans l'adresse.
+        if (hasImplicitTokens(window.location.hash)) {
+          window.history.replaceState(window.history.state, '', stripEmailLink(window.location.href));
+        }
       })
       .catch(() => {
         if (!cancelled) {
@@ -228,7 +277,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
         const client = await supabase();
-        const { error } = await client.auth.signOut();
+        // Ce navigateur seulement : se déconnecter ici ne doit pas fermer les sessions ouvertes sur d'autres appareils.
+        const { error } = await client.auth.signOut({ scope: 'local' });
         if (error) throw error;
       },
 

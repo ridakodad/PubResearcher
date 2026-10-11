@@ -50,9 +50,12 @@ function readConstraints() {
 }
 
 export class FakeSupabase {
-  constructor({ confirmEmail = true, googleEnabled = true } = {}) {
+  constructor({ confirmEmail = true, googleEnabled = true, mailAllowList = null } = {}) {
     this.confirmEmail = confirmEmail;
     this.googleEnabled = googleEnabled; // « Authentication › Sign In / Providers › Google » activé dans le projet
+    // Serveur d'envoi par défaut de Supabase : il n'écrit qu'aux membres de l'équipe. `null` : service d'envoi à soi.
+    this.mailAllowList = mailAllowList;
+    this.tokenHashes = new Map(); // jeton des liens « token_hash » → { email, type }, à usage unique
     this.constraints = readConstraints();
     this.users = new Map(); // adresse → utilisateur
     this.codes = new Map(); // code d'échange → { user, challenge, kind }
@@ -148,8 +151,29 @@ export class FakeSupabase {
     const pending = this.pending.get(`recovery:${email}`);
     if (!pending) throw new Error(`aucune réinitialisation en attente pour ${email}`);
     const code = `code-${crypto.randomUUID()}`;
-    this.codes.set(code, { user: this.users.get(email), challenge: null, kind: 'recovery' });
+    // Le défi PKCE envoyé avec la demande : seul le navigateur qui l'a faite peut échanger ce code.
+    this.codes.set(code, { user: this.users.get(email), challenge: pending.challenge ?? null, kind: 'recovery' });
     return withParam(pending.redirectTo, 'code', code);
+  }
+
+  /**
+   * Le lien des modèles de courriels « token_hash » (documentation, § 5.1) : `{{ .SiteURL }}/bienvenue?token_hash=…&type=email`
+   * ou `…/mot-de-passe?token_hash=…&type=recovery`. Aucun vérificateur PKCE : il marche dans n'importe quel navigateur,
+   * une seule fois. `siteUrl` joue le rôle de la « Site URL » du projet.
+   */
+  tokenHashLink(email, { kind = 'signup', siteUrl }) {
+    const key = kind === 'recovery' ? `recovery:${email}` : email;
+    if (!this.pending.has(key)) throw new Error(`aucun envoi en attente pour ${email} (${kind})`);
+    const tokenHash = crypto.randomBytes(28).toString('hex');
+    const type = kind === 'recovery' ? 'recovery' : 'email';
+    this.tokenHashes.set(tokenHash, { email, type });
+    return `${siteUrl}${kind === 'recovery' ? '/mot-de-passe' : '/bienvenue'}?token_hash=${tokenHash}&type=${type}`;
+  }
+
+  /** Refus du serveur d'envoi par défaut, tel que le renvoie le vrai service. */
+  mailRefused(email) {
+    if (!this.mailAllowList || this.mailAllowList.includes(email)) return null;
+    return this.error(400, 'email_address_not_authorized', `Email address "${email}" cannot be used as it is not authorized`);
   }
 
   // ------------------------------------------------------------------------------------------ traitement ---
@@ -184,7 +208,9 @@ export class FakeSupabase {
     if (fault) {
       fault.times -= 1;
       if (fault.abort) return route.abort('connectionfailed');
-      result = { status: fault.status, body: fault.body };
+      // Le service d'authentification date toutes ses réponses (format d'erreur 2024-01-01), pannes comprises.
+      const versioned = url.pathname.startsWith('/auth/v1/') ? { 'x-supabase-api-version': '2024-01-01' } : {};
+      result = { status: fault.status, body: fault.body, headers: versioned };
     } else if (url.pathname !== '/auth/v1/authorize' && request.headers()['apikey'] !== MOCK_KEY) {
       // (« authorize » est une navigation du navigateur : elle ne porte pas d'en-tête personnalisé.)
       result = this.error(401, 'no_authorization', 'No API key found in request');
@@ -219,6 +245,7 @@ export class FakeSupabase {
     if (route === '/signup' && method === 'POST') {
       const email = String(body.email ?? '').toLowerCase();
       if (!email) return this.error(400, 'validation_failed', 'To signup, please provide your email');
+      if (this.confirmEmail && this.mailRefused(email)) return this.mailRefused(email);
       if (String(body.password ?? '').length < 6) {
         return { status: 422, body: { code: 'weak_password', message: 'Password should be at least 6 characters.', weak_password: { reasons: ['length'] } }, headers: { 'x-supabase-api-version': '2024-01-01' } };
       }
@@ -277,12 +304,27 @@ export class FakeSupabase {
     if (route === '/recover' && method === 'POST') {
       // Même réponse que l'adresse existe ou non.
       const email = String(body.email ?? '').toLowerCase();
-      if (this.users.has(email)) this.pending.set(`recovery:${email}`, { redirectTo: url.searchParams.get('redirect_to') });
+      if (this.mailRefused(email)) return this.mailRefused(email);
+      if (this.users.has(email)) {
+        this.pending.set(`recovery:${email}`, { redirectTo: url.searchParams.get('redirect_to'), challenge: body.code_challenge ?? null });
+      }
       return { body: {} };
+    }
+
+    if (route === '/verify' && method === 'POST') {
+      // Lien « token_hash » : à usage unique, valable dans n'importe quel navigateur.
+      const entry = this.tokenHashes.get(String(body.token_hash ?? ''));
+      const type = body.type === 'signup' ? 'email' : body.type;
+      if (!entry || entry.type !== type) return this.error(403, 'otp_expired', 'Email link is invalid or has expired');
+      this.tokenHashes.delete(String(body.token_hash));
+      const user = this.users.get(entry.email);
+      if (entry.type === 'email') user.confirmed = true;
+      return { body: this.sessionJson(user) };
     }
 
     if (route === '/resend' && method === 'POST') {
       const email = String(body.email ?? '').toLowerCase();
+      if (this.mailRefused(email)) return this.mailRefused(email);
       // Le renvoi ouvre un nouveau flux PKCE : nouveau défi, nouvelle adresse de retour (avec son identifiant de flux).
       if (this.pending.has(email)) {
         const previous = this.pending.get(email);

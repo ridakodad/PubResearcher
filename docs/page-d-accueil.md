@@ -13,8 +13,8 @@ Le site public de PubResearcher : il présente l'outil, propose de créer un acc
 | `/connexion` | « Se connecter » : mêmes moyens ; « Mot de passe oublié ? » | public |
 | `/bienvenue` | Parcours d'accueil en trois étapes : **profil**, **étude**, **engagement** (la charte d'anonymisation) | connecté |
 | `/acces` | « Ouvrir l'application », mode d'emploi du premier lancement, récapitulatif des réponses, rappel adapté à l'autorisation de l'étude | connecté, parcours terminé |
-| `/mot-de-passe` | Demander un lien de réinitialisation ; choisir un nouveau mot de passe | public / connecté |
-| `/deconnexion` | Se déconnecte puis revient à l'accueil | — |
+| `/mot-de-passe` | Demander un lien de réinitialisation ; choisir un nouveau mot de passe ; explique un lien reçu qui n'a pas pu servir | public / connecté |
+| `/deconnexion` | Déconnecte **ce navigateur** puis revient à l'accueil. Atteinte autrement que par un bouton du site (lien venu d'ailleurs, adresse tapée), elle demande d'abord confirmation | — |
 | `/confidentialite` | Ce qui est conservé, pourquoi, où ; comment le faire effacer | public |
 
 **Reprise.** Chaque étape enregistre ce qu'elle a recueilli avant de passer à la suivante : on peut quitter la page et reprendre là où l'on s'est arrêté. `/acces` renvoie vers `/bienvenue` tant que le profil est incomplet ou que l'engagement n'a pas été pris pour la **version courante** du texte. `/bienvenue?modifier` rouvre le parcours pour corriger ses réponses (la charte n'est alors redemandée que si le texte a changé).
@@ -97,13 +97,13 @@ Trois comptes, à créer une fois : **Supabase** (comptes et réponses), **Googl
 
 1. **Créer un projet** *(fait : voir l'encadré)*. Choisissez la région la plus proche de vos utilisateurs (en Europe, pour un public marocain ou européen). Notez l'**URL du projet** (`https://<réf>.supabase.co`) et la **clé publique** (`sb_publishable_…`, page *Connect* ou *API Keys*), et mettez-les dans `landing/.env.production`. N'utilisez et ne copiez jamais la clé secrète (`service_role` / `sb_secret_…`) : le site n'en a pas besoin.
 2. **Créer les tables** *(fait)*. Éditeur SQL › collez le contenu de `landing/supabase/migrations/20261011011740_profils_et_engagements.sql` › *Run* (ou `supabase db push` avec la CLI : le numéro du fichier est celui que le projet a enregistré, la CLI ne le rejouera pas). Le script est rejouable (`if not exists`, `drop … if exists`).
-3. **Contrôler** *(fait)*. *Database › Advisors* (Security) : aucun avertissement. *Table Editor* : un cadenas « RLS enabled » sur les deux tables. (Côté *Performance*, « Unused Index » sur `consents_user_kind_idx` est normal tant que la table est vide : c'est l'index de la lecture du dernier engagement.)
+3. **Contrôler** *(fait)*. *Advisors › Security Advisor* : aucun avertissement. *Table Editor* : un cadenas « RLS enabled » sur les deux tables. (Côté *Performance*, « Unused Index » sur `consents_user_kind_idx` est normal tant que la table est vide : c'est l'index de la lecture du dernier engagement.)
 4. **Réglages d'authentification** (*Authentication*) :
    - *URL Configuration* — **Site URL** : l'adresse publique du site (`https://…`). **Redirect URLs** : l'adresse du site (de préférence le chemin exact, `https://…/bienvenue` et `https://…/mot-de-passe`) ; pour le développement local `http://localhost:5174/**` ; pour les déploiements d'essai de Vercel `https://*-<votre-compte-ou-équipe>.vercel.app/**`. Sans cela, les retours (Google, lien de confirmation, réinitialisation) tombent sur la mauvaise adresse ou sont refusés. Le jeton `**` accepte tout chemin : réservez-le au local et aux essais.
    - *Sign In / Providers › Email* — laissez **Confirm email** activée (c'est le réglage actuel du projet) ; **longueur minimale du mot de passe : 10** au moins (le site en exige 10 ; le service doit faire de même) ; « Prevent use of leaked passwords » si votre formule le permet (formule Pro).
    - *Sign In / Providers › Google* — voir § 5.2.
-5. **Envoi des courriels (obligatoire pour de vrais utilisateurs).** Le serveur d'envoi fourni par défaut **n'écrit qu'aux membres de votre équipe** Supabase (« Email address not authorized » pour toute autre adresse), avec des limites strictes et sans garantie : il ne sert qu'à essayer. *Authentication › Emails › SMTP Settings* : branchez un service d'envoi (Resend, Brevo, Postmark, AWS SES, SendGrid…) et un expéditeur de votre domaine. Sans cela, personne ne reçoit son lien de confirmation.
-6. **Textes des courriels** (*Authentication › Email Templates*) : les modèles par défaut sont en anglais. Deux gabarits à coller (`{{ .ConfirmationURL }}` est fourni par le service) :
+5. **Envoi des courriels (obligatoire pour de vrais utilisateurs).** Le serveur d'envoi fourni par défaut **n'écrit qu'aux membres de votre équipe** Supabase, avec des limites strictes et sans garantie : il ne sert qu'à essayer. Pour toute autre adresse, l'inscription par e-mail est refusée et le site affiche « Ce site ne peut pas encore envoyer de courriel à cette adresse. Utilisez « Continuer avec Google », ou réessayez plus tard. » *Authentication › Emails › SMTP Settings* : branchez un service d'envoi (Resend, Brevo, Postmark, AWS SES, SendGrid…) et un expéditeur d'un domaine **vérifié** chez ce service. Sans cela, personne d'autre que l'équipe ne reçoit son lien de confirmation.
+6. **Textes des courriels** (*Authentication › Emails › Templates*) : les modèles par défaut sont en anglais, et leur lien (`{{ .ConfirmationURL }}`) ne marche que dans le navigateur où la demande a été faite — courant pour qui s'inscrit sur son ordinateur et lit ses courriels sur son téléphone — et un logiciel de sécurité de messagerie qui l'ouvre avant l'utilisateur le consomme. Les deux gabarits ci-dessous mènent **directement au site** avec un jeton à usage unique, que le site échange lui-même : ils marchent sur n'importe quel appareil. À coller tels quels (`{{ .SiteURL }}` et `{{ .TokenHash }}` sont fournis par le service ; la **Site URL** doit donc être celle du site, § 5.1 (4)) :
 
    *Confirm signup* — objet : `Confirmez votre adresse e-mail — PubResearcher`
 
@@ -111,7 +111,7 @@ Trois comptes, à créer une fois : **Supabase** (comptes et réponses), **Googl
    <h2>Confirmez votre adresse e-mail</h2>
    <p>Bonjour,</p>
    <p>Pour terminer la création de votre accès à PubResearcher, confirmez votre adresse :</p>
-   <p><a href="{{ .ConfirmationURL }}">Confirmer mon adresse</a></p>
+   <p><a href="{{ .SiteURL }}/bienvenue?token_hash={{ .TokenHash }}&type=email">Confirmer mon adresse</a></p>
    <p>Ce lien ne sert qu’une fois. Si vous n’avez rien demandé, ignorez ce message.</p>
    ```
 
@@ -120,26 +120,31 @@ Trois comptes, à créer une fois : **Supabase** (comptes et réponses), **Googl
    ```html
    <h2>Choisissez un nouveau mot de passe</h2>
    <p>Vous avez demandé la réinitialisation de votre mot de passe PubResearcher.</p>
-   <p><a href="{{ .ConfirmationURL }}">Choisir un nouveau mot de passe</a></p>
-   <p>Si vous n’êtes pas à l’origine de cette demande, ignorez ce message : votre mot de passe ne change pas.</p>
+   <p><a href="{{ .SiteURL }}/mot-de-passe?token_hash={{ .TokenHash }}&type=recovery">Choisir un nouveau mot de passe</a></p>
+   <p>Ce lien ne sert qu’une fois. Si vous n’êtes pas à l’origine de cette demande, ignorez ce message : votre mot de passe ne change pas.</p>
    ```
+
+   Le site accepte aussi les liens par défaut (flux PKCE) : si vous gardez les modèles d'origine, un lien ouvert dans un autre navigateur donne un message qui dit quoi faire, sans plus.
 
 ### 5.2 Google (bouton « Continuer avec Google »)
 
-1. [Console Google Cloud](https://console.cloud.google.com/) › créez (ou choisissez) un projet › **Google Auth Platform** : configurez l'**écran de consentement** (nom : PubResearcher ; adresse d'assistance ; domaine du site). Les seuls champs demandés par le site sont ceux du profil de base (`openid`, `email`, `profile`) : pas de validation par Google nécessaire pour ces champs. Tant que l'application est en mode « Test », seuls les utilisateurs de test peuvent se connecter : **publiez-la** (« In production ») avant de communiquer l'adresse.
+1. [Console Google Cloud](https://console.cloud.google.com/) › créez (ou choisissez) un projet › **Google Auth Platform** :
+   - *Branding* : nom (PubResearcher), adresse d'assistance, liens vers l'accueil et la page « Confidentialité » du site ; **domaines autorisés** : celui du site et `oyzhlclaniaykyixhsjy.supabase.co`.
+   - *Data Access* : les champs du profil de base seulement — `.../auth/userinfo.email` et `.../auth/userinfo.profile` (présents d'office), `openid` (à ajouter). Aucune validation par Google n'est nécessaire pour ces champs.
+   - *Audience* : tant que l'application est en mode « Test », seuls les utilisateurs de test peuvent se connecter : **publiez-la** (« In production ») avant de communiquer l'adresse.
 2. *Clients › Créer un client OAuth* › type **Application Web**.
    - **Origines JavaScript autorisées** : l'adresse du site (`https://…`), et `http://localhost:5174` pour le développement.
    - **URI de redirection autorisés** : l'**URL de rappel de Supabase**, affichée sur la page *Providers › Google* du tableau de bord : `https://<réf>.supabase.co/auth/v1/callback`. (C'est l'adresse **de Supabase**, pas celle du site.)
 3. Copiez l'**ID client** et le **code secret** dans *Authentication › Sign In / Providers › Google* de Supabase, activez le fournisseur.
 
-Pour ce projet, l'URL de rappel est `https://oyzhlclaniaykyixhsjy.supabase.co/auth/v1/callback`.
+Pour ce projet, l'URL de rappel est `https://oyzhlclaniaykyixhsjy.supabase.co/auth/v1/callback`. Sur la page de choix du compte, Google affichera « continuer vers oyzhlclaniaykyixhsjy.supabase.co » : c'est l'adresse du service d'authentification. Seul un domaine personnalisé pour le projet Supabase (option payante) la remplace par une adresse à vous ; la vérification de la marque (*Branding*, quelques jours) fait afficher le nom et le logo.
 
 Le site demande à Google de proposer le choix du compte (`prompt=select_account`) : utile sur un poste partagé. **Tant que Google n'est pas activé dans Supabase**, le site le vérifie avant de partir (réglages publics du service, `/auth/v1/settings`) et affiche « La connexion avec Google n’est pas encore activée sur ce site : utilisez votre adresse e-mail. » — au lieu de laisser le service afficher sa page d'erreur brute. Si cette vérification échoue (réseau), le site tente quand même la connexion.
 
 ### 5.3 Vercel
 
 1. *Add New… › Project* › importez le dépôt GitHub. **Root Directory : `landing`** — c'est le seul réglage essentiel (le dépôt contient aussi l'application, qui ne se déploie pas sur Vercel : voir § 9). Le reste (framework Vite, `npm ci`, `npm run build`, dossier `dist`, en-têtes de sécurité, réécriture vers `index.html`) est lu dans `landing/vercel.json`.
-2. *Environment Variables* (Production **et** Preview) — voir le tableau du § 6. `VITE_SUPABASE_URL` et `VITE_SUPABASE_PUBLISHABLE_KEY` viennent déjà de `landing/.env.production` (une variable définie dans Vercel l'emporte sur ce fichier) ; restent `VITE_SITE_URL`, `VITE_CONTROLLER_NAME`, `VITE_CONTACT_EMAIL`. Les variables `VITE_*` sont **incorporées à la compilation** : toute modification demande un nouveau déploiement.
+2. *Environment Variables* (Production **et** Preview) — voir le tableau du § 6. `VITE_SUPABASE_URL` et `VITE_SUPABASE_PUBLISHABLE_KEY` viennent déjà de `landing/.env.production` (une variable **du même nom** définie dans Vercel l'emporte sur ce fichier ; l'ancienne `VITE_SUPABASE_ANON_KEY`, elle, ne remplace pas la clé du fichier : changez l'adresse et la clé ensemble, sous ces deux noms) ; restent `VITE_SITE_URL`, `VITE_CONTROLLER_NAME`, `VITE_CONTACT_EMAIL`. Les variables `VITE_*` sont **incorporées à la compilation** : toute modification demande un nouveau déploiement.
 3. *Deploy*. Notez l'adresse de production, puis revenez au § 5.1 (4) : **Site URL** et **Redirect URLs**, et au § 5.2 : **origine JavaScript** de Google.
 4. Renseignez `VITE_CONTROLLER_NAME` et `VITE_CONTACT_EMAIL` (page « Confidentialité »), puis redéployez. Tant qu'elles manquent, la page le dit en toutes lettres : *ne confiez pas de données à ce site avant de les avoir renseignées*.
 5. Vérifiez que le plan Vercel choisi convient à votre usage (conditions d'utilisation de Vercel) et, si vous utilisez un domaine à vous, ajoutez-le dans *Settings › Domains*.
@@ -157,7 +162,9 @@ Le site demande à Google de proposer le choix du compte (`prompt=select_account
 - [ ] *Mot de passe oublié* : le lien arrive, mène à « Choisir un nouveau mot de passe ».
 - [ ] La page « Confidentialité » affiche le responsable et son adresse.
 - [ ] « Ouvrir l'application » mène à `VITE_APP_URL` (voir § 7).
-- [ ] *Database › Advisors* : aucun avertissement de sécurité sur les deux tables.
+- [ ] *Advisors › Security Advisor* : aucun avertissement de sécurité sur les deux tables.
+- [ ] Lien reçu par e-mail ouvert **sur un autre appareil** que celui de la demande (téléphone) : avec les modèles du § 5.1 (6), la confirmation et la réinitialisation y aboutissent.
+- [ ] *Renvoyer le lien* (écran « Vérifiez votre boîte e-mail ») : le second courriel arrive et son lien aboutit.
 
 ### 5.5 Essayer en local
 
@@ -171,7 +178,7 @@ Pour essayer avec le vrai projet Supabase, copiez `.env.example` en `.env.local`
 
 ## 6. Variables d'environnement
 
-Toutes sont lues **à la compilation** ; aucune ne doit contenir de secret (tout ce qui est préfixé `VITE_` est publié dans le code du site). Ordre de priorité : variable d'environnement (Vercel, ligne de commande) > `.env.production.local` > `.env.production` (dans le dépôt : les deux premières) > `.env.local` > `.env`.
+Toutes sont lues **à la compilation** ; aucune ne doit contenir de secret (tout ce qui est préfixé `VITE_` est publié dans le code du site). Ordre de priorité, du plus fort au plus faible : variable d'environnement (Vercel, ligne de commande) > `.env.production.local` (jamais versé au dépôt) > `.env.production` (dans le dépôt : l'adresse et la clé du projet) > `.env.local` > `.env`.
 
 | Variable | Rôle | Valeur par défaut |
 |---|---|---|
@@ -201,7 +208,7 @@ Si votre établissement exploite l'application sur un serveur (voir le [guide de
 | Règles d'accès par ligne et droits de la migration (cinq règles ; retrait de tout, puis droits colonne par colonne ; aucun droit pour un visiteur ; dates posées par la base ; journal en ajout seul) ; le site n'écrit que des colonnes autorisées ; `.env.production` ne contient que l'adresse et la clé publique | idem | dépôt |
 | Politique de sécurité du contenu, en-têtes, absence de script ou de style en ligne, de secret, de lien mort | idem | dépôt |
 | Contrastes WCAG 2.2 AA des jetons, deux thèmes | `npm test` — `server/test/web-contrast.test.ts` (lit les **deux** feuilles de style) | dépôt |
-| 20 parcours dans un vrai navigateur, contre un faux Supabase (inscription avec confirmation, lien ouvert ailleurs, Google/PKCE, Google pas encore activé, connexion, reprise, modification, pannes, déconnexion, redirections, clavier, 320 → 1 440 px) | `cd landing && node --test e2e/flows.test.mjs` (Playwright requis) | dépôt, `landing/e2e/` |
+| 25 parcours dans un vrai navigateur, contre un faux Supabase (inscription avec confirmation, lien ouvert ailleurs, liens « token_hash » sur un autre appareil, réinitialisation ratée puis réussie sur téléphone, envoi refusé par le serveur par défaut, Google/PKCE, Google pas encore activé, connexion, reprise, modification, pannes, déconnexion et déconnexion à confirmer, adresses abîmées, redirections, clavier, 320 → 1 440 px) | `cd landing && node --test e2e/flows.test.mjs` (Playwright requis) | dépôt, `landing/e2e/` |
 | **Projet réel** : 17 contrôles des règles et des droits (deux comptes simulés, transaction annulée), refus sans connexion par HTTP, codes d'erreur réels (`invalid_credentials`), en-têtes CORS, conseillers de sécurité et de performance | requêtes SQL et HTTP, 11 octobre 2026 | § 3.3 ; [rapport de validation, § 13](validation.md#13-page-daccueil-et-charte-danonymisation-130) |
 | Accessibilité (axe-core), contraste du **rendu**, anneaux de focus | scripts de validation, non publiés | [rapport de validation, § 13](validation.md#13-page-daccueil-et-charte-danonymisation-130) |
 
@@ -223,12 +230,14 @@ Le faux Supabase (`landing/e2e/fake-supabase.mjs`) imite le **protocole** — fo
 
 | Ce que vous voyez | Cause probable | Remède |
 |---|---|---|
-| Bandeau « Mode aperçu » sur le site publié | Les deux variables `VITE_SUPABASE_*` manquent **à la compilation** | Ajoutez-les dans Vercel (Production **et** Preview) puis **redéployez** |
+| Bandeau « Mode aperçu » sur le site publié | `landing/.env.production` a été retiré ou vidé, ou une variable `VITE_SUPABASE_*` **vide** est définie dans Vercel (elle l'emporte sur le fichier) | Rétablissez le fichier, ou renseignez les deux variables dans Vercel (Production **et** Preview), puis **redéployez** |
 | Google : « redirect_uri_mismatch » | L'URI de redirection de Google n'est pas l'URL de rappel **de Supabase** | § 5.2 (2) : `https://<réf>.supabase.co/auth/v1/callback` |
 | Après Google ou après un lien reçu : on arrive sur `localhost` ou sur une page inconnue | **Site URL** laissée à sa valeur par défaut, ou adresse absente des **Redirect URLs** | § 5.1 (4) |
 | Google : « accès bloqué » ou seuls quelques comptes passent | L'écran de consentement est en mode « Test » | Publiez l'application (§ 5.2) |
 | « La connexion avec Google n’est pas encore activée sur ce site » | Fournisseur Google désactivé dans Supabase | § 5.2 (3) |
-| « Email address not authorized » dans les journaux, aucun courriel reçu | Serveur d'envoi par défaut de Supabase | § 5.1 (5) : service d'envoi personnalisé |
+| « Ce site ne peut pas encore envoyer de courriel à cette adresse » à l'inscription (`email_address_not_authorized`) | Serveur d'envoi par défaut de Supabase : il n'écrit qu'à l'équipe | § 5.1 (5) : service d'envoi personnalisé |
+| « Ce lien de réinitialisation ne peut pas servir ici » | Lien par défaut ouvert ailleurs que dans le navigateur de la demande, expiré, ou déjà utilisé (y compris par un logiciel de sécurité de la messagerie) | Redemander un lien depuis l'appareil où on le lira ; durablement : modèles du § 5.1 (6) |
+| « Vérifiez votre boîte e-mail », mais rien n'arrive, pour une adresse qui avait déjà un compte | Par discrétion, le service répond pareil que l'adresse ait un compte ou non, et n'envoie rien pour un compte existant | Se connecter (l'écran le rappelle), ou « Mot de passe oublié » |
 | « Trop de tentatives en peu de temps » | Limite de débit du service d'authentification | Patientez une minute ; avec le serveur d'envoi par défaut, la limite est basse |
 | « La connexion n'a pas pu se terminer dans ce navigateur » | Le lien de confirmation a été ouvert sur un autre appareil que celui de l'inscription, ou il a déjà servi | Si l'adresse est confirmée, connectez-vous avec le mot de passe |
 | « Impossible d'enregistrer ou de lire vos réponses » | Les tables n'existent pas (migration non jouée), ou une règle refuse | § 5.1 (2) ; consultez la console du navigateur (le détail technique y est écrit, préfixé `[pubresearcher]`) et *Logs › Postgres* |
@@ -243,7 +252,7 @@ Le faux Supabase (`landing/e2e/fake-supabase.mjs`) imite le **protocole** — fo
 |---|---|
 | `landing/index.html` | Page unique ; écran d'attente lisible par les robots, remplacé au démarrage |
 | `landing/vercel.json` | Compilation, réécriture, en-têtes (CSP, `nosniff`, `Referrer-Policy`, …), cache des fichiers à empreinte |
-| `landing/src/lib/` | Logique : `charter`, `forms`, `onboarding`, `urls`, `authReturn` (pures, testées), `auth`, `authSettings` (Google activé ?), `profile`, `supabase` (client chargé à la demande), `config` |
+| `landing/src/lib/` | Logique : `charter`, `forms`, `onboarding`, `urls`, `authReturn` (pures, testées), `auth`, `authSettings` (Google activé ?), `profile`, `supabase` (client dans un fichier à part, chargé après l'affichage), `config` |
 | `landing/.env.production` | Adresse et clé publique du projet Supabase, lues par les compilations de production |
 | `landing/src/pages/`, `components/` | Pages et composants React |
 | `landing/src/styles.css` | Feuille de style : jetons copiés de l'application, puis composants |

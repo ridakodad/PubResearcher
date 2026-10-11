@@ -14,7 +14,16 @@ import { fileURLToPath } from 'node:url';
 
 import * as app from '../../web/src/lib/anonymisation.js';
 import * as landing from '../../landing/src/lib/charter.js';
-import { LINK_NOT_COMPLETED, parseAuthReturn, stripAuthReturn } from '../../landing/src/lib/authReturn.js';
+import {
+  EMAIL_LINK_FAILED,
+  hasImplicitTokens,
+  LINK_NOT_COMPLETED,
+  parseAuthReturn,
+  parseEmailLink,
+  RECOVERY_LINK_FAILED,
+  stripAuthReturn,
+  stripEmailLink,
+} from '../../landing/src/lib/authReturn.js';
 import {
   authErrorCode,
   frenchAuthError,
@@ -227,6 +236,12 @@ describe('erreurs du service d’authentification : toujours une phrase en fran�
     [{ code: 'same_password' }, /différer/],
     [{ code: 'session_expired' }, /expiré/],
     [{ status: 429, message: 'whatever' }, /patientez/],
+    // Serveur d'envoi par défaut de Supabase (projet tel que livré) : l'adresse n'est pas celle d'un membre de l'équipe.
+    [{ code: 'email_address_not_authorized', message: 'Email address "a@b.org" cannot be used as it is not authorized' }, /ne peut pas encore envoyer de courriel.*Continuer avec Google/],
+    [{ message: 'Email address "a@b.org" cannot be used as it is not authorized' }, /ne peut pas encore envoyer de courriel/],
+    [{ code: 'email_address_invalid', message: 'Email address "a@example.com" is invalid' }, /n’est pas acceptée/],
+    [{ name: 'AuthSessionMissingError', message: 'Auth session missing!' }, /session a expiré/],
+    [{ message: 'Email not confirmed' }, /non confirmée/],
     [{ message: 'Invalid login credentials' }, /incorrect/],
     [{ message: 'User already registered' }, /existe déjà/],
     [{ message: 'Unsupported provider: provider is not enabled' }, /Google n’est pas encore activée sur ce site : utilisez votre adresse e-mail/],
@@ -246,7 +261,9 @@ describe('erreurs du service d’authentification : toujours une phrase en fran�
 
   test('le code d’une erreur', () => {
     assert.equal(authErrorCode({ code: 'email_not_confirmed' }), 'email_not_confirmed');
-    for (const raw of [null, undefined, 'x', {}, { code: 400 }]) assert.equal(authErrorCode(raw), '');
+    // Ancien format de réponse, sans code : « adresse non confirmée » se reconnaît encore (le bouton de renvoi en dépend).
+    assert.equal(authErrorCode({ message: 'Email not confirmed' }), 'email_not_confirmed');
+    for (const raw of [null, undefined, 'x', {}, { code: 400 }, { message: 'Invalid login credentials' }]) assert.equal(authErrorCode(raw), '');
   });
 });
 
@@ -391,6 +408,74 @@ describe('retour d’une authentification en échec', () => {
     assert.equal(stripAuthReturn('https://s.exemple/connexion#error=access_denied&error_code=otp_expired&error_description=z'), '/connexion');
     assert.equal(stripAuthReturn('https://s.exemple/connexion#type=signup&error=x'), '/connexion#type=signup');
   });
+
+  test('sur la page « mot de passe », un échec parle de réinitialisation : on ne peut pas « se connecter avec son mot de passe »', () => {
+    for (const [search, hash] of [
+      ['', '#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired'],
+      ['?error=server_error&error_description=x', ''],
+    ] as const) {
+      assert.equal(parseAuthReturn(search, hash, 'recovery'), RECOVERY_LINK_FAILED);
+    }
+    assert.match(RECOVERY_LINK_FAILED, /Demandez-en un nouveau/);
+    assert.doesNotMatch(RECOVERY_LINK_FAILED, /connectez-vous avec votre mot de passe/i);
+    assert.equal(parseAuthReturn('', '', 'recovery'), null);
+    assert.equal(parseAuthReturn('', '#error=access_denied&error_code=otp_expired'), EMAIL_LINK_FAILED);
+  });
+});
+
+describe('liens reçus par e-mail au format « token_hash » : valables sur tout appareil', () => {
+  const HASH = 'pkce_7a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f6a7b8c9d0e1f';
+
+  test('le lien est reconnu, avec son type', () => {
+    assert.deepEqual(parseEmailLink(`?token_hash=${HASH}&type=email`), { tokenHash: HASH, type: 'email' });
+    assert.deepEqual(parseEmailLink(`?type=recovery&token_hash=${HASH}`), { tokenHash: HASH, type: 'recovery' });
+    // `signup` : ancien nom de la confirmation d'inscription.
+    assert.deepEqual(parseEmailLink(`?token_hash=${HASH}&type=signup`), { tokenHash: HASH, type: 'email' });
+  });
+
+  test('rien d’autre n’est échangé : type inconnu, jeton absent, vide ou suspect', () => {
+    for (const search of [
+      '',
+      '?code=abc',
+      `?token_hash=${HASH}`,
+      `?token_hash=${HASH}&type=magiclink`,
+      `?token_hash=${HASH}&type=invite`,
+      '?token_hash=&type=email',
+      '?token_hash=court&type=email',
+      `?token_hash=${encodeURIComponent('<script>')}&type=email`,
+      `?token_hash=${'a'.repeat(300)}&type=email`,
+    ]) {
+      assert.equal(parseEmailLink(search), null, search);
+    }
+  });
+
+  test('le jeton quitte l’adresse ; le reste demeure', () => {
+    assert.equal(stripEmailLink(`https://s.exemple/bienvenue?token_hash=${HASH}&type=email`), '/bienvenue');
+    assert.equal(stripEmailLink(`https://s.exemple/bienvenue?modifier&token_hash=${HASH}&type=email`), '/bienvenue?modifier=');
+    assert.equal(stripEmailLink('https://s.exemple/connexion?suite=%2Facces'), '/connexion?suite=%2Facces');
+    // `type` n'est retiré de la requête que s'il accompagne un jeton.
+    assert.equal(stripEmailLink('https://s.exemple/x?type=a'), '/x?type=a');
+  });
+
+  test('jetons de session dans le fragment (ancien format, refusé par le flux PKCE) : détectés, puis retirés', () => {
+    const implicit = '#access_token=eyJ.a.b&expires_at=1&expires_in=3600&refresh_token=r&token_type=bearer&type=signup';
+    assert.equal(hasImplicitTokens(implicit), true);
+    assert.equal(hasImplicitTokens('#apercu'), false);
+    assert.equal(hasImplicitTokens(''), false);
+    assert.equal(stripEmailLink(`https://s.exemple/bienvenue${implicit}`), '/bienvenue');
+    assert.equal(stripEmailLink('https://s.exemple/#vos-donnees'), '/#vos-donnees');
+  });
+
+  test('les modèles de courriels de la documentation mènent au site, aux bonnes pages, avec ces paramètres', () => {
+    const doc = read('docs/page-d-accueil.md');
+    const links = [...doc.matchAll(/href="\{\{ \.SiteURL \}\}(\/[^?"]*)\?token_hash=\{\{ \.TokenHash \}\}&type=(\w+)"/g)].map((m) => [m[1], m[2]]);
+    assert.deepEqual(links, [
+      ['/bienvenue', 'email'],
+      ['/mot-de-passe', 'recovery'],
+    ]);
+    const templates = [...doc.matchAll(/```html\n([\s\S]*?)```/g)].map((m) => m[1]!).join('\n');
+    assert.doesNotMatch(templates, /\{\{ \.ConfirmationURL \}\}/, 'plus de lien par défaut dans les modèles proposés');
+  });
 });
 
 // ---------------------------------------------------------------------------------------------------- base ---
@@ -528,7 +613,9 @@ describe('déploiement (Vercel) : politique de sécurité, en-têtes, page HTML'
     assert.match(global['Referrer-Policy']!, /strict-origin/);
     assert.match(global['Permissions-Policy']!, /camera=\(\)/);
     assert.match(global['Cross-Origin-Opener-Policy']!, /same-origin/);
-    assert.deepEqual(vercel.rewrites, [{ source: '/(.*)', destination: '/index.html' }]);
+    // Toute adresse inconnue sert la page (routes du site)… sauf /assets/ : un fichier manquant y reste une erreur 404,
+    // au lieu d'une page HTML servie sous le nom d'un script, avec le cache d'un an des fichiers à empreinte.
+    assert.deepEqual(vercel.rewrites, [{ source: '/((?!assets/).*)', destination: '/index.html' }]);
     assert.equal(vercel.framework, 'vite');
     assert.equal(vercel.outputDirectory, 'dist');
     const assets = vercel.headers.find((h) => h.source === '/assets/(.*)')!.headers[0]!;
@@ -580,6 +667,15 @@ describe('code du site : autonome, sans secret, sans surface d’injection', () 
     assert.deepEqual(Object.keys(pkg.dependencies).sort(), ['@supabase/supabase-js', 'react', 'react-dom', 'react-router-dom']);
     const root = JSON.parse(read('package.json')) as { version: string };
     assert.equal(pkg.version, root.version, 'une seule version pour l’outil et sa page d’accueil');
+  });
+
+  test('le site se compile seul (Vercel n’installe que landing/) : les types qu’il utilise sont déclarés chez lui', () => {
+    const pkg = JSON.parse(read('landing/package.json')) as { devDependencies: Record<string, string> };
+    // vite.config.ts lit `process.env` : sans @types/node dans landing/, `tsc -b` échoue hors du dépôt complet.
+    assert.match(read('landing/vite.config.ts'), /process\./);
+    assert.ok(pkg.devDependencies['@types/node'], '@types/node dans landing/package.json');
+    for (const name of ['typescript', 'vite', '@vitejs/plugin-react', '@types/react', '@types/react-dom']) assert.ok(pkg.devDependencies[name], name);
+    assert.match(read('landing/package.json'), /"build": "tsc -b && vite build"/);
   });
 
   test('aucune API d’injection de HTML ni d’évaluation de code', () => {

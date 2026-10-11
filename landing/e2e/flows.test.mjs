@@ -33,14 +33,17 @@ const CHARTER_IDS = ['identifiants', 'angles-morts', 'codes', 'autorisation', 't
 
 /**
  * Compile le site avec ces variables, et elles seules. Le mode « e2e » écarte `.env.production` (les adresse et clé
- * du vrai projet) : sans lui, la compilation « aperçu » pointerait vers le vrai Supabase.
+ * du vrai projet). Les variables du service sont toujours posées, vides au besoin : une variable d'environnement
+ * l'emporte sur tout fichier, y compris un `.env.local` que l'on aurait créé pour essayer le vrai projet. Et la
+ * compilation est celle de la production (`NODE_ENV`), quoi qu'hérite le processus de test.
  */
 function build(outDir, env) {
   const clean = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('VITE_')));
+  const none = { VITE_SUPABASE_URL: '', VITE_SUPABASE_PUBLISHABLE_KEY: '', VITE_SUPABASE_ANON_KEY: '' };
   const args = [VITE, 'build', '--mode', 'e2e', '--outDir', outDir, '--emptyOutDir', '--logLevel', 'error'];
   const result = spawnSync(process.execPath, args, {
     cwd: ROOT,
-    env: { ...clean, ...env },
+    env: { ...clean, NODE_ENV: 'production', ...none, ...env },
     encoding: 'utf8',
   });
   assert.equal(result.status, 0, `compilation de ${outDir} : ${result.stderr || result.stdout}`);
@@ -245,6 +248,40 @@ describe('site configuré (faux Supabase)', { skip }, () => {
     await second.page.waitForURL('**/bienvenue');
     await second.page.getByRole('heading', { name: 'Qui êtes-vous ?' }).waitFor();
     await second.context.close();
+  });
+
+  test('lien de confirmation « token_hash » (modèle de la documentation) : valable dans un autre navigateur, une seule fois', async () => {
+    const fake = new FakeSupabase({ confirmEmail: true });
+    const first = await openSite(site, { fake });
+    await first.page.goto(site.origin + '/inscription');
+    await first.page.getByLabel('Nom et prénom').fill(ME.name);
+    await first.page.getByLabel('Adresse e-mail').fill(ME.email);
+    await first.page.getByLabel('Mot de passe', { exact: true }).fill(ME.password);
+    await first.page.getByLabel('Confirmez le mot de passe').fill(ME.password);
+    await first.page.getByRole('button', { name: 'Créer mon accès' }).last().click();
+    await first.page.getByRole('heading', { name: 'Vérifiez votre boîte e-mail' }).waitFor();
+    const link = fake.tokenHashLink(ME.email, { kind: 'signup', siteUrl: site.origin });
+    await first.context.close();
+
+    // Ouvert sur un autre appareil : pas de vérificateur PKCE, et pourtant connecté, directement sur le parcours.
+    const second = await openSite(site, { fake });
+    await second.page.goto(link);
+    await second.page.getByRole('heading', { name: 'Qui êtes-vous ?' }).waitFor();
+    assert.equal(new URL(second.page.url()).pathname, '/bienvenue');
+    assert.equal(new URL(second.page.url()).search, '', 'le jeton a quitté l’adresse');
+    const [verify] = fake.requests('POST /auth/v1/verify');
+    assert.equal(verify.body.type, 'email');
+    assert.ok(fake.users.get(ME.email).confirmed);
+    assert.deepEqual(unexpected(second.problems), []);
+
+    // Le même lien une seconde fois (ici, un troisième navigateur) : refusé, et on le dit.
+    const third = await openSite(site, { fake });
+    await third.page.goto(link);
+    await third.page.waitForURL('**/connexion?suite=%2Fbienvenue');
+    await third.page.getByRole('alert').getByText(/Ce lien a expiré ou a déjà servi/).waitFor();
+    assert.equal(new URL(third.page.url()).searchParams.has('token_hash'), false);
+    await second.context.close();
+    await third.context.close();
   });
 
   test('parcours complet : profil, étude, charte, accès — et ce qui part dans la base', async () => {
@@ -465,6 +502,65 @@ describe('site configuré (faux Supabase)', { skip }, () => {
     await context.close();
   });
 
+  test('réinitialisation sur un autre appareil : le lien « token_hash » y marche ; le lien par défaut s’explique', async () => {
+    const fake = new FakeSupabase();
+    seedUser(fake);
+    const desktop = await openSite(site, { fake });
+    await desktop.page.goto(site.origin + '/mot-de-passe');
+    await desktop.page.getByLabel('Adresse e-mail').fill(ME.email);
+    await desktop.page.getByRole('button', { name: 'Envoyer le lien' }).click();
+    await desktop.page.getByRole('status').getByText(/Si un compte existe pour/).waitFor();
+    assert.ok(fake.requests('POST /auth/v1/recover').at(-1).body.code_challenge, 'la demande porte un défi PKCE');
+    const pkceLink = fake.recoveryLink(ME.email);
+    const hashLink = fake.tokenHashLink(ME.email, { kind: 'recovery', siteUrl: site.origin });
+    await desktop.context.close();
+
+    // Lien par défaut, ouvert ailleurs : le vérificateur est resté sur l'autre appareil. Message clair, sur place.
+    const phone = await openSite(site, { fake, viewport: { width: 390, height: 844 } });
+    await phone.page.goto(pkceLink);
+    await phone.page.getByRole('alert').getByText(/ouvert ailleurs que dans le navigateur où vous l’avez demandé/).waitFor();
+    assert.equal(new URL(phone.page.url()).pathname, '/mot-de-passe');
+    await phone.page.getByRole('heading', { name: 'Mot de passe oublié' }).waitFor();
+    // Il ne reparaît pas plus loin, sur la page de connexion.
+    await phone.page.goto(site.origin + '/connexion');
+    await phone.page.getByRole('heading', { name: 'Se connecter' }).waitFor();
+    assert.equal(await phone.page.getByRole('alert').count(), 0);
+
+    // Lien « token_hash » : il marche sur ce même téléphone.
+    await phone.page.goto(hashLink);
+    await phone.page.getByRole('heading', { name: 'Choisir un nouveau mot de passe' }).waitFor();
+    assert.equal(new URL(phone.page.url()).search, '', 'le jeton a quitté l’adresse');
+    await phone.page.getByLabel('Nouveau mot de passe').fill('un autre mot de passe solide');
+    await phone.page.getByLabel('Confirmez le mot de passe').fill('un autre mot de passe solide');
+    await phone.page.getByRole('button', { name: 'Enregistrer' }).click();
+    await phone.page.getByText('Votre mot de passe est modifié.').waitFor();
+    assert.equal(fake.users.get(ME.email).password, 'un autre mot de passe solide');
+    assert.deepEqual(unexpected(phone.problems), []);
+    await phone.context.close();
+
+    // Un lien de réinitialisation périmé (retour d'erreur du service) : même explication, adresse nettoyée.
+    const late = await openSite(site, { fake });
+    await late.page.goto(`${site.origin}/mot-de-passe#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired`);
+    await late.page.getByRole('alert').getByText(/Demandez-en un nouveau ci-dessous/).waitFor();
+    assert.equal(new URL(late.page.url()).hash, '');
+    await late.context.close();
+  });
+
+  test('serveur d’envoi par défaut de Supabase : l’inscription refusée s’explique, Google reste possible', async () => {
+    const fake = new FakeSupabase({ confirmEmail: true, mailAllowList: ['equipe@exemple.org'] });
+    const { page, problems, context } = await openSite(site, { fake });
+    await page.goto(site.origin + '/inscription');
+    await page.getByLabel('Nom et prénom').fill(ME.name);
+    await page.getByLabel('Adresse e-mail').fill(ME.email);
+    await page.getByLabel('Mot de passe', { exact: true }).fill(ME.password);
+    await page.getByLabel('Confirmez le mot de passe').fill(ME.password);
+    await page.getByRole('button', { name: 'Créer mon accès' }).last().click();
+    await page.getByRole('alert').getByText('Ce site ne peut pas encore envoyer de courriel à cette adresse. Utilisez « Continuer avec Google », ou réessayez plus tard.').waitFor();
+    assert.equal(fake.users.has(ME.email), false);
+    assert.deepEqual(unexpected(problems, { allowNetwork: true }), [], 'seul le refus du service apparaît');
+    await context.close();
+  });
+
   test('reprise du parcours : charte périmée → étape 3 ; parcours terminé → /acces ; profil partiel → étape 2', async () => {
     // Charte d'une ancienne version : on redemande la charte, sans effacer l'ancien engagement.
     const fake = new FakeSupabase();
@@ -574,8 +670,9 @@ describe('site configuré (faux Supabase)', { skip }, () => {
     assert.ok(keys.length > 0, 'la session est dans le navigateur');
     await page.getByRole('link', { name: 'Se déconnecter' }).first().click();
     await page.waitForURL(site.origin + '/');
-    assert.equal(fake.requests('POST /auth/v1/logout').length, 1);
-    assert.deepEqual(await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('sb-auth') && k.endsWith('auth-token'))), []);
+    const [logout] = fake.requests('POST /auth/v1/logout');
+    assert.equal(logout.query.scope, 'local', 'ce navigateur seulement : les autres appareils restent connectés');
+    assert.deepEqual(await page.evaluate(() => Object.keys(localStorage).filter((k) => /^sb-.+-auth-token$/.test(k))), [], 'plus de session');
     await page.getByRole('link', { name: 'Se connecter' }).first().waitFor();
 
     await login(page, site.origin, { email: second.email });
@@ -584,6 +681,47 @@ describe('site configuré (faux Supabase)', { skip }, () => {
     assert.equal(await page.getByLabel('Pays').inputValue(), '', 'rien du profil du premier utilisateur');
     assert.equal(await page.getByLabel('Nom et prénom').inputValue(), 'Dr Deuxième');
     assert.ok(readFilters(fake).includes(`eq.${second.id}`));
+    await context.close();
+  });
+
+  test('/deconnexion ouvert depuis un autre site : confirmation demandée, la session reste', async () => {
+    const fake = new FakeSupabase();
+    const me = seedUser(fake);
+    seedProfile(fake, me);
+    seedConsent(fake, me);
+    const { page, problems, context } = await openSite(site, { fake });
+    await login(page, site.origin);
+    await page.waitForURL('**/acces');
+
+    await page.goto(site.origin + '/deconnexion'); // comme un lien posé sur une autre page du web
+    await page.getByRole('heading', { name: 'Se déconnecter ?' }).waitFor();
+    assert.equal(fake.requests('POST /auth/v1/logout').length, 0, 'rien sans confirmation');
+    await page.getByRole('link', { name: 'Rester connecté' }).click();
+    await page.waitForURL('**/acces');
+
+    await page.goto(site.origin + '/deconnexion');
+    await page.getByRole('button', { name: 'Me déconnecter' }).click();
+    await page.waitForURL(site.origin + '/');
+    assert.equal(fake.requests('POST /auth/v1/logout').length, 1);
+    await page.getByRole('link', { name: 'Se connecter' }).first().waitFor();
+
+    // Déconnecté, la page ne sert à rien : retour à l'accueil.
+    await page.goto(site.origin + '/deconnexion');
+    await page.waitForURL(site.origin + '/');
+    assert.deepEqual(unexpected(problems), []);
+    await context.close();
+  });
+
+  test('adresses abîmées : un fragment illisible ne fait pas tomber la page ; un fichier manquant reste une 404', async () => {
+    const fake = new FakeSupabase();
+    const { page, problems, context } = await openSite(site, { fake });
+    await page.goto(site.origin + '/#%');
+    await page.getByRole('heading', { level: 1 }).first().waitFor();
+    assert.equal(await page.getByText('Quelque chose s’est mal passé.').count(), 0, 'pas l’écran d’erreur du site');
+    const missing = await page.request.get(site.origin + '/assets/index-inexistant.js');
+    assert.equal(missing.status(), 404);
+    assert.doesNotMatch(await missing.text(), /<html/i);
+    assert.deepEqual(unexpected(problems), []);
     await context.close();
   });
 

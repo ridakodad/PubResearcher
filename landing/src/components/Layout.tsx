@@ -11,6 +11,15 @@ import { PreviewBanner } from './PreviewBanner';
  * remonte en haut, qu'on place le focus sur le contenu (un lecteur d'écran annonce alors la nouvelle page) ou qu'on
  * descend jusqu'à l'ancre demandée.
  */
+/** `#%` ou `#%E0` dans l'adresse ne doivent pas faire tomber la page : un fragment illisible ne vise rien. */
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 export function Layout({ children }: { children: ReactNode }) {
   const { pathname, hash } = useLocation();
   const first = useRef(true);
@@ -20,7 +29,7 @@ export function Layout({ children }: { children: ReactNode }) {
     first.current = false;
 
     if (hash) {
-      const target = document.getElementById(decodeURIComponent(hash.slice(1)));
+      const target = document.getElementById(safeDecode(hash.slice(1)));
       if (target) {
         target.scrollIntoView();
         return;
