@@ -3,7 +3,7 @@
 Ce guide s'adresse à qui doit construire un jeu de données à partir de dossiers patients hétérogènes (comptes rendus Word ou PDF, scans, images, examens DICOM) : un interne, un investigateur, un attaché de recherche clinique. Il suit l'ordre du travail réel. Pour installer l'outil, voir le [guide de l'administrateur](guide-administrateur.md) ; pour rédiger la partie « Méthodes » d'un article, voir [Méthodes et reproductibilité](methodes-et-reproductibilite.md).
 
 > **Ce que l'outil fait.** Il lit des documents, applique une grille de variables que *vous* définissez, propose une valeur avec le passage qui la justifie, et garde la trace de tout ce que vous en faites.
-> **Ce qu'il ne fait pas.** Il n'anonymise rien, ne remplace pas la relecture humaine, et ne lit que du texte : une donnée absente du texte (page non scannée, mention orale) ne peut pas être extraite.
+> **Ce qu'il ne fait pas.** Il n'anonymise rien (avant un envoi à Claude, il pseudonymise le texte au mieux, sans garantie : § 5), ne remplace pas la relecture humaine, et ne lit que du texte : une donnée absente du texte (page non scannée, mention orale) ne peut pas être extraite.
 
 > **Les captures** montrent les 24 dossiers fictifs de démonstration (`npm run demo`). La relecture y est **simulée** pour l'illustration : les pourcentages de fiabilité affichés ne mesurent pas l'outil.
 
@@ -14,7 +14,7 @@ Ce guide s'adresse à qui doit construire un jeu de données à partir de dossie
 | # | Étape | Où | Ce que vous obtenez |
 |---|---|---|---|
 | 1 | Définir la fiche d'exploitation | *Fiche d'exploitation* | La liste de vos variables et la façon de les retrouver |
-| 2 | Importer les dossiers | *Dossiers patients* | Un dossier par patient, chaque document analysé |
+| 2 | Importer les dossiers (et, s'il existe, le tableau de la cohorte) | *Dossiers patients* | Un dossier par patient, chaque document analysé ; les valeurs déjà saisies par l'équipe |
 | 3 | Contrôler l'import | *Dossiers patients*, *Extraction* | Les documents illisibles ou tronqués, repérés avant d'extraire |
 | 4 | Extraire | *Dossiers patients* ou *Extraction* | Une valeur par variable, avec son justificatif |
 | 5 | Relire un échantillon tiré au hasard | Détail d'un dossier | Les valeurs confirmées, corrigées ou vidées — et la mesure de fiabilité |
@@ -50,14 +50,14 @@ Une variable porte au plus 30 règles ; une fiche importée compte au plus 500 v
 
 ### 2.2 Les règles d'extraction
 
-Une variable peut avoir plusieurs règles. Elles sont évaluées **dans l'ordre**, document par document : la première qui produit une valeur conforme au type de la variable l'emporte ; les suivantes servent de repli. Une valeur trouvée mais inutilisable (« Âge : NR ») laisse la main à la règle suivante. Si aucune règle suivante ne produit de valeur, elle est consignée comme *valeur écartée*, avec sa raison : dans le banc d'essai de la variable, et sur la page *Extraction* dans le bilan de la dernière passe (« valeurs trouvées mais écartées »). Une règle suivante qui réussit efface ce rejet.
+Une variable peut avoir plusieurs règles. Elles sont évaluées **dans l'ordre** : la première qui produit une valeur conforme au type de la variable l'emporte ; les suivantes servent de repli. Une règle lit **toutes ses mentions, dans tous les documents** du dossier : si elles concordent, elles donnent la valeur ; si elles divergent (« Hb 12,6 » dans un compte rendu, « Hb 8,1 » dans un autre), la variable reste **vide et signalée** « valeurs discordantes », sans repli sur la règle suivante — sauf si vous avez indiqué quelle valeur retenir (§ 2.3). Pour une variable oui/non, libellés et mots-clés sont mis en commun : « Diabète : oui » ici et « pas de diabète » là se contredisent. Une valeur trouvée mais inutilisable (« Âge : NR ») laisse la main à la règle suivante. Si aucune règle suivante ne produit de valeur, elle est consignée comme *valeur écartée*, avec sa raison : dans le banc d'essai de la variable, et sur la page *Extraction* dans le bilan de la dernière passe (« valeurs trouvées mais écartées »). Une règle suivante qui réussit efface ce rejet.
 
 Les recherches ignorent la casse, les accents et les variantes d'apostrophe (l'apostrophe droite `'` et celle que Word insère, `’`) : `Durée d'hospitalisation` retrouve aussi bien `DUREE D HOSPITALISATION` que `Durée d’hospitalisation`, et un mot-clé `d'insuffisance rénale` trouve `d’insuffisance rénale`. Cela vaut pour les libellés, les mots-clés, les exclusions et les expressions régulières.
 
 | Règle | À employer pour | Exemple |
 |---|---|---|
 | **Libellé suivi de la valeur** | La forme la plus courante d'un compte rendu | Libellés `Âge`, `Age du patient` → trouve « Âge : 54 ans » → 54 |
-| **Présence de mots-clés** | Un antécédent, un symptôme : oui/non ou une étiquette | Termes `diabète`, `diabétique` ; exclusions `pas de`, `absence de` ; valeur `Oui` ; si nié `Non` |
+| **Présence de mots-clés** | Un antécédent, un symptôme : oui/non ou une étiquette | Termes `diabète`, `diabétique` ; exclusions `pas de`, `absence de` ; valeur `Oui` ; si nié `Non`. Pour une variable de l'épisode en cours (fièvre, complication), cochez « Ignorer les mentions placées dans les antécédents » |
 | **Expression régulière** | Ce que le libellé ne couvre pas ; le premier groupe capturant est retenu | `patient de (\d{1,3}) ans` |
 | **Tag DICOM** | Les métadonnées d'un examen, par mot-clé ou par code | `PatientAge`, `Modality`, `StudyDate`, `00101010` |
 
@@ -65,11 +65,16 @@ Les recherches ignorent la casse, les accents et les variantes d'apostrophe (l'a
 
 - **Mots entiers.** Un terme court (4 lettres ou moins : « hta », « irm », « mme ») ne se trouve que comme mot entier : « mme » n'est pas cherché dans « homme », « hta » n'est pas confondu avec « HTAP ». Un terme plus long peut être une racine volontaire (« diabet », « tabag »).
 - **Négations.** Elles restent limitées à la proposition en cours : dans « pas de diabète, HTA sous traitement », le « pas de » ne contamine pas l'HTA. « ni » prolonge la négation (« pas de diabète, ni d'HTA » nie les deux). Une négation placée après le terme est lue aussi — **à condition que la règle déclare au moins un terme d'exclusion** (champ « Termes d'exclusion ») : « diabète : non », « diabète (-) », « HTA exclue » nient alors ; sans exclusion déclarée, ces formes **affirment** le diabète. En revanche « diabète non insulinodépendant » **affirme** le diabète.
+- **Ce que dit la phrase, pas seulement qu'elle nomme.** Une mention oui/non est qualifiée, dans sa proposition (dans sa phrase pour les antécédents) : une **hypothèse** (« suspicion de », « ? », « probable », « à éliminer », « évoqué ») et « **non renseigné** » (« NR », « inconnu ») ne donnent ni « Oui » ni « Non » ; une **absence établie** (« diabète éliminé », « ex-fumeur », « ancien fumeur », « sevré ») vaut « Non » ; un **épisode passé et clos** (« fébrile en 2019 », « diabète gestationnel », « résolutif ») n'est pas actuel ; une négation **contredite** (« pas de complication… mais reprise au bloc ») ou **restreinte** (« pas de complication précoce ») n'est pas un « Non » sûr. Ces mentions restent visibles comme valeurs écartées. « HTA ancienne » (de longue date ou arrêtée ?) ne donne rien ; « Tabac : ancien » vaut « Non ».
 - **Absence documentée ≠ donnée manquante.** Le champ « Valeur émise si le terme n'apparaît que nié » enregistre « Non » quand l'absence est écrite ; sans lui, la variable reste vide. Cette distinction compte à l'analyse.
 - **Contextes à ignorer.** « Père diabétique » ne dit rien du patient : déclarez `père`, `mère`, `familial` comme contextes à ignorer, la mention n'est ni affirmée ni niée.
 - **Valeurs seuil.** « CRP < 5 » n'est **pas** lu « 5 » : lire un seuil comme une mesure biaiserait toute moyenne. La valeur est écartée, affichée comme telle, et c'est à vous de trancher.
 - **Entier et décimal.** Une variable entière qui rencontre « 3,5 » ne l'arrondit pas : elle l'écarte et le dit.
 - **Libellé ou expression ?** La règle « libellé » s'arrête au point-virgule ou au saut de ligne et, pour une variable typée (nombre, date, oui/non, choix), à la fin de la phrase. Pour capturer un texte sur plusieurs lignes, employez une expression régulière.
+- **Tableaux.** Une unité écrite dans la cellule suivante d'un tableau (« Créatinine | 168 | µmol/L ») est rattachée à la valeur et contrôlée ; une unité inconnue à barre (« Hmol/L », µ mal lu par l'OCR) fait écarter la valeur.
+- **Durées.** Une durée en jours se calcule d'une période (« Séjour du 14/01 au 21/01 », « du 11 au 25 octobre ») ; une date n'est jamais lue comme un nombre.
+- **Lignes coupées.** Une ligne de PDF coupée au milieu d'une phrase (« Pas de⏎diabète ») est recollée quand la suivante commence par une minuscule ; une liste à un élément par ligne ne l'est pas.
+- **Options.** La correspondance la plus longue l'emporte (« défavorable » n'est pas lu « favorable ») ; une option niée est ignorée (« favorable sans décès ») ; un choix unique qui en cite plusieurs (« stationnaire puis défavorable ») est signalé comme discordant, pas tranché.
 
 ### 2.3 Post-traitement
 
@@ -78,8 +83,13 @@ Les recherches ignorent la casse, les accents et les variantes d'apostrophe (l'a
 | **Correspondances de valeurs** | Ramène une abréviation vers une option : `CT = Scanner`, `MR = IRM`, `H = Masculin` |
 | **Minimum plausible** et **Maximum plausible** (variables numériques et entières) | Une valeur hors bornes est rejetée par l'extraction et la règle suivante prend le relais. C'est ce qui évite de lire « 120 ans d'évolution » comme un âge |
 | **Facteur de conversion** | Multiplie la valeur trouvée (g/L → mg/L) |
+| **Si plusieurs mentions divergent** | Par défaut, *Ne rien retenir : à trancher à la main* (texte libre : la première). Sinon : la première ou la dernière (**dans l'ordre d'import** des documents, puis du texte — aucun document n'a de date clinique fiable), la plus grande ou la plus petite (nombres, dates), « Oui » dès qu'une mention l'affirme (oui/non), ou la réunion des valeurs (choix multiple). La justification garde alors les autres valeurs trouvées, et la confiance baisse de 15 points |
+| **Proposer sans remplir** | Variable de synthèse (examens réalisés, traitements reçus) : un examen nommé n'a pas forcément été fait pendant le séjour (« IRM de contrôle dans six mois »). Les mentions trouvées, réunies d'une règle à l'autre, sont **proposées** (§ 2.6) et la variable reste vide, à valider ; une valeur lue dans un fichier DICOM la remplit |
+| **Valeur à l'arrivée seulement** | Fièvre, température, bilan d'entrée : les mentions datées plus tard dans le séjour (« à J4 », « en postopératoire », « pic fébrile le 18/04 », « au cours du séjour ») sont écartées, car elles décrivent une complication |
 
-Une **unité différente** de celle de la variable est détectée : « 6 mois » pour un âge en *ans*, « 85 µmol/L » pour une créatinine en *mg/L*, « 135 g/L » pour une hémoglobine en *g/dL* sont **écartés et signalés** (« unité « µmol/L » différente de « mg/L » »), jamais lus comme s'ils étaient dans la bonne unité. Le contrôle porte sur une liste fermée d'unités courantes (mg/L, g/L, µg/L, ng/L, ng/mL, pg/mL, µg/mL, mg/dL, g/dL, µg/dL, ng/dL, mmol/L, µmol/L, nmol/L, pmol/L, mEq/L, UI/L, UI/mL, %, mmHg, kg, g, mg, µg, cm, mm, m, mL, L, °C, °F) et sur les unités de temps ; une unité qu'il ne connaît pas, d'un côté ou de l'autre, ne bloque rien. Si vous déclarez un **facteur de conversion** (g/L → mg/L), c'est que vous prenez la conversion en charge : le contrôle des unités courantes est levé pour cette variable (celui des unités de temps reste actif). Les bornes servent aussi à la saisie manuelle : une valeur hors bornes demande une confirmation explicite.
+La fiche fournie au premier démarrage emploie ces réglages : fièvre et complications ignorent les antécédents et retiennent « Oui » dès qu'un document l'affirme ; fièvre, température et bilan d'entrée (hémoglobine, globules blancs, CRP, créatinine) sont lus à l'arrivée ; modalités d'imagerie et traitement sont proposés sans remplir. **Une fiche existante n'est pas modifiée** par une mise à jour de l'outil : sans réglage de sélection, des mentions discordantes y sont simplement signalées.
+
+Une **unité différente** de celle de la variable est détectée : « 6 mois » pour un âge en *ans*, « 85 µmol/L » pour une créatinine en *mg/L*, « 135 g/L » pour une hémoglobine en *g/dL* sont **écartés et signalés** (« unité « µmol/L » différente de « mg/L » »), jamais lus comme s'ils étaient dans la bonne unité. Le contrôle porte sur une liste fermée d'unités courantes (mg/L, g/L, µg/L, ng/L, ng/mL, pg/mL, µg/mL, mg/dL, g/dL, µg/dL, ng/dL, mmol/L, µmol/L, nmol/L, pmol/L, mEq/L, UI/L, UI/mL, %, mmHg, kg, g, mg, µg, cm, mm, m, mL, L, °C, °F) et sur les unités de temps ; une unité qu'il ne connaît pas, d'un côté ou de l'autre, ne bloque rien — sauf une unité à barre qu'il ne connaît pas (« Hmol/L » : un µ mal lu par l'OCR), qui fait écarter la valeur. Si vous déclarez un **facteur de conversion** (g/L → mg/L), c'est que vous prenez la conversion en charge : le contrôle des unités courantes est levé pour cette variable (celui des unités de temps reste actif). Les bornes servent aussi à la saisie manuelle : une valeur hors bornes demande une confirmation explicite.
 
 ### 2.4 Tester avant d'enregistrer
 
@@ -92,6 +102,18 @@ Dans l'éditeur d'une variable, **Tester les règles** évalue le paramétrage s
 *Export › Fiche au format JSON* écrit la fiche complète ; *Importer une fiche* la recrée sur un autre poste ou pour une autre étude, **en entier ou pas du tout**. Gardez ce fichier avec le protocole de l'étude : il définit ce qui a été extrait.
 
 Chaque passe d'extraction enregistre l'**empreinte** (SHA-256) des règles de la fiche. Deux passes d'empreinte identique ont appliqué exactement les mêmes règles ; si l'empreinte change entre deux passes, la fiche a été modifiée entre-temps — le rapport « Méthodes et traçabilité » le montre.
+
+### 2.6 Lire les valeurs signalées et proposées
+
+Trois cas laissent une variable **vide** et le disent, dans le banc d'essai de la variable et dans la liste « valeurs trouvées mais écartées » du bilan de passe (page *Extraction*) :
+
+| Raison affichée | Ce que cela veut dire | Que faire |
+|---|---|---|
+| « valeurs discordantes : 12,6 (cr-entree.pdf) ; 8,1 (cr-sortie.pdf) — à trancher à la main… » | Plusieurs mentions, plusieurs valeurs | Ouvrir le dossier et saisir la bonne ; ou, si la règle est générale (« la valeur d'entrée »), choisir dans la fiche la valeur à retenir |
+| « mentions trouvées : Scanner, IRM (…) — variable de synthèse, à valider… » | Variable « Proposer sans remplir » : ce que les documents nomment | Vérifier dans le dossier ce qui a réellement été fait pendant le séjour, puis saisir |
+| Hypothèse, « non renseigné », antécédent, épisode passé, valeur postérieure à l'arrivée, lettre au lieu d'un chiffre (« 2O »)… | Une mention existe, mais elle ne permet pas de conclure | Saisir à la main si le dossier permet de trancher, sinon laisser vide |
+
+Quand une règle de sélection a tranché, la justification de la valeur (relecture d'un dossier, banc d'essai) le dit — « mentions discordantes : la première est retenue (ordre d'import des documents) » — et liste les **autres valeurs trouvées**, avec leur document : relisez ces valeurs-là en priorité.
 
 ---
 
@@ -115,7 +137,7 @@ Chaque passe d'extraction enregistre l'**empreinte** (SHA-256) des règles de la
 
 Les codes sont normalisés : les caractères invisibles (copiés depuis un tableur ou un PDF) sont retirés, les espaces typographiques deviennent des espaces ordinaires, les suites d'espaces sont réduites à une et les espaces de bord coupés ; « PAT-001 » et « pat-001 » désignent le même dossier. **Utilisez des codes pseudonymisés** : le code est la clé du jeu de données exporté.
 
-Les **doublons** sont reconnus par l'empreinte du contenu, pas par le nom : un fichier identique déjà importé dans le même dossier est signalé et ignoré.
+Les **doublons** sont reconnus par l'empreinte du contenu, pas par le nom : un fichier identique déjà importé dans le même dossier est signalé et ignoré. Un classeur (`.xlsx`, `.xls`, `.ods`) ou un CSV/TSV déposé avec les comptes rendus est refusé : c'est un tableau, qui s'importe avec *Importer un tableau* (ci-dessous) ; pour garder un CSV comme simple document texte, renommez-le en `.txt`.
 
 | Limite | Valeur par défaut | Réglable par l'administrateur |
 |---|---|---|
@@ -129,6 +151,18 @@ Les **doublons** sont reconnus par l'empreinte du contenu, pas par le nom : un f
 Quand une limite de **lecture** est atteinte (pages, délai, texte), le document est importé **et le dit** : à la fin de l'import, un bandeau « Importés, mais lus en partie » liste les fichiers concernés (« Texte tronqué : … », « Lecture partielle : N pages non lues … »), et la visionneuse du document affiche « Lecture incomplète » ; ces documents sont comptés dans le rapport « Méthodes » comme *lus partiellement*. Quand une limite de **taille** est dépassée (fichier, envoi), le serveur refuse l'envoi (413) : l'écran renvoie alors les fichiers du lot un par un, de sorte que seul le fichier trop gros est signalé en erreur. Un fichier illisible n'empêche jamais d'importer les autres.
 
 Sur un document déjà importé : **Renommer** (l'extension ne change pas), **Ré-analyser** (après activation de l'OCR, par exemple), **Supprimer**. **Supprimer un dossier supprime aussi ses fichiers sur le disque** : c'est irréversible.
+
+### Importer un tableau de cohorte (Excel, CSV)
+
+Si l'équipe tient déjà un tableau de la cohorte — une ligne par patient, une colonne par variable —, *Dossiers patients › Importer un tableau (Excel, CSV)* en verse les valeurs dans la **fiche active**, derrière la même charte d'anonymisation. Formats : `.xlsx`, CSV et TSV (séparateur `;`, `,`, tabulation ou `|` reconnu, encodage détecté) ; un `.xls`, un `.ods` ou un classeur protégé par mot de passe est refusé avec la marche à suivre (l'enregistrer en `.xlsx` ou en CSV). Cinq étapes :
+
+1. **Fichier.** S'il a déjà été importé (même empreinte), l'écran le signale.
+2. **Feuille et ligne d'en-tête**, choisies sur l'aperçu (la feuille visible la plus remplie est proposée). Les feuilles masquées, les cellules fusionnées et les formules sont signalées ; une formule n'est jamais recalculée : sa dernière valeur enregistrée est lue.
+3. **Colonne des codes et correspondances** colonne → variable, proposées d'après le libellé, la clé, les libellés des règles et l'unité écrite dans l'en-tête (une unité discordante est signalée). Une variable par colonne ; une colonne non reprise est ignorée.
+4. **Simulation**, sans rien écrire : lignes retenues, dossiers créés ou existants, valeurs à écrire, inchangées, **refusées avec leur motif** (même conversion que l'extraction : décimales, dates, oui/non, options, unité de l'en-tête, bornes ; le facteur de conversion ne s'applique pas), conflits. Les codes sont normalisés comme les noms de dossier ; une ligne sans code, un code en double ou un dossier inconnu (si vous ne créez pas les dossiers absents) sont écartés avec le motif.
+5. **Écriture, puis bilan.** Par défaut, l'import **n'écrase jamais** une décision de relecteur ni une valeur extraite ou importée différente : il la garde et la compte comme conflit. Deux options l'autorisent explicitement. Si les données ont changé depuis la simulation (une passe, une relecture), l'écriture est refusée : relancez la simulation.
+
+Fermer la fenêtre avant d'écrire abandonne l'import. Une valeur importée porte l'étiquette **Importé** : sa justification cite le fichier (téléchargeable, avec son empreinte), la feuille, la cellule, l'en-tête de la colonne et le contenu brut. Ce n'est **ni une extraction ni une relecture** : personne ne l'a vérifiée contre le dossier source. Une passe d'extraction ne la remplace pas ; un relecteur peut la **confirmer** ou la **corriger** après vérification. Les valeurs importées n'entrent pas dans les mesures de fiabilité ; le rapport « Méthodes » les compte à part et liste les tableaux importés. **Le fichier entier est conservé** par l'outil (toutes ses colonnes, même celles que vous n'avez pas reprises) : retirez-en, avant l'import, les colonnes nominatives.
 
 ---
 
@@ -152,7 +186,7 @@ Avant d'extraire, deux minutes évitent des heures de doute :
 | **Règles puis Claude** | Les règles d'abord ; le modèle ne reçoit que les variables restées vides | Meilleur rapport coût/rendement |
 | **Claude seul** | Soumet toute la fiche au modèle | Comparer, ou démarrer sans règles |
 
-> **Données de santé.** Les modes « Règles puis Claude » et « Claude seul » **envoient le texte des documents** à l'API d'Anthropic (sous les noms « Document 1 », « Document 2 »… : ni les noms de fichier ni le code du dossier ne partent, mais le texte, lui, part tel quel). Cette sortie de données relève des mêmes autorisations que tout traitement externalisé de données de santé, et se décide avant l'usage. Le mode « Règles seules » n'en envoie aucune. Sans clé d'API, les deux autres modes sont indisponibles. Voir [Sécurité et données](securite-et-donnees.md).
+> **Données de santé.** Les modes « Règles puis Claude » et « Claude seul » **envoient le texte des documents** à l'API d'Anthropic (sous les noms « Document 1 », « Document 2 »… : ni les noms de fichier ni le code du dossier ne partent). Avant l'envoi, l'outil **pseudonymise** le texte sur le poste : les noms précédés d'une civilité ou d'un titre (M., Mme, Dr…), les champs « Nom » et « Prénom », les dates de naissance, numéros de sécurité sociale, téléphones, adresses électroniques et postales et les identifiants annoncés (IPP, NDA, N° de séjour) deviennent `[NOM]`, `[DATE DE NAISSANCE]`, `[TÉLÉPHONE]`… ; les valeurs cliniques ne sont pas touchées, et l'extrait surligné à la relecture reste celui du document d'origine. **Ce n'est pas une anonymisation** : un nom sans civilité au milieu d'une phrase (« vu avec Jean ce matin »), un lieu, une profession rare passent ; pseudonymisez les documents avant l'import, comme la charte le demande. Cette sortie de données relève des mêmes autorisations que tout traitement externalisé de données de santé, et se décide avant l'usage. Le mode « Règles seules » n'en envoie aucune. Sans clé d'API, les deux autres modes sont indisponibles. Voir [Sécurité et données](securite-et-donnees.md).
 
 **Votre clé d'API Anthropic : la page « Activer Claude ».** Les modes « Claude » et la rédaction assistée utilisent **votre** clé : vous payez Anthropic directement, à l'usage, et PubResearcher ne facture rien. La page *Activer Claude* (colonne de gauche ; le même guide est sur la page d'accueil du site, à l'adresse `/activer-claude`) vous y mène en quatre étapes, cinq minutes en tout, avec à chaque fois un bouton qui ouvre directement la bonne page de la console d'Anthropic :
 
@@ -167,17 +201,17 @@ La clé reste sur l'ordinateur qui fait tourner l'outil, hors de la base, des sa
 
 **Ce que coûte une passe.** Dès qu'un mode « Claude » est choisi, la page affiche une **fourchette en dollars** pour tous les dossiers, calculée sur leur texte réel ; au-delà de 5 $US, l'outil demande confirmation avant de lancer. Le bilan de passe donne ensuite le **coût constaté**, d'après les jetons facturés. Avec le modèle par défaut (Claude Opus 5.5), un dossier ordinaire coûte de l'ordre de 0,05 à 0,20 $US. En mode « Règles puis Claude », seules les variables restées vides partent : la passe coûte moins que le haut de la fourchette.
 
-Le **bilan de passe** s'affiche à la fin de la passe (pages *Extraction* et *Dossiers patients*) avec les totaux : variables extraites, non trouvées, gardées (déjà relues par un humain), **écartées** (valeur trouvée mais inutilisable : seuil, hors bornes, unité, type) et, pour le modèle, valeurs non vérifiées ou invalides. Sur la page *Extraction*, la liste des valeurs écartées (dossier, variable, extrait, raison) se déplie sous les totaux ; elle ne vaut que pour la dernière passe, tant que la page reste ouverte. Le détail par dossier et par variable est dans la réponse de l'API (`reports`). Ces chiffres renseignent la qualité des documents autant que celle des règles.
+Le **bilan de passe** s'affiche à la fin de la passe (pages *Extraction* et *Dossiers patients*) avec les totaux : variables extraites, non trouvées, gardées (déjà relues par un humain, ou importées d'un tableau), **écartées** (valeur trouvée mais inutilisable : seuil, hors bornes, unité, type, hypothèse, valeurs discordantes, proposition d'une variable de synthèse — voir § 2.6) et, pour le modèle, valeurs non vérifiées ou invalides. Sur la page *Extraction*, la liste des valeurs écartées (dossier, variable, extrait, raison) se déplie sous les totaux ; elle ne vaut que pour la dernière passe, tant que la page reste ouverte. Le détail par dossier et par variable est dans la réponse de l'API (`reports`). Ces chiffres renseignent la qualité des documents autant que celle des règles.
 
 ![Bilan de passe](img/extraction-bilan.png)
 
 Ce qu'il faut savoir d'une passe :
 
 - **Elle est reproductible** : même fiche, mêmes documents, mêmes valeurs (mode « Règles seules »).
-- **Elle ne détruit pas votre relecture.** Une valeur confirmée, corrigée ou vidée à la main est gardée. (L'API permet d'écraser aussi les valeurs relues, `overwriteManual`, pour repartir de zéro ; l'interface ne l'expose volontairement pas.)
+- **Elle ne détruit pas votre relecture.** Une valeur confirmée, corrigée ou vidée à la main est gardée, de même qu'une valeur importée d'un tableau. (L'API permet d'écraser aussi les valeurs relues, `overwriteManual`, pour repartir de zéro ; l'interface ne l'expose volontairement pas.)
 - **Elle est journalisée** : fiche (empreinte), mode, modèle éventuel, dates, effectifs. Une variable qui n'est *plus* trouvée perd sa valeur automatique au lieu de la conserver en silence, et l'événement est consigné — mais une passe ne retire que ce qu'elle a pu produire : « Règles seules » ne touche pas aux valeurs de Claude, et un appel au modèle en échec (limite de débit, panne) n'efface rien.
 - **Elle est atomique par dossier** : un arrêt brutal du serveur en plein milieu laisse chaque fiche telle qu'elle était, jamais à moitié effacée.
-- **Avec un modèle** : une valeur proposée n'est retenue que si la citation recopiée du document est *retrouvée* dans son texte — ou, à défaut, si la valeur elle-même y figure (quatre caractères au moins ; confiance plus basse, 75 % au lieu de 90 %) —, puis si elle passe le même contrôle de type et de bornes que les règles. Retrouver la valeur ne prouve pas qu'elle a été lue à cet endroit. Elle est marquée « Claude » et demande une relecture plus attentive qu'une valeur de règle. Commencez par quelques dossiers pour mesurer coût et qualité.
+- **Avec un modèle** : une valeur proposée n'est retenue que si la citation recopiée du document est *retrouvée* dans son texte — ou, à défaut, si la valeur elle-même y figure (quatre caractères au moins ; confiance plus basse, 75 % au lieu de 90 %) —, si cette citation **contient la valeur** (un nombre ou une date doit y figurer ; un « oui » ne peut pas reposer sur « Pas de diabète », « suspicion de », « ancien fumeur » : la raison du rejet est gardée), puis si elle passe le même contrôle de type et de bornes que les règles. Retrouver la valeur ne prouve pas qu'elle a été lue à cet endroit. La valeur, la passe et le coût nomment le modèle **qui a réellement répondu**, qui peut différer de celui demandé. Elle est marquée « Claude » et demande une relecture plus attentive qu'une valeur de règle. Commencez par quelques dossiers pour mesurer coût et qualité.
 
 ---
 
@@ -191,8 +225,9 @@ Ouvrez un dossier (*Dossiers patients › Ouvrir*). Chaque variable affiche sa *
 |---|---|
 | **Règle · 85 %** | Valeur proposée par une règle, avec sa confiance *relative* (voir ci-dessous) — non relue |
 | **Claude · 90 %** | Valeur proposée par le modèle, citation retrouvée (75 % si seule la valeur l'a été) — non relue |
+| **Importé** | Valeur importée d'un tableau de cohorte ; la justification cite le fichier, la feuille et la cellule — non relue |
 | **Confirmé** | Un relecteur a validé la proposition telle quelle |
-| **Corrigé** | Un relecteur l'a remplacée (« Proposé : 282 (règle) » reste affiché) |
+| **Corrigé** | Un relecteur l'a remplacée (« Proposé : 282 (règle) », ou « Importé : 282 (tableau) », reste affiché) |
 | **Vidé** | Un relecteur a écarté la proposition : la case reste vide aux passes suivantes |
 | **Saisi** | Valeur entrée à la main là où l'extraction n'avait rien trouvé |
 | **Vérifié · vide** | Relu : il n'y a rien à relever dans le dossier |
@@ -201,7 +236,7 @@ Ouvrez un dossier (*Dossiers patients › Ouvrir*). Chaque variable affiche sa *
 
 Les gestes :
 
-- **Confirmer** valide la valeur proposée, sans la ressaisir.
+- **Confirmer** valide la valeur proposée — ou importée, après l'avoir vérifiée dans le dossier —, sans la ressaisir.
 - **Corriger** : saisissez la bonne valeur. Les contrôles sont ceux du type (un entier n'accepte pas « 3,5 », une date doit exister au calendrier — pas de 31 février —, un choix doit être une option). Les nombres s'écrivent avec la virgule ou le point. Une valeur **hors des bornes de plausibilité** ouvre la fenêtre « Valeur inhabituelle » : *Corriger*, ou *Enregistrer quand même* si elle est extraordinaire mais vraie.
 - **Vider** une valeur : effacez le champ. Une absence relue est une information.
 - **Rétablir l'extraction** retire votre décision **et relance aussitôt l'extraction de ce dossier**, en mode « Règles seules » : la variable est de nouveau remplie par les règles si elles la retrouvent, et reste vide sinon. Les valeurs « Claude » des *autres* variables ne sont pas touchées (une passe de règles ne retire que ce que des règles ont posé).
@@ -230,9 +265,9 @@ Quatre vues dans la page *Résultats* (trois sont aussi dans le rail ; *Fiabilit
 
 | Vue | Contenu |
 |---|---|
-| **Tableau de données** | Un dossier par ligne, une variable par colonne, avec l'origine de chaque valeur (règle, modèle, relue). Recherche et pagination |
-| **Distributions** | Histogramme pour le quantitatif (moyenne, écart type, médiane, extrêmes), effectifs pour le qualitatif, chronologie pour les dates. Les manquants sont comptés à part |
-| **Complétude** | Taux de remplissage par variable, partagé entre automatique, modèle, relu et vide : où porter l'effort de relecture |
+| **Tableau de données** | Un dossier par ligne, une variable par colonne, avec l'origine de chaque valeur (règle, modèle, importée, relue). Recherche et pagination |
+| **Distributions** | Histogramme pour le quantitatif (moyenne, écart type, médiane, extrêmes), effectifs pour le qualitatif, chronologie pour les dates. Les manquants sont comptés à part ; au-delà de 20 % de valeurs manquantes, un avertissement le rappelle. Choix multiple : chaque pourcentage porte sur les **dossiers renseignés** (12 sur 24 = 50 %), et leur somme peut dépasser 100 % |
+| **Complétude** | Taux de remplissage par variable, partagé entre règle, modèle, importé, relu et vide : où porter l'effort de relecture |
 | **Fiabilité** | Concordance et rappel globaux avec leurs intervalles ; concordance par variable (intervalle en infobulle) |
 
 ![Distributions](img/distributions.png)
@@ -247,17 +282,17 @@ Les valeurs vides restent **vides** dans les distributions : une variable à 40 
 
 | Sortie | Pour qui, pour quoi |
 |---|---|
-| **« Télécharger le CSV »** | Séparateur `;` (Excel français, virgule décimale) ou `,` (R, Python, SPSS, point décimal) ; oui/non en `1`/`0` ou `Oui`/`Non` ; en-têtes en clés techniques ou en libellés. UTF-8 avec marque d'ordre des octets : Excel affiche les accents |
-| **« Télécharger le classeur »** (Excel) | Trois feuilles : les données **typées** (les dates restent des dates, les nombres des nombres), le dictionnaire des variables, une synthèse de cohorte |
+| **« Télécharger le CSV »** | Séparateur `;` (Excel français, virgule décimale) ou `,` (R, Python, SPSS, point décimal) ; oui/non en `1`/`0` ou `Oui`/`Non` ; en-têtes en clés techniques (sans unité : des noms de colonne valides pour R, Stata, SPSS ; l'unité est dans le dictionnaire) ou en libellés (avec l'unité). **« Sans le libellé des dossiers »** retire la colonne du libellé libre, qui peut contenir un nom ou des initiales, pour partager le fichier avec un statisticien. UTF-8 avec marque d'ordre des octets : Excel affiche les accents |
+| **« Télécharger le classeur »** (Excel) | Trois feuilles : les données **typées** (les dates restent des dates, les nombres des nombres), le dictionnaire des variables, une synthèse de cohorte calculée comme l'écran (une valeur manquante n'est jamais comptée comme un zéro) : n, manquants, moyenne, écart type, médiane, quartiles, extrêmes, et effectifs n (%) des variables qualitatives |
 | **« Dictionnaire des variables »** | Clé, libellé, section, type, unité, obligatoire, options, définition, libellé du type. À joindre à tout jeu de données diffusé |
 | **« Télécharger les figures »** (diaporama) | Une planche par variable décrite par un histogramme ou des modalités (pas de planche pour le texte libre ni pour une variable sans valeur), graphiques en formes natives modifiables, numérotées et citables |
 | **« Rapport (HTML) », « Markdown », « English »** | Le rapport « Méthodes et traçabilité » : corpus, fiche (empreinte), passes, origine des valeurs, fiabilité, journal, environnement logiciel, limites. L'écran propose le HTML et le Markdown en français, et le Markdown en anglais ; le JSON et le HTML anglais s'obtiennent par l'API (`/api/export/methods?format=json&lang=en`) |
-| **« Journal des modifications (CSV) »** | Chaque changement de valeur : horodatage, dossier, variable, avant/après, origine, passe — **pas l'auteur** (l'outil n'a pas de comptes). Ordre chronologique ; aucune fonction ne modifie le journal, mais il disparaît avec le dossier qu'on supprime |
+| **« Journal des modifications (CSV) »** | Chaque changement de valeur : horodatage, dossier, variable, avant/après, origine, passe ou import de tableau — **pas l'auteur** (l'outil n'a pas de comptes). Ordre chronologique ; aucune fonction ne modifie le journal, mais il disparaît avec le dossier qu'on supprime |
 | **« Fiche au format JSON »** | Le paramétrage, réimportable |
 
 ![Export](img/export.png)
 
-Le CSV, le classeur et le diaporama **ne portent pas l'origine** des valeurs (règle, modèle, relecteur) : elle reste dans le tableau de données de l'écran, dans le journal et dans le rapport « Méthodes ». Mentionnez dans votre article la part de valeurs relues, que le rapport calcule.
+Le CSV, le classeur et le diaporama **ne portent pas l'origine** des valeurs (règle, modèle, tableau importé, relecteur) : elle reste dans le tableau de données de l'écran, dans le journal et dans le rapport « Méthodes ». Mentionnez dans votre article la part de valeurs relues, que le rapport calcule.
 
 Le rapport contient un **paragraphe « Méthodes » prêt à adapter**, rédigé avec les chiffres de votre base. Voir [Méthodes et reproductibilité](methodes-et-reproductibilite.md).
 
@@ -269,14 +304,15 @@ Le rapport contient un **paragraphe « Méthodes » prêt à adapter**, rédigé
 
 ![Revue bibliographique](img/bibliographie.png)
 
-1. **Rechercher.** Une équation, transmise telle quelle à PubMed et/ou Google Scholar (acteurs Apify, facturés au résultat, appelés *par le serveur*) ; période, ordre, nombre de résultats par source. L'administrateur doit avoir renseigné `APIFY_TOKEN`. Sans lui, la page reste consultable (bibliothèque, tri, exports) mais aucune recherche ne part.
-2. **Regrouper.** Un article trouvé deux fois devient une référence (DOI, puis PMID, puis PMCID, puis titre normalisé). Rien n'est effacé.
-3. **Trier.** *Retenir*, *À voir*, *Exclure…* ; l'exclusion exige son **motif** (population, intervention, critère de jugement, schéma d'étude, langue, texte intégral introuvable, doublon de publication, autre). Rien ne se supprime.
-4. **Suivre le diagramme de flux** inspiré de PRISMA 2020 : identifiées, doublons retirés, à trier, exclues par motif, retenues. Tous les chiffres sont calculés, aucun n'est saisi.
-5. **Consigner les stratégies** : chaque passe, réussie ou non, garde son équation, sa date, l'acteur, la période, les effectifs. « Reprendre » recharge une passe dans le formulaire sans rien relancer.
-6. **Exporter** en RIS (Zotero, EndNote, Mendeley), BibTeX ou CSV, et le CSV des stratégies.
+1. **Rechercher dans PubMed**, coché d'office et **utilisable sans aucun réglage** (API officielle et gratuite du NCBI, interrogée par le serveur) : une équation avec la syntaxe de PubMed (`[tiab]`, `[MeSH]`…), une période, un ordre ; **toutes les notices** (jusqu'au plafond du serveur, 10 000 par défaut) pour une revue systématique, ou **les N premières** pour explorer. Le bilan donne le nombre total annoncé par PubMed et le nombre récupéré. Google Scholar est une option, grisée tant que l'administrateur n'a pas renseigné `APIFY_TOKEN` (acteur Apify, facturé au résultat) ; les balises de champ PubMed lui sont retirées, et la passe le dit.
+2. **Importer des références** (*Importer des références (RIS, nbib, BibTeX, CSV)*) : l'export d'une autre base — Embase, Cochrane CENTRAL, Scopus, Web of Science, LiSSa, CINAHL, PsycINFO, un registre (ClinicalTrials.gov, ICTRP), Zotero, ou « Autre » avec un nom libre. Choisissez la base d'origine : c'est elle qui range les notices dans la bonne colonne du diagramme. 50 Mo et 50 000 notices au plus par fichier ; une notice sans titre est écartée et comptée.
+3. **Regrouper.** Un article trouvé deux fois devient une référence (DOI, puis PMID, puis PMCID, puis titre normalisé) ; deux notices de PMID différents, ou de DOI différents pour un rapprochement par titre, restent distinctes (lettres de même titre, revue Cochrane et sa mise à jour). Rien n'est effacé.
+4. **Trier.** *Retenir*, *À voir*, *Exclure…* ; au tri sur titre et résumé, le **motif** d'exclusion est facultatif, comme le permet PRISMA 2020 (population, intervention, critère de jugement, schéma d'étude, langue, texte intégral introuvable, doublon de publication, autre) ; sans motif, l'exclusion est comptée « motif non précisé ». Rien ne se supprime.
+5. **Suivre le diagramme de flux** PRISMA 2020 : notices identifiées par base de données, registre et autres méthodes (Google Scholar en fait partie), doublons retirés, à trier, exclues par motif, retenues. Tous les chiffres sont calculés ; relancer une recherche ne gonfle plus les notices identifiées.
+6. **Consigner le journal de recherche** (PRISMA-S) : chaque passe et chaque import, réussis ou non, gardent leur équation (et sa traduction par PubMed, ou la chaîne réellement envoyée à Scholar), leur date, la base, le fichier importé, le nombre annoncé et récupéré, les avertissements. « Reprendre » recharge une passe dans le formulaire sans rien relancer.
+7. **Exporter** en RIS (Zotero, EndNote, Mendeley ; type de référence et PMCID compris), BibTeX ou CSV, et le CSV du journal de recherche.
 
-À savoir : Google Scholar n'autorise pas l'extraction automatisée (conditions d'utilisation) ; pour une revue systématique, **PubMed est la source de référence**. Le plan gratuit d'Apify limite l'acteur PubMed à 10 résultats par passe. Scholar ne donne qu'un *extrait*, pas le résumé. **N'écrivez aucune donnée de patient dans l'équation** : seule l'équation part chez Apify.
+À savoir : Google Scholar n'autorise pas l'extraction automatisée (conditions d'utilisation) ; pour une revue systématique, **PubMed est la source de référence**. Scholar ne donne qu'un *extrait*, pas le résumé. **N'écrivez aucune donnée de patient dans l'équation** : elle part au NCBI (PubMed) et, si Scholar est coché, chez Apify. Détail : [Revue bibliographique](revue-bibliographique.md).
 
 ---
 
@@ -289,7 +325,10 @@ Le rapport contient un **paragraphe « Méthodes » prêt à adapter**, rédigé
 ## 11. Limites à connaître
 
 - **Le moteur lit du texte.** Un document illisible, une page non scannée, une mention orale ne produisent rien ; l'absence d'une valeur n'établit pas que la donnée n'existe pas.
-- **L'OCR se trompe.** Un « O » peut être lu comme un zéro (« 7O kg » donne 7), une négation peut se perdre. Les valeurs venues d'un scan se relisent contre l'image.
+- **L'OCR se trompe.** Une lettre collée à un chiffre (« 7O kg », « 6l ans ») fait écarter la valeur, mais une confusion qui donne un autre chiffre (un « 8 » lu « 3 ») passe inaperçue, et une négation peut se perdre. Les valeurs venues d'un scan se relisent contre l'image.
+- **« Premier » et « dernier » suivent l'ordre d'import**, pas la chronologie clinique : aucun document n'a de date fiable en métadonnée. Pour l'hémoglobine d'entrée, préférez « Valeur à l'arrivée seulement » ou une règle qui vise le compte rendu d'entrée.
+- **La pseudonymisation avant Claude est un filet, pas une garantie** : elle repose sur des motifs (civilité, libellés, formats de numéros) ; ce qu'aucun motif n'annonce passe.
+- **Une valeur importée d'un tableau** n'est vérifiée que dans son format (type, options, unité, bornes), pas contre le dossier.
 - **Le français d'abord.** Négations, sigles et libellés sont pensés pour des comptes rendus en français ; d'autres langues demandent de réécrire les règles.
 - **La confiance n'est pas une probabilité** (voir plus haut).
 - **Les années à deux chiffres** (« 12/03/21 ») sont lues avec l'année courante comme pivot (au-delà, c'est le siècle précédent : « 45 » donne 1945 en 2026). Pour une date de naissance, vérifiez le siècle ; le même document peut se lire autrement dans quelques années.
@@ -309,6 +348,10 @@ Le rapport contient un **paragraphe « Méthodes » prêt à adapter**, rédigé
 | « Fichier trop volumineux : la limite est de 200 Mo par fichier (MAX_UPLOAD_BYTES) … » | Réduire le fichier, ou demander à l'administrateur de relever `MAX_UPLOAD_BYTES` |
 | « Valeur inhabituelle » | Hors des bornes de la variable : *Corriger*, ou *Enregistrer quand même* si elle est vraie |
 | « valeur seuil « < 5 » : à saisir à la main » | Une valeur au seuil de détection n'est pas un nombre : saisissez ce que votre protocole prescrit |
+| « valeurs discordantes : … — à trancher à la main… » | Plusieurs mentions différentes : saisissez la bonne, ou choisissez dans la fiche la valeur à retenir (§ 2.6) |
+| « mentions trouvées : … — variable de synthèse, à valider… » | Variable « Proposer sans remplir » : vérifiez dans le dossier, puis saisissez (§ 2.6) |
+| « C'est un tableau, pas un compte rendu… » | Un classeur ou un CSV déposé avec les documents : *Importer un tableau (Excel, CSV)* |
+| « Les données ont changé depuis la simulation… » | Une passe, une relecture ou un autre import a eu lieu entre la simulation et l'écriture : relancez la simulation |
 | « Extraction par Claude non configurée. » ou « Claude n'est pas activé… » | Aucune clé n'est enregistrée : seul le mode « Règles seules » est possible. Suivez la page *Activer Claude* (§ 5) |
 | « Anthropic refuse cette clé… » | Clé mal recopiée, expirée, supprimée ou désactivée : copiez-la de nouveau depuis la console d'Anthropic, ou créez-en une autre |
 | « C'est une clé d'administration… » | Une clé `sk-ant-admin…` ne sert pas à interroger un modèle : créez une clé d'API ordinaire |
@@ -318,5 +361,6 @@ Le rapport contient un **paragraphe « Méthodes » prêt à adapter**, rédigé
 | « Anthropic refuse votre clé d'API : elle a expiré, ou a été désactivée ou supprimée… » | Créez une nouvelle clé dans la console et collez-la sur la page *Activer Claude* : elle remplace l'ancienne |
 | « Cette clé vaut pour plusieurs espaces de travail d'Anthropic, et l'outil n'a pas pu choisir le sien… » | Votre rôle dans l'organisation ne permet pas de lister ses espaces : créez une clé en choisissant un seul espace de travail (« Default Workspace ») |
 | « Anthropic est injoignable depuis ce poste… » | Pas d'accès à Internet, ou un pare-feu bloque `api.anthropic.com` : voyez avec l'administrateur |
-| « Une recherche est déjà en cours » | Une seule passe bibliographique à la fois (elle est facturée) : patientez |
+| « Une recherche est déjà en cours » | Une seule passe bibliographique à la fois : patientez |
+| « L'équation renvoie N résultats dans PubMed, au-delà du plafond… (BIBLIO_PUBMED_MAX) » | Resserrez l'équation ou la période, récupérez les N premières pour explorer, ou demandez à l'administrateur de relever le plafond |
 | Nom d'hôte non autorisé (403) | On accède à l'outil sous un nom que l'administrateur n'a pas déclaré (`ALLOWED_HOSTS`) |

@@ -6,6 +6,8 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { CHOICE_SETTINGS, NUMERIC_SETTINGS, environmentProblems, numberOr, readNumericEnv } from '../src/lib/env-check.js';
 
 const names = Object.keys(NUMERIC_SETTINGS) as (keyof typeof NUMERIC_SETTINGS)[];
@@ -67,10 +69,27 @@ describe('réglages numériques : bornes', () => {
     const documented = [
       'PORT', 'MAX_UPLOAD_BYTES', 'MAX_REQUEST_BYTES', 'MAX_TEXT_CHARS', 'PDF_MAX_PAGES', 'PDF_PARSE_TIMEOUT_MS', 'DOCX_MAX_XML_MB',
       'DOCX_MAX_TOTAL_MB', 'IMAGE_MAX_MEGAPIXELS', 'PARSE_CONCURRENCY', 'PARSE_HARD_TIMEOUT_MS', 'PARSE_WORKER_MB',
-      'PARSE_MAX_GROWTH_MB', 'REGEX_BUDGET_MS', 'OCR_MAX_PAGES', 'OCR_PDF_SCALE', 'LLM_MAX_CHARS_PER_DOC', 'LLM_MAX_TOKENS',
-      'CHAT_MAX_TOKENS', 'BIBLIO_MAX_RESULTS', 'APIFY_TIMEOUT_MS',
+      'PARSE_MAX_GROWTH_MB', 'REGEX_BUDGET_MS', 'OCR_MAX_PAGES', 'OCR_PDF_SCALE', 'TABLE_MAX_ROWS', 'TABLE_MAX_COLUMNS',
+      'TABLE_MAX_CELLS', 'TABLE_MAX_XML_MB', 'TABLE_MAX_TOTAL_MB', 'LLM_MAX_CHARS_PER_DOC', 'LLM_MAX_TOKENS',
+      'CHAT_MAX_TOKENS', 'BIBLIO_PUBMED_MAX', 'BIBLIO_IMPORT_MAX_MB', 'NCBI_TIMEOUT_MS', 'BIBLIO_MAX_RESULTS', 'APIFY_TIMEOUT_MS',
     ];
     assert.deepEqual([...names].sort(), [...documented].sort());
+  });
+
+  test('le tableau des bornes du guide de l’administrateur (§ 4.8) reprend exactement ces réglages et ces bornes', () => {
+    const guide = readFileSync(fileURLToPath(new URL('../../docs/guide-administrateur.md', import.meta.url)), 'utf8');
+    const section = guide.split(/^### 4\.8 /m)[1]?.split(/^## /m)[0] ?? '';
+    const digits = (cell: string) => Number(cell.replace(/\(.*\)/, '').replace(/[^0-9]/g, ''));
+    const rows = [...section.matchAll(/^\| `([A-Z0-9_]+)` \| ([^|]+) \| ([^|]+) \|/gm)].map((m) => ({
+      name: m[1]!,
+      min: digits(m[2]!),
+      max: digits(m[3]!),
+    }));
+    assert.deepEqual(rows.map((r) => r.name).sort(), [...names].sort());
+    for (const row of rows) {
+      const setting = NUMERIC_SETTINGS[row.name as keyof typeof NUMERIC_SETTINGS];
+      assert.deepEqual([row.min, row.max], [setting.min, setting.max], row.name);
+    }
   });
 });
 

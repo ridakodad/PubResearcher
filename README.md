@@ -4,13 +4,13 @@
 
 # PubResearcher
 
-L'espace de travail d'une étude rétrospective, sur votre poste. D'un côté, constituer un jeu de données de recherche à partir de dossiers patients hétérogènes : import des documents (Word, PDF — scannés compris —, images, DICOM, texte), extraction guidée par une **fiche d'exploitation paramétrable**, relecture traçable, mesure de fiabilité, visualisation, exports (CSV, Excel, diaporama) et rapport « Méthodes et traçabilité » prêt à citer. De l'autre, mener la **revue de littérature** : interroger PubMed et Google Scholar, trier chaque référence avec son motif, exporter en RIS, BibTeX ou CSV.
+L'espace de travail d'une étude rétrospective, sur votre poste. D'un côté, constituer un jeu de données de recherche à partir de dossiers patients hétérogènes : import des documents (Word, PDF — scannés compris —, images, DICOM, texte), extraction guidée par une **fiche d'exploitation paramétrable**, relecture traçable, mesure de fiabilité, visualisation, exports (CSV, Excel, diaporama) et rapport « Méthodes et traçabilité » prêt à citer. De l'autre, mener la **revue de littérature** : interroger PubMed (API officielle du NCBI, sans réglage) et, en option, Google Scholar, importer les exports d'autres bases (RIS, nbib, BibTeX, CSV), trier chaque référence, suivre le diagramme de flux PRISMA, exporter en RIS, BibTeX ou CSV.
 
 Pensée pour un travail de thèse ou une étude rétrospective : on part d'une pile de dossiers, on obtient un tableau exploitable dans Excel, R ou SPSS — sans ressaisir chaque variable à la main, et sans perdre la trace de l'origine de chaque valeur.
 
 **Version 1.5.0** · Node.js ≥ 22.13 · un seul processus, aucun module natif à compiler · 828 tests
 
-> **Données de santé.** Par défaut l'outil n'écoute que sur le poste et n'envoie **rien** hors de la machine. Il n'anonymise pas : importez des documents pseudonymisés. Avant tout import, l'application demande de **confirmer une charte d'anonymisation** (cinq engagements, rappelés à chaque nouvelle version du texte). Lisez [Sécurité et données](docs/securite-et-donnees.md) avant la première étude.
+> **Données de santé.** Par défaut l'outil n'écoute que sur le poste et n'envoie **rien** hors de la machine. Il n'anonymise pas : importez des documents pseudonymisés (avant un envoi à Claude, il masque en plus, sur le poste, les noms précédés d'une civilité, téléphones, dates de naissance et identifiants annoncés — une pseudonymisation de secours, pas une anonymisation). Avant tout import, l'application demande de **confirmer une charte d'anonymisation** (cinq engagements, rappelés à chaque nouvelle version du texte). Lisez [Sécurité et données](docs/securite-et-donnees.md) avant la première étude.
 
 ## Aperçu
 
@@ -33,7 +33,7 @@ Pensée pour un travail de thèse ou une étude rétrospective : on part d'une p
 | Scripter l'outil (R, Python, `curl`) | [Référence de l'API](docs/reference-api.md) |
 | Comprendre ou modifier le code | [Architecture](docs/architecture.md) |
 | Savoir ce qui a été testé, et ce qui ne l'a pas été | [Rapport de validation](docs/validation.md) |
-| Interroger PubMed et Google Scholar | [Revue bibliographique](docs/revue-bibliographique.md) |
+| Interroger PubMed, importer des références, suivre le diagramme PRISMA | [Revue bibliographique](docs/revue-bibliographique.md) |
 | Mettre en ligne le site d'accueil (Supabase, Google, Vercel), comprendre la charte d'anonymisation | [Page d'accueil](docs/page-d-accueil.md) |
 | Voir ce qui a changé | [Journal des versions](docs/changelog.md) |
 | Connaître la charte graphique (couleurs, police, composants, accessibilité) | [Identité visuelle](docs/identite-visuelle.md) |
@@ -66,17 +66,19 @@ Le site est une **porte d'entrée, pas une serrure** : il ne protège pas l'appl
 
 Les doublons sont détectés par empreinte du contenu, pas par nom de fichier.
 
+**Votre équipe tient déjà un tableau de la cohorte ?** *Importer un tableau (Excel, CSV)* : chaque ligne devient un dossier, chaque colonne une variable de la fiche. Une simulation montre, avant d'écrire, ce qui sera écrit, refusé (avec le motif) ou laissé en place ; chaque valeur importée cite son fichier, sa feuille et sa cellule, et n'écrase jamais une valeur relue.
+
 **2. Définir la fiche d'exploitation.** La liste des variables de votre étude, en sections. Chaque variable a un type (texte, nombre, entier, date, oui/non, choix unique, choix multiple), une unité, une définition, des bornes de plausibilité et — c'est le cœur — la façon dont elle se retrouve dans les documents.
 
-**3. Extraire.** Une passe applique la fiche à tous les dossiers, par des **règles** que vous paramétrez, par **Claude**, ou par les deux. Chaque valeur trouvée conserve **le document et l'extrait qui la justifient** ; ce que les règles ont trouvé puis refusé (« CRP < 5 », « 85 µmol/L » pour du mg/L) est consigné avec sa raison (banc d'essai de la variable, bilan de la dernière passe).
+**3. Extraire.** Une passe applique la fiche à tous les dossiers, par des **règles** que vous paramétrez, par **Claude**, ou par les deux. Chaque valeur trouvée conserve **le document et l'extrait qui la justifient** ; ce que les règles ont trouvé puis refusé (« CRP < 5 », « 85 µmol/L » pour du mg/L, « suspicion de diabète », deux valeurs discordantes) est consigné avec sa raison (banc d'essai de la variable, bilan de la dernière passe).
 
-**4. Relire.** Dossier par dossier, chaque variable affiche son origine (règle, Claude, relecture humaine), sa justification et son historique. Une valeur confirmée, corrigée ou vidée à la main **n'est jamais écrasée** par une extraction lancée depuis l'interface.
+**4. Relire.** Dossier par dossier, chaque variable affiche son origine (règle, Claude, tableau importé, relecture humaine), sa justification et son historique. Une valeur confirmée, corrigée ou vidée à la main, ou importée d'un tableau, **n'est jamais écrasée** par une extraction lancée depuis l'interface.
 
 **5. Mesurer.** Les gestes de relecture donnent, sans rien saisir de plus, la **concordance** et le **rappel** de l'extraction avec leur intervalle de confiance à 95 %.
 
 **6. Analyser et exporter.** Tableau de données, distributions, complétude ; CSV, classeur Excel typé, figures en diaporama, dictionnaire des variables, fiche JSON, journal d'audit, **rapport « Méthodes et traçabilité »** (français ou anglais) avec un paragraphe « Méthodes » rédigé à partir des chiffres de votre base.
 
-**7. Faire la revue de littérature.** Une page à part, indépendante des dossiers : interroger PubMed et Google Scholar par des acteurs Apify, regrouper les doublons, trier chaque référence (retenue, à voir, exclue avec son motif), suivre le diagramme de flux et exporter en RIS, BibTeX ou CSV. [Détail](docs/revue-bibliographique.md).
+**7. Faire la revue de littérature.** Une page à part, indépendante des dossiers : interroger PubMed par l'API officielle du NCBI (gratuite, sans réglage ; toutes les notices, ou les N premières pour explorer) et, en option, Google Scholar par un acteur Apify ; importer les exports d'Embase, CENTRAL, Scopus, Web of Science, LiSSa ou Zotero (RIS, nbib, BibTeX, CSV) ; regrouper les doublons, trier chaque référence (retenue, à voir, exclue), suivre le diagramme de flux PRISMA 2020 et le journal de recherche (PRISMA-S), exporter en RIS, BibTeX ou CSV. [Détail](docs/revue-bibliographique.md).
 
 ---
 
@@ -144,9 +146,9 @@ Une variable peut avoir plusieurs règles, évaluées **dans l'ordre** : la prem
 | **Expression régulière** | Ce que le libellé ne couvre pas | `patient de (\d{1,3}) ans` |
 | **Tag DICOM** | Les métadonnées d'un examen | `PatientAge`, `Modality`, `00101010` |
 
-Post-traitement : correspondances de valeurs (`CT = Scanner`), bornes de plausibilité, facteur de conversion. Le **banc d'essai** de l'éditeur teste une règle sur un texte collé ou un dossier réel, sans rien enregistrer.
+Post-traitement : correspondances de valeurs (`CT = Scanner`), bornes de plausibilité, facteur de conversion, **valeur à retenir quand plusieurs mentions divergent** (par défaut : aucune, à trancher à la main), et deux réglages de variable : **« Proposer sans remplir »** (variables de synthèse — examens réalisés, traitements reçus : les mentions trouvées sont proposées à la relecture) et **« Valeur à l'arrivée seulement »** (fièvre, température, bilan d'entrée : les mentions datées plus tard dans le séjour sont écartées). Le **banc d'essai** de l'éditeur teste une règle sur un texte collé ou un dossier réel, sans rien enregistrer.
 
-Le moteur préfère un vide à une valeur fausse : une valeur seuil, un décimal pour un entier, une unité différente de celle de la variable, une valeur hors bornes sont **écartés et signalés**, jamais lus de travers. Détail, négations, mots entiers, limites : [guide du chercheur](docs/guide-chercheur.md#2-définir-la-fiche-dexploitation).
+Le moteur préfère un vide à une valeur fausse : une valeur seuil, un décimal pour un entier, une unité différente de celle de la variable, une valeur hors bornes, une lettre que l'OCR a mise à la place d'un chiffre (« 2O ») sont **écartés et signalés**, jamais lus de travers. Une mention oui/non est qualifiée avant d'être lue : une hypothèse (« suspicion de », « ? »), un épisode passé (« diabète gestationnel en 2012 ») ou « non renseigné » ne donnent jamais « Oui » ; « ancien fumeur », « diabète éliminé » valent « Non ». Détail, négations, mots entiers, limites : [guide du chercheur](docs/guide-chercheur.md#2-définir-la-fiche-dexploitation).
 
 ---
 
@@ -160,9 +162,9 @@ Les règles excellent sur ce qui est structuré. Elles atteignent leur limite su
 | **Règles puis Claude** | Les règles d'abord ; Claude ne reçoit que les variables restées vides | Le meilleur rapport coût/rendement |
 | **Claude seul** | Soumet toute la fiche au modèle | Comparer, ou démarrer sans règles |
 
-**Ce qui empêche une valeur inventée d'entrer dans le jeu de données** : deux contrôles indépendants. (1) Le modèle doit recopier un extrait du document ; cet extrait est **recherché dans le texte réel** du dossier — à défaut, c'est la valeur elle-même qui l'est (confiance plus basse) ; ni l'un ni l'autre, et la valeur est écartée. (2) La valeur passe ensuite par le même typage que celles des règles (type, options, bornes). L'extrait affiché en relecture est celui du document, pas celui du modèle. **Rien de ce qui vient d'un modèle ne devrait entrer dans une publication sans relecture humaine.**
+**Ce qui empêche une valeur inventée d'entrer dans le jeu de données** : trois contrôles. (1) Le modèle doit recopier un extrait du document ; cet extrait est **recherché dans le texte réel** du dossier — à défaut, c'est la valeur elle-même qui l'est (confiance plus basse) ; ni l'un ni l'autre, et la valeur est écartée. (2) L'extrait doit **contenir la valeur** : un nombre ou une date doit y figurer, et un « oui » ne peut pas reposer sur un extrait qui nie, doute ou relègue au passé (« Pas de diabète », « suspicion de », « ancien fumeur »). (3) La valeur passe par le même typage que celles des règles (type, options, bornes). L'extrait affiché en relecture est celui du document, pas celui du modèle ; la valeur, la passe et le coût nomment le modèle qui a réellement répondu. **Rien de ce qui vient d'un modèle ne devrait entrer dans une publication sans relecture humaine.**
 
-> **Cette fonction envoie le texte des documents à l'API d'Anthropic**, sous les noms « Document 1 », « Document 2 »… (ni les noms de fichier ni le code du dossier ne partent, mais **le texte, lui, part tel quel**, nom du patient compris s'il y figure). C'est une sortie de données de santé hors de l'établissement : elle relève des mêmes autorisations que tout traitement externalisé, et se décide avant l'usage. Sans clé d'API, les deux modes « Claude » sont indisponibles. Le mode n'a pas été exercé contre l'API réelle dans la validation (le SDK l'a été contre un faux serveur ; voir le [rapport](docs/validation.md#11-limites-et-ce-qui-na-pas-été-vérifié)).
+> **Cette fonction envoie le texte des documents à l'API d'Anthropic**, sous les noms « Document 1 », « Document 2 »… (ni les noms de fichier ni le code du dossier ne partent). Le texte est d'abord **pseudonymisé sur le poste** : noms précédés d'une civilité ou d'un titre, champs « Nom » et « Prénom », dates de naissance, numéros de sécurité sociale, téléphones, adresses électroniques et postales, identifiants annoncés (IPP, NDA) deviennent `[NOM]`, `[TÉLÉPHONE]`… Ce n'est **pas une anonymisation** : un nom sans civilité au milieu d'une phrase part encore. C'est une sortie de données de santé hors de l'établissement : elle relève des mêmes autorisations que tout traitement externalisé, et se décide avant l'usage. Sans clé d'API, les deux modes « Claude » sont indisponibles. Le mode n'a pas été exercé contre l'API réelle dans la validation (le SDK l'a été contre un faux serveur ; voir le [rapport](docs/validation.md#11-limites-et-ce-qui-na-pas-été-vérifié)).
 
 ### Votre clé, votre facture
 
@@ -194,15 +196,16 @@ npm start
 | `LLM_EFFORT` | `high` | Profondeur de raisonnement ; `medium` ou `low` réduisent le coût sur de grandes séries |
 | `LLM_MAX_CHARS_PER_DOC` | `60000` | Texte transmis par document ; au-delà, tronqué et signalé au modèle |
 | `LLM_MAX_TOKENS` | `16000` | Plafond de génération |
+| `LLM_PSEUDONYMIZE` | actif | `0` désactive la pseudonymisation locale avant l'envoi |
 
-Un appel par dossier ; la consigne et le dictionnaire des variables sont mis en cache. Avec le modèle par défaut, un dossier ordinaire (une vingtaine de milliers de caractères, une trentaine de variables) coûte de l'ordre de **0,05 à 0,20 $US** ; l'estimation affichée avant chaque passe vaut pour votre corpus, la console d'Anthropic pour la facture. Commencez par quelques dossiers pour mesurer le coût et la qualité avant d'engager la cohorte entière.
+Un appel par dossier ; la consigne et le dictionnaire des variables (toute la fiche, même en mode « Règles puis Claude ») sont mis en cache. Avec le modèle par défaut, un dossier ordinaire (une vingtaine de milliers de caractères, une trentaine de variables) coûte de l'ordre de **0,05 à 0,20 $US** ; l'estimation affichée avant chaque passe vaut pour votre corpus, la console d'Anthropic pour la facture. Commencez par quelques dossiers pour mesurer le coût et la qualité avant d'engager la cohorte entière.
 
 ---
 
 ## Export
 
-- **Jeu de données (CSV)** — séparateur `;` (Excel français, virgule décimale) ou `,` (R, Python, SPSS, point décimal) ; oui/non en `1`/`0` ou `Oui`/`Non` ; en-têtes en clés techniques ou en libellés. UTF-8 avec marque d'ordre des octets pour que les accents s'affichent dans Excel. Les choix multiples occupent une colonne, options séparées par `|`.
-- **Classeur Excel** — trois feuilles (données **typées**, dictionnaire, synthèse de cohorte).
+- **Jeu de données (CSV)** — séparateur `;` (Excel français, virgule décimale) ou `,` (R, Python, SPSS, point décimal) ; oui/non en `1`/`0` ou `Oui`/`Non` ; en-têtes en clés techniques (sans unité : des noms de colonne valides pour R, Stata, SPSS) ou en libellés ; option « sans le libellé des dossiers » pour partager le fichier. UTF-8 avec marque d'ordre des octets pour que les accents s'affichent dans Excel. Les choix multiples occupent une colonne, options séparées par `|`.
+- **Classeur Excel** — trois feuilles (données **typées**, dictionnaire, synthèse de cohorte : mêmes calculs que l'écran — une valeur manquante n'est jamais un zéro —, quartiles, effectifs n (%) des variables qualitatives).
 - **Figures en diaporama** — une planche par variable décrite par un histogramme ou des modalités (pas pour le texte libre), en formes natives modifiables.
 - **Dictionnaire des variables** — type, unité, options et définition. À joindre au jeu de données.
 - **Rapport « Méthodes et traçabilité »** et **journal d'audit** — voir [Méthodes et reproductibilité](docs/methodes-et-reproductibilite.md).
@@ -244,11 +247,11 @@ Toute la configuration passe par des variables d'environnement. Les plus courant
 | `PORT` | `4000` | Port d'écoute |
 | `HOST` | `127.0.0.1` | Adresse d'écoute (`0.0.0.0` pour ouvrir au réseau — avec `APP_PASSWORD` et HTTPS) |
 | `APP_PASSWORD` | — | Mot de passe d'accès (HTTP Basic) |
-| `DATA_DIR` | `./data` | Base SQLite et fichiers importés |
+| `DATA_DIR` | `./data` (sources) ; dossier de l'utilisateur (version prête à l'emploi) | Base SQLite et fichiers importés |
 | `ALLOWED_HOSTS`, `ALLOWED_ORIGINS`, `TRUST_PROXY` | — | Noms, origines et proxys de confiance (derrière un proxy inverse) |
 | `MAX_UPLOAD_BYTES` | 200 Mo | Taille maximale d'un fichier |
 
-**Liste complète** (plafonds d'analyse, isolation, OCR, Claude, Apify, diagnostic) : [guide de l'administrateur](docs/guide-administrateur.md#4-configuration). Une valeur numérique invalide arrête le démarrage, avec un message qui dit laquelle et la plage attendue.
+**Liste complète** (plafonds d'analyse et des tableaux importés, isolation, OCR, Claude, PubMed, Apify, diagnostic) : [guide de l'administrateur](docs/guide-administrateur.md#4-configuration). Une valeur numérique invalide arrête le démarrage, avec un message qui dit laquelle et la plage attendue.
 
 Les documents importés sont conservés tels quels sous `DATA_DIR/uploads/`, sous un nom généré ; le nom d'origine reste affiché dans l'interface. **Sauvegarde** : `npm run backup` (voir [le guide](docs/guide-administrateur.md#6-sauvegarde-et-restauration)).
 
@@ -256,7 +259,7 @@ Les documents importés sont conservés tels quels sous `DATA_DIR/uploads/`, sou
 
 ## Données personnelles
 
-L'outil n'a ni chiffrement au repos ni comptes individuels : il est prévu pour un poste ou un serveur d'établissement maîtrisé, pas pour une exposition publique. Les documents et la base restent sur la machine qui l'héberge — **sauf** dans les modes « Claude » (texte des documents vers Anthropic), dans la rédaction assistée (des agrégats de la cohorte vers Anthropic) et dans la revue bibliographique (l'équation de recherche seule vers Apify). Ne transmettez que des documents **pseudonymisés** ; utilisez des codes de dossier sans lien avec l'identité : ils constituent la clé du jeu de données exporté. Modèle de menaces, protections, liste de contrôle d'avant-étude et conduite en cas d'incident : [Sécurité et données personnelles](docs/securite-et-donnees.md).
+L'outil n'a ni chiffrement au repos ni comptes individuels : il est prévu pour un poste ou un serveur d'établissement maîtrisé, pas pour une exposition publique. Les documents et la base restent sur la machine qui l'héberge — **sauf** dans les modes « Claude » (texte des documents, pseudonymisé sur le poste, vers Anthropic), dans la rédaction assistée (des agrégats de la cohorte vers Anthropic) et dans la revue bibliographique (l'équation de recherche seule, vers le NCBI pour PubMed ou vers Apify pour Scholar). Ne transmettez que des documents **pseudonymisés** ; utilisez des codes de dossier sans lien avec l'identité : ils constituent la clé du jeu de données exporté. Modèle de menaces, protections, liste de contrôle d'avant-étude et conduite en cas d'incident : [Sécurité et données personnelles](docs/securite-et-donnees.md).
 
 ---
 
@@ -265,16 +268,19 @@ L'outil n'a ni chiffrement au repos ni comptes individuels : il est prévu pour 
 ```
 server/          API Node/TypeScript, SQLite (module intégré `node:sqlite`)
   src/extract/   Un extracteur par format, plafonds, OCR, analyse en fils séparés
-  src/engine/    Repliage, typage, règles, expressions surveillées, passe d'extraction,
-                 appel à Claude et vérification des citations
-  src/biblio/    Revue bibliographique : client Apify, adaptateurs, exports RIS / BibTeX / CSV
+  src/engine/    Repliage, typage, règles et qualificatifs des mentions, expressions surveillées,
+                 passe d'extraction, appel à Claude (pseudonymisation, vérification des citations)
+  src/table/     Lecture des tableaux de cohorte (.xlsx, CSV, TSV), correspondances, simulation d'import
+  src/biblio/    Revue bibliographique : PubMed (E-utilities du NCBI), Scholar (Apify), import RIS / nbib /
+                 BibTeX / CSV, exports RIS / BibTeX / CSV
   src/repo/      Accès aux données (dont fiabilité et rapport « Méthodes »)
   src/routes/    API HTTP
   test/          38 fichiers de test (dont la logique et la configuration de la page d'accueil)
 web/             Interface React/TypeScript (Vite) : styles à la main, police et illustrations embarquées
 landing/         Site public, déployé à part (Vercel) : présentation, inscription Google ou e-mail,
                  parcours d'accueil, charte d'anonymisation ; tables Supabase (migration), parcours e2e
-scripts/         Démarrage (`ensure-build.mjs`) et génération de l'illustration d'en-tête
+scripts/         Démarrage (`ensure-build.mjs`), archives prêtes à l'emploi (`package.mjs`, `package/`),
+                 génération de l'illustration d'en-tête
 docs/            La documentation
 ```
 
@@ -290,7 +296,7 @@ npm test             # 793 tests, un processus par fichier
 cd landing && node --test e2e/flows.test.mjs   # 25 parcours de la page d'accueil (Playwright requis)
 ```
 
-Les tests couvrent le moteur (repliage, typage, chaque famille de règles, négation, unités, expressions surveillées), la chaîne complète — import, extraction, relecture, export — sur de vrais fichiers PDF, DOCX, DICOM et images (PNG, JPEG avec EXIF, TIFF) construits par les fixtures, un **vrai processus serveur** (démarrage, verrou, réglages invalides, arrêt par signal), l'isolation sur de vrais fichiers piégés, le SDK d'Anthropic contre un faux serveur, et la revue bibliographique contre un faux serveur Apify qui rejoue de vraies sorties.
+Les tests couvrent le moteur (repliage, typage, chaque famille de règles, négation, unités, expressions surveillées), la chaîne complète — import, extraction, relecture, export — sur de vrais fichiers PDF, DOCX, DICOM et images (PNG, JPEG avec EXIF, TIFF) construits par les fixtures, un **vrai processus serveur** (démarrage, verrou, réglages invalides, arrêt par signal), l'isolation sur de vrais fichiers piégés, le SDK d'Anthropic contre un faux serveur, et la revue bibliographique contre un faux NCBI (réponses enregistrées d'E-utilities) et un faux serveur Apify.
 
 Le [rapport de validation](docs/validation.md) donne les mesures (banc d'essai du moteur, 97 fichiers hostiles, 25 arrêts brutaux, 1 000 à 5 000 dossiers, 64 combinaisons d'accessibilité, la suite sous cinq versions de Node — mesurées sur la 1.1.0, le moteur étant inchangé ; les § 1.2 à 1.5 disent ce qui a été rejoué pour les versions 1.2.0 à 1.5.0, le § 13 ce qui a été mesuré sur la page d'accueil) **et ce qui n'a pas été vérifié** : aucun corpus clinique réel, le mode « Claude » jamais exécuté contre l'API réelle, Excel et PowerPoint jamais ouverts, Chromium seulement.
 

@@ -96,6 +96,7 @@ DATA_DIR/
   uploads/
     <identifiant du dossier>/
       <uuid>.<extension>      les fichiers d'origine, sous un nom généré
+    imports/                  les tableaux de cohorte importés (classeurs, CSV), sous un nom généré
     .incoming/                dépôt provisoire des envois en cours (vidé à chaque démarrage)
   sauvegardes/                destination par défaut de `npm run backup`
   anthropic-key.json          clé d'API Anthropic saisie dans l'application (droits 0600), si elle existe
@@ -104,13 +105,15 @@ DATA_DIR/
 
 `anthropic-key.json` n'est **ni sauvegardé ni restauré** : sur une nouvelle machine, l'utilisateur saisit à nouveau sa clé (§ 4.5).
 
+`uploads/imports/` garde **le fichier entier** de chaque tableau de cohorte importé — toutes ses feuilles et toutes ses colonnes, y compris celles qui n'ont pas été reprises (un nom, une date de naissance s'y trouvent parfois) : c'est la pièce qui justifie chaque valeur importée. Il est compris dans les sauvegardes, et un import confirmé ne se supprime pas par l'interface. Un brouillon d'import abandonné (fenêtre fermée avant de confirmer) est effacé aussitôt, ou au démarrage suivant s'il a plus d'un jour.
+
 Les noms `research-tool.db`, `.research-tool.lock` et `research-tool-sauvegarde-…` sont ceux d'avant le changement de nom en PubResearcher (1.2.0) : ils sont **conservés** pour qu'une base ou une sauvegarde créée par une version antérieure s'ouvre telle quelle.
 
 Le nom d'origine d'un fichier n'existe que dans la base. **Copier `DATA_DIR` à chaud** (fichier par fichier) peut donner une base incohérente : utilisez `npm run backup`. Les fichiers `.db-wal` et `.db-shm` n'existent que pendant que l'outil tourne : un arrêt propre (Ctrl+C, `SIGTERM`) ramène le journal dans `research-tool.db`, qui contient alors toutes les données à lui seul ; après un arrêt brutal, ils restent et la base les relit seule au redémarrage (ne copiez jamais le `.db` sans eux dans ce cas).
 
 ## 4. Configuration
 
-Toute la configuration passe par des variables d'environnement, lues au démarrage (sauf mention contraire). Une valeur numérique invalide **arrête le démarrage** : toutes celles qui le sont sont annoncées d'un coup, avec la plage attendue (`PORT=abc`, `PDF_MAX_PAGES=-5`, `LLM_MAX_CHARS_PER_DOC=60 000` — l'espace n'est pas un séparateur), au lieu d'être ignorées. Il en va de même de `LLM_EFFORT`. Les bornes acceptées sont au § 4.8. Les autres variables (`HOST`, `DATA_DIR`, `OCR_LANG`, `APIFY_*`…) ne sont pas contrôlées avant leur emploi.
+Toute la configuration passe par des variables d'environnement, lues au démarrage (sauf mention contraire). Une valeur numérique invalide **arrête le démarrage** : toutes celles qui le sont sont annoncées d'un coup, avec la plage attendue (`PORT=abc`, `PDF_MAX_PAGES=-5`, `LLM_MAX_CHARS_PER_DOC=60 000` — l'espace n'est pas un séparateur), au lieu d'être ignorées. Il en va de même de `LLM_EFFORT`. Les bornes acceptées sont au § 4.8. Les autres variables (`HOST`, `DATA_DIR`, `OCR_LANG`, `NCBI_*`, `APIFY_*`…) ne sont pas contrôlées avant leur emploi.
 
 ```bash
 # macOS / Linux
@@ -161,6 +164,18 @@ Chaque plafond est relu **à chaque fichier**, mais l'environnement d'un process
 
 > **Mémoire et `--max-old-space-size`.** Si Node est lancé avec cette option, elle annule `PARSE_WORKER_MB`. La surveillance de croissance (`PARSE_MAX_GROWTH_MB`) reste alors la protection.
 
+**Tableaux de cohorte** (import Excel, CSV, TSV). Lus dans les mêmes fils isolés que les documents, avec leurs propres plafonds ; le fichier lui-même est borné par `MAX_UPLOAD_BYTES`. Une formule n'est jamais évaluée (sa dernière valeur enregistrée est lue), les macros et liaisons externes sont ignorées ; `.xls`, `.ods` et un classeur chiffré sont refusés avec la marche à suivre (l'enregistrer en `.xlsx` ou en CSV).
+
+| Variable | Défaut | Rôle |
+|---|---|---|
+| `TABLE_MAX_ROWS` | `50000` | Lignes lues par feuille (un patient par ligne) |
+| `TABLE_MAX_COLUMNS` | `2000` | Colonnes lues par feuille |
+| `TABLE_MAX_CELLS` | `2000000` | Cellules renseignées dans tout le classeur |
+| `TABLE_MAX_XML_MB` | `64` | Taille décompressée d'une partie d'un classeur (une feuille, la table des textes) |
+| `TABLE_MAX_TOTAL_MB` | `256` | Taille décompressée de tout le classeur |
+
+Les tailles décompressées annoncées par l'archive sont vérifiées avant de l'ouvrir, et la décompression s'arrête à la taille annoncée (archive qui ment).
+
 ### 4.4 Reconnaissance optique (OCR)
 
 | Variable | Défaut | Rôle |
@@ -197,27 +212,35 @@ La clé sert aussitôt, sans redémarrage. Elle est **commune à l'instance** : 
 | `LLM_MAX_CHARS_PER_DOC` | `60000` | Texte transmis par document ; au-delà, tronqué et signalé au modèle |
 | `LLM_MAX_TOKENS` | `16000` | Plafond de génération de l'extraction |
 | `CHAT_MAX_TOKENS` | `8000` | Plafond de génération de la rédaction |
+| `LLM_PSEUDONYMIZE` | actif | `0` désactive la pseudonymisation locale du texte avant l'envoi (ci-dessous). À ne faire que si les documents sont déjà pseudonymisés et que le masquage gêne l'extraction |
 
-**Coût.** Avant une passe, l'écran d'extraction affiche une **fourchette en dollars**, calculée sur le texte réel des dossiers (3,2 caractères par jeton, consigne mise en cache), et demande confirmation au-delà de 5 $US ; après la passe, et après chaque réponse de l'assistant de rédaction, le **coût constaté** d'après les jetons facturés. Barème intégré (octobre 2026, dollars par million de jetons, entrée / sortie) : Opus 5.5 4 / 20, Opus 5 5 / 25, Sonnet 5.5 et Sonnet 5 2 / 10, Haiku 5.5 0,10 / 0,50, Fable 5.1 10 / 50. Ces montants sont indicatifs : la facture qui fait foi est celle de la console d'Anthropic.
+**Coût.** Avant une passe, l'écran d'extraction affiche une **fourchette en dollars**, calculée sur le texte réel des dossiers (3,2 caractères par jeton, consigne mise en cache), et demande confirmation au-delà de 5 $US ; après la passe, et après chaque réponse de l'assistant de rédaction, le **coût constaté** d'après les jetons facturés, au tarif du modèle **qui a réellement répondu** (le repli côté serveur d'Anthropic peut en désigner un autre que `LLM_MODEL` ; un identifiant daté, `claude-opus-5-5-…`, prend le tarif de son modèle). En mode « Règles puis Claude », la consigne décrit toujours la fiche entière, et la liste des variables restées vides passe dans le message : la consigne reste identique d'un dossier à l'autre, donc en cache. Barème intégré (octobre 2026, dollars par million de jetons, entrée / sortie) : Opus 5.5 4 / 20, Opus 5 5 / 25, Sonnet 5.5 et Sonnet 5 2 / 10, Haiku 5.5 0,10 / 0,50, Fable 5.1 10 / 50. Ces montants sont indicatifs : la facture qui fait foi est celle de la console d'Anthropic.
 
 **Messages d'Anthropic.** Clé refusée ou expirée, crédit épuisé, limite de dépenses atteinte (celle que l'utilisateur fixe, `400`), plafond mensuel du palier du compte (`429` sans réessai possible), espace de travail manquant, limite de débit et modèle introuvable sont traduits en clair, avec ce qu'il faut faire (« Crédit épuisé sur votre compte Anthropic : ajoutez du crédit… ») ; aucun de ces refus n'est réessayé en boucle. La clé n'apparaît dans aucun message, aucune réponse, aucun journal — le journal ne note que ses quatre derniers caractères à l'enregistrement.
 
-> **Ce qui part chez Anthropic**, mode « Claude » : le **texte des documents** (présentés au modèle sous les noms « Document 1 », « Document 2 »… : ni le code du dossier ni les noms de fichiers ne partent), les libellés, unités, définitions et options des variables, et le nom de la fiche. **Le texte d'un compte rendu contient souvent le nom du patient** : l'outil ne le retire pas. Pour la rédaction : des agrégats seulement (voir [Sécurité et données](securite-et-donnees.md#2-ce-qui-sort-de-la-machine)).
+> **Ce qui part chez Anthropic**, mode « Claude » : le **texte des documents, pseudonymisé sur le poste** (présentés au modèle sous les noms « Document 1 », « Document 2 »… : ni le code du dossier ni les noms de fichiers ne partent), les libellés, unités, définitions et options des variables, et le nom de la fiche. Avant l'envoi, les noms précédés d'une civilité ou d'un titre (M., Mme, Dr…), les champs « Nom » et « Prénom », dates de naissance, numéros de sécurité sociale, téléphones, adresses électroniques et postales, et identifiants annoncés (IPP, NDA, N° de séjour) sont remplacés par une étiquette (`[NOM]`, `[TÉLÉPHONE]`…) ; les valeurs cliniques ne sont pas touchées. **C'est une pseudonymisation, pas une anonymisation** : un nom sans civilité au milieu d'une phrase part encore. Pour la rédaction : des agrégats seulement (voir [Sécurité et données](securite-et-donnees.md#2-ce-qui-sort-de-la-machine)).
 >
 > L'API réelle d'Anthropic **n'a pas été appelée** par la validation de cette version (aucune clé ni crédit ; voir le [rapport de validation](validation.md)). Le SDK est exercé contre un faux serveur HTTP — vérification de la clé, requête, réponse structurée, erreurs, masquage de la clé — et ce qui l'entoure (schéma imposé, recherche des citations, typage, tri retenues/écartées, coût) est testé. Essayez d'abord sur quelques dossiers pseudonymisés.
 
 ### 4.6 Revue bibliographique
 
+**PubMed fonctionne sans réglage** : il passe par l'API officielle et gratuite du NCBI (E-utilities), au plus 3 requêtes par seconde (10 avec une clé). Le poste doit pouvoir joindre `eutils.ncbi.nlm.nih.gov`.
+
 | Variable | Défaut | Rôle |
 |---|---|---|
-| `APIFY_TOKEN` | — | Jeton Apify (*Settings › API & Integrations*). Sans lui, aucune recherche ne part. **Reste côté serveur** |
-| `APIFY_PUBMED_ACTOR` | `labrat011/pubmed-scraper` | Acteur interrogé pour PubMed |
+| `NCBI_API_KEY` | — | Clé d'API du NCBI (gratuite, compte *My NCBI*) : relève le débit de 3 à 10 requêtes par seconde. **Reste côté serveur** |
+| `NCBI_EMAIL` | — | Adresse de contact transmise au NCBI avec chaque requête, comme il le demande (avec `tool=PubResearcher`) |
+| `NCBI_TIMEOUT_MS` | `60000` | Délai d'un appel au NCBI ; trois nouvelles tentatives espacées (1, 2, 4 s, ou le délai demandé) sur 429, 5xx et coupure |
+| `NCBI_EUTILS_BASE` | `https://eutils.ncbi.nlm.nih.gov/entrez/eutils` | Point d'accès — pour des tests ou une passerelle |
+| `BIBLIO_PUBMED_MAX` | `10000` | Plafond de notices PubMed récupérées en une passe « toutes les notices » ; au-delà, la passe échoue et le dit (resserrez l'équation) |
+| `BIBLIO_IMPORT_MAX_MB` | `50` | Taille maximale d'un fichier de références importé (RIS, nbib, BibTeX, CSV ; 50 000 notices au plus par fichier) |
+| `APIFY_TOKEN` | — | Jeton Apify (*Settings › API & Integrations*), pour **Google Scholar** seulement, en option. Sans lui, Scholar est grisé. **Reste côté serveur** |
 | `APIFY_SCHOLAR_ACTOR` | `george.the.developer/google-scholar-scraper` | Acteur pour Scholar ; `johnvc/google-scholar-api` est aussi pris en charge |
-| `BIBLIO_MAX_RESULTS` | `100` | Plafond de résultats par source et par passe (chaque résultat est facturé) |
-| `APIFY_TIMEOUT_MS` | `290000` | Attente maximale d'une passe (Apify coupe à 300 s) |
+| `BIBLIO_MAX_RESULTS` | `100` | Plafond de résultats Google Scholar par passe (chaque résultat est facturé par Apify) |
+| `APIFY_TIMEOUT_MS` | `290000` | Attente maximale d'une passe Scholar (Apify coupe à 300 s) |
 | `APIFY_API_BASE` | `https://api.apify.com` | Point d'accès — pour des tests ou une passerelle |
 
-Fixez aussi une **limite d'usage mensuelle** dans votre compte Apify (*Settings › Billing*) : c'est le seul garde-fou que l'application ne peut pas contourner.
+`APIFY_PUBMED_ACTOR` n'existe plus : l'acteur Apify de PubMed est retiré (la variable est ignorée). Si vous activez Scholar, fixez une **limite d'usage mensuelle** dans votre compte Apify (*Settings › Billing*) : c'est le seul garde-fou que l'application ne peut pas contourner.
 
 ### 4.7 Diagnostic
 
@@ -247,9 +270,17 @@ Chaque réglage numérique est vérifié au démarrage contre ces bornes, **enti
 | `REGEX_BUDGET_MS` | 10 | 60 000 |  |
 | `OCR_MAX_PAGES` | 0 (jamais d'OCR) | 100 000 |  |
 | `OCR_PDF_SCALE` | 1 | 4 | décimale admise (`2.5`) |
+| `TABLE_MAX_ROWS` | 1 | 10 000 000 |  |
+| `TABLE_MAX_COLUMNS` | 1 | 16 384 | le maximum d'Excel |
+| `TABLE_MAX_CELLS` | 1 | 1 000 000 000 |  |
+| `TABLE_MAX_XML_MB` | 1 | 100 000 |  |
+| `TABLE_MAX_TOTAL_MB` | 1 | 1 000 000 |  |
 | `LLM_MAX_CHARS_PER_DOC` | 1 000 | 10 000 000 |  |
 | `LLM_MAX_TOKENS` | 256 | 1 000 000 |  |
 | `CHAT_MAX_TOKENS` | 256 | 1 000 000 |  |
+| `BIBLIO_PUBMED_MAX` | 1 | 200 000 |  |
+| `BIBLIO_IMPORT_MAX_MB` | 1 | 500 |  |
+| `NCBI_TIMEOUT_MS` | 1 000 | 600 000 (10 min) |  |
 | `BIBLIO_MAX_RESULTS` | 1 | 10 000 |  |
 | `APIFY_TIMEOUT_MS` | 1 000 | 3 600 000 (1 h) |  |
 

@@ -21,7 +21,7 @@
  * rendue dans une erreur, ni transmise à l'interface.
  */
 
-import { readNumericEnv, type NumericSetting } from '../lib/env-check.js';
+import { NUMERIC_SETTINGS, readNumericEnv, type NumericSetting } from '../lib/env-check.js';
 import { redactSecret } from '../lib/redact.js';
 import { childOf, childrenOf, descendantsOf, parseXml, pathOf, textOf, type XmlElement } from '../lib/xml.js';
 import { normDoi } from './normalize.js';
@@ -49,12 +49,12 @@ export interface EutilsConfig {
 }
 
 /**
- * Bornes des réglages de PubMed. Une valeur hors bornes ou illisible donne le
- * défaut : la passe ne doit pas tomber pour un réglage mal écrit.
+ * Bornes des réglages de PubMed, celles que le démarrage vérifie (`lib/env-check.ts`). Une valeur posée après le
+ * démarrage, hors bornes ou illisible, donne le défaut : la passe ne doit pas tomber pour un réglage mal écrit.
  */
 export const EUTILS_SETTINGS = {
-  BIBLIO_PUBMED_MAX: { min: 1, max: 200_000 },
-  NCBI_TIMEOUT_MS: { min: 1000, max: 600_000 },
+  BIBLIO_PUBMED_MAX: NUMERIC_SETTINGS.BIBLIO_PUBMED_MAX,
+  NCBI_TIMEOUT_MS: NUMERIC_SETTINGS.NCBI_TIMEOUT_MS,
 } as const satisfies Record<string, NumericSetting>;
 
 /** Lue à chaque passe : la clé et l'adresse se posent dans l'environnement, jamais dans le code. */

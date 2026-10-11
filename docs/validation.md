@@ -97,6 +97,22 @@ La 1.5.0 conduit l'utilisateur jusqu'à sa clé (page **Activer Claude** dans l'
 
 **Non vérifié pour la 1.5.0** : l'API réelle d'Anthropic n'a toujours pas été appelée — ni la vérification d'une clé, ni la liste des espaces de travail, dont le faux service suit la documentation ; les mots de la console cités par le guide (« Create key », « Billing », « Spend limits », « auto-reload », « Default Workspace ») viennent de la documentation d'Anthropic et de guides publics, **pas de la console elle-même** (aucun compte). La lecture du MP4 H.264 n'a été vérifiée que par ffmpeg : le Chromium de test, sans H.264, lit la version WebM ; Safari, Chrome et Edge n'ont pas été essayés. Non rejoué : l'audit des 64 combinaisons de l'interface (seules les pages *Activer Claude*, *Extraction* et *Plan de travail* ont changé ; la première a été auditée ci-dessus).
 
+### 1.6 Phase 1 : précision des règles, import de tableaux, PubMed officiel, version prête à l'emploi
+
+*(chiffres de la porte 1 à venir)*
+
+Ce qui change, et comment chaque changement est vérifié :
+
+| Changement | Vérification |
+|---|---|
+| Qualificatifs des mentions (hypothèse, absence établie, épisode passé, antécédent, non renseigné, négation contredite), mentions discordantes signalées et règles de sélection, réglages « Proposer sans remplir » et « Valeur à l'arrivée seulement », durées tirées d'une période, unité dans la cellule suivante, lettres de l'OCR, lignes de PDF coupées | `engine-qualifiers`, `engine-precision`, banc d'essai complété (§ 5.1), et une mesure sur des **dossiers fictifs inédits** (§ 5.3) : un premier jeu de 20 dossiers (59 documents) a servi à la mise au point ; la mesure finale se fait sur un **second jeu jamais vu** — *(chiffres de la porte 1 à venir)* |
+| Claude : citation qui doit contenir la valeur, modèle qui a répondu, consigne stable en mode mixte | `quote-check`, `llm` (faux serveur HTTP) — *(chiffres de la porte 1 à venir)* |
+| Pseudonymisation locale avant l'envoi à Claude | `pseudonymize` (motifs, positions ramenées au texte d'origine), `llm-secrets` (nom et téléphone absents du corps de la requête) — *(chiffres de la porte 1 à venir)* |
+| Import de tableaux de cohorte (`.xlsx`, CSV, TSV) | `table-read` (lecteurs, classeurs piégés, plafonds), `table-import` (simulation, écriture, conflits, provenance, empreinte du plan) — *(chiffres de la porte 1 à venir)* |
+| PubMed par les E-utilities, import RIS/nbib/BibTeX/CSV, diagramme de flux | `biblio-eutils` (vraies réponses d'`esearch`/`efetch` rejouées par un faux service), `biblio-import`, `biblio` ; une vraie recherche PubMed (appendicite, 1 052 notices) a servi à corriger le dédoublonnage — *(chiffres de la porte 1 à venir)* |
+| Export : synthèse Excel, pourcentages des choix multiples, CSV sans unité dans les clés, option sans libellé | `research-io`, `pipeline` — *(chiffres de la porte 1 à venir)* |
+| Version prête à l'emploi (archives par système) | `data-dir` ; `scripts/package/smoke-test.mjs` sous Linux (profil vide, `PATH` sans Node.js, sans réseau) ; Windows et macOS : construites et inspectées, essai confié au flux GitHub Actions — *(chiffres de la porte 1 à venir)* |
+
 ## 2. Environnement de test
 
 | | |
@@ -173,7 +189,7 @@ Aucun test automatisé ne pilote l'interface : celle-ci est validée par les scr
 
 ### 5.1 Ce qui est mesuré : un banc d'essai synthétique
 
-`engine-benchmark.test.ts` : **88 phrases cliniques courantes, rédigées à la main par les auteurs du moteur, dont la bonne réponse est connue**, appliquées à la fiche livrée par défaut (22 variables). Résultat : **88 / 88 corrects, 0 valeur fausse, 0 vide à tort** — la condition d'arrêt du test est « aucune valeur fausse ».
+`engine-benchmark.test.ts` : **des phrases cliniques courantes, rédigées à la main par les auteurs du moteur, dont la bonne réponse est connue**, appliquées à la fiche livrée par défaut (22 variables) — 88 en 1.1.0 (**88 / 88 corrects, 0 valeur fausse, 0 vide à tort**), complétées en phase 1 par des hypothèses, absences établies, antécédents, « non renseigné », négations contredites, lettres de l'OCR, notations de température et options multiples *(chiffres de la porte 1 à venir)*. La condition d'arrêt du test est « aucune valeur fausse ». Pour les variables « Proposer sans remplir » (imagerie, traitement), le banc lit la détection elle-même ; un test à part vérifie que la fiche livrée les **propose** sans les remplir.
 
 **Ce chiffre ne dit presque rien de la précision sur vos dossiers.** Le corpus est écrit par ceux qui ont écrit les règles ; il sert à (1) empêcher qu'un faux positif corrigé réapparaisse (« homme » lu « Féminin » parce qu'il contient « mme » ; « CRP < 5 » lu 5), (2) dire noir sur blanc ce que les règles ne savent pas faire, (3) donner un point de départ.
 
@@ -184,13 +200,16 @@ Si l'une d'elles change de résultat, le test échoue et force à mettre cette d
 | Variable | Texte | Résultat | Pourquoi |
 |---|---|---|---|
 | Tabagisme | « Tabac : 20 paquets-années » | vide | une quantité n'est pas reconnue comme « oui » |
-| Tabagisme | « Tabagisme sevré depuis 5 ans » | Oui | la fiche ne distingue pas actuel et sevré : à définir pour votre étude |
 | Sexe | « Le patient a été admis pour douleurs abdominales. » | vide | « patient » est un masculin générique : un sexe inventé vaut moins qu'un vide |
 | Hémoglobine | « 11 g/dL puis 9,5 g/dL à J3 » | 11 | la première valeur gagne : aucune notion de chronologie |
 
-*Corrigée dans cette version* : « Créatinine : 85 µmol/L » était lue 85 mg/L ; elle est désormais **écartée et signalée** (unité différente).
+*Corrigée en 1.1.0* : « Créatinine : 85 µmol/L » était lue 85 mg/L ; elle est désormais **écartée et signalée** (unité différente). *Corrigée en phase 1* : « Tabagisme sevré depuis 5 ans » donnait « Oui » ; une absence établie (« sevré », « ancien fumeur », « ex-fumeur ») vaut désormais « Non », et le cas est passé dans le banc d'essai. La limite de l'hémoglobine porte sur **une seule** mention qui cite deux valeurs ; deux mentions discordantes, elles, ne sont plus départagées par l'ordre : la variable est signalée (ou tranchée par la règle de sélection choisie).
 
-### 5.3 Ce que vaut l'extraction sur vos dossiers
+### 5.3 Comptes rendus inédits (phase 1)
+
+Pour sortir des phrases écrites par les auteurs des règles, la fiche par défaut est appliquée, en « Règles seules », à des dossiers fictifs complets que les règles n'ont pas vus, et comparée à la réponse attendue pour chaque variable. **Précision** : parmi les valeurs remplies, la part juste ; **rappel** : parmi les valeurs attendues, la part trouvée ; une valeur seulement proposée (« Proposer sans remplir ») ou signalée n'est pas une valeur remplie. Un premier jeu (20 dossiers, 59 documents) a servi à corriger les règles (durées tirées d'une période, unité dans la cellule suivante, options contenues dans une autre, lignes de PDF coupées, variables d'arrivée et de synthèse, numéro de dossier) : c'est désormais un jeu de **mise au point**, dont les chiffres ne mesurent plus l'outil. La mesure se fait sur un **second jeu, jamais vu** pendant la mise au point : *(protocole et chiffres de la porte 1 à venir)*.
+
+### 5.4 Ce que vaut l'extraction sur vos dossiers
 
 Seule la page **Fiabilité** le dit, sur un échantillon relu et **tiré au hasard** : voir [Méthodes et reproductibilité](methodes-et-reproductibilite.md#3-mesurer-la-fiabilité-sur-vos-dossiers) (définitions, intervalles de confiance, nombre de valeurs à relire).
 
@@ -406,22 +425,25 @@ Deux autres agents ont relu la documentation **contre le code** : l'un le README
 ## 11. Limites et ce qui n'a pas été vérifié
 
 **Précision de l'extraction**
-- **Aucun corpus clinique réel.** Le banc d'essai (88 cas) est écrit par les auteurs du moteur. La précision sur de vrais comptes rendus — leur diversité de mise en page, d'abréviations, de fautes — est **inconnue** ; elle se mesure par relecture d'un échantillon aléatoire.
+- **Aucun corpus clinique réel.** Le banc d'essai est écrit par les auteurs du moteur ; les comptes rendus inédits de la phase 1 (§ 5.3) sont fictifs. La précision sur de vrais comptes rendus — leur diversité de mise en page, d'abréviations, de fautes — est **inconnue** ; elle se mesure par relecture d'un échantillon aléatoire.
 - La **confiance** affichée est un indice par type de règle, pas une probabilité calibrée.
-- **L'OCR** n'a été éprouvé que sur trois PDF scannés fabriqués. Sur de vraies photos, des lettres se confondent (« 7O kg » donne 7) et une négation peut se perdre.
+- **L'OCR** n'a été éprouvé que sur trois PDF scannés fabriqués et une photo de compte rendu. Une lettre collée à un chiffre (« 7O kg ») fait désormais écarter la valeur, mais un chiffre lu pour un autre passe, et une négation peut se perdre.
+- **Qualificatifs** : les indices (« suspicion de », « ? », « éliminé », « en 2019 »…) sont volontairement étroits ; une tournure qu'ils ne connaissent pas est lue comme une affirmation. **« Premier » et « dernier »** d'une règle de sélection suivent l'ordre d'import, pas la chronologie.
+- **Pseudonymisation avant Claude** : éprouvée sur des phrases écrites pour l'occasion ; ce qu'aucun motif n'annonce (nom sans civilité, lieu, profession) n'est pas masqué. Ce n'est pas une anonymisation.
 - Le vocabulaire est **français** ; aucune autre langue n'a été essayée.
 - Les années à deux chiffres se lisent avec l'année courante pour pivot : le même document peut se lire autrement dans quelques années.
 
 **Modes qui dépendent d'un service tiers**
 - **Mode « Claude »** (extraction et rédaction) : **jamais exécuté contre l'API réelle** (aucune clé). Sont testés : le schéma imposé, la recherche des citations dans les documents, le typage, le tri retenues / écartées, la consigne, la vérification et l'enregistrement d'une clé, le calcul du coût à partir des jetons déclarés. Ne sont **pas** testés : les réponses réelles d'un modèle, la justesse de la fourchette de coût face à une facture réelle, la limite de débit, les erreurs réseau réelles.
-- **Revue bibliographique** : les adaptateurs lisent de **vraies sorties** enregistrées en octobre 2026, mais tous les appels de la validation sont allés à un faux serveur local. La facturation, les quotas, la disponibilité des acteurs et les changements de leurs champs ne sont pas éprouvés. Google Scholar n'autorise pas l'extraction automatisée.
+- **Revue bibliographique** : le lecteur de PubMed et les adaptateurs Scholar lisent de **vraies réponses** enregistrées en octobre 2026, mais tous les appels de la suite vont à de faux services locaux. Le débit réel du NCBI, ses refus (429) et ses pannes, la facturation et les quotas d'Apify, les changements de champs ne sont pas éprouvés par la suite. Les imports RIS, nbib, BibTeX et CSV sont testés sur des extraits d'exports réels ou reconstitués ; tous les logiciels qui en produisent n'ont pas été essayés. Google Scholar n'autorise pas l'extraction automatisée.
+- **Import de tableaux** : les classeurs de la suite sont fabriqués par les tests (par l'écrivain `.xlsx` de l'outil, ou partie XML par partie XML, dont des archives piégées) ; un classeur enregistré par Excel, LibreOffice ou Numbers n'y figure pas.
 
 **Formats de sortie**
 - Les classeurs `.xlsx` et les diaporamas `.pptx` n'ont **jamais été ouverts dans Excel, PowerPoint, LibreOffice ou Keynote** ; leur validité est établie par des contrôles structurels (archive, XML, types, dates) et par un validateur indépendant du contre-expert. Le comportement d'Excel face aux cellules très longues, aux dates avant 1900 et aux décimales n'est pas confirmé en conditions réelles.
 
 **Environnements**
 - **Linux uniquement** ; Windows et macOS non essayés (chemins, verrou de fichier, signaux, longueurs de chemin, disques réseau).
-- **Lanceurs** : `lancer.command` a été exécuté sous Linux depuis une archive neuve (installation des dépendances, compilation, démarrage, page servie) ; `lancer.bat` et le double-clic sous macOS (autorisation du système, ouverture du navigateur) n'ont **jamais été exécutés**.
+- **Lanceurs** : `lancer.command` a été exécuté sous Linux depuis une archive neuve (installation des dépendances, compilation, démarrage, page servie) ; `lancer.bat` et le double-clic sous macOS (autorisation du système, ouverture du navigateur) n'ont **jamais été exécutés**. **Archives prêtes à l'emploi** : seule l'archive Linux a été essayée de bout en bout ; celles de Windows et de macOS ont été construites et inspectées, mais leur premier lancement (SmartScreen, Gatekeeper, translocation) n'a pas été vu sur ces systèmes. Elles ne sont pas signées.
 - **Node** : suite complète sous cinq versions (22.13.0, 22.22.2, 22.23.3, 24.21.0, 26.11.1 : § 3) ; les autres versions intermédiaires (22.14 à 22.21, 23, 25) n'ont reçu que la recherche du défaut du décodeur de texte, pas la suite.
 - **Chromium uniquement** pour l'interface ; Firefox, Safari et les navigateurs mobiles réels ne l'ont pas été (l'émulation tactile de Chromium l'a été). Pour la charte de la 1.2.0 (verre dépoli, `color-mix()`, mode « contraste élevé » de Windows, polices non latines) : § 9.3.
 - **Aucun lecteur d'écran** (NVDA, JAWS, VoiceOver, TalkBack) : l'accessibilité est établie par axe-core, qui ne détecte qu'une partie des défauts, et par des contrôles de clavier et de structure.
