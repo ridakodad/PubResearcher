@@ -416,6 +416,7 @@ exportRouter.get(
       'valeur_apres',
       'origine_apres',
       'passe',
+      'import',
     ];
     const rows: FieldValue[][] = listEventsForTemplate(template.id).map((e) => [
       e.id,
@@ -429,6 +430,7 @@ exportRouter.get(
       e.newValue,
       e.newSource,
       e.runId,
+      e.importId,
     ]);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader(

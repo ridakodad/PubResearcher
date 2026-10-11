@@ -5,6 +5,7 @@ import { llmStatus } from '../engine/llm.js';
 import type { Block } from '../lib/report.js';
 import { appVersion } from '../version.js';
 import { computeQuality, type Proportion, type QualityReport } from './quality.js';
+import { listImports } from './imports.js';
 import { listRuns, templateFingerprint, type ExtractionRun } from './runs.js';
 
 /**
@@ -50,7 +51,21 @@ export interface MethodsData {
   runs: ExtractionRun[];
   /** Toutes les passes de la fiche, y compris les plus anciennes que `runs`. */
   runSummary: { total: number; first: string | null; last: string | null; modes: string[]; models: string[] };
-  provenance: { auto: number; llm: number; manual: number; empty: number; cells: number; filled: number };
+  provenance: { auto: number; llm: number; manual: number; imported: number; empty: number; cells: number; filled: number };
+  /** Tableaux de cohorte importés dans cette fiche, du plus ancien au plus récent. */
+  imports: {
+    id: number;
+    filename: string;
+    sha256: string;
+    format: string;
+    sheet: string | null;
+    committedAt: string | null;
+    dataRows: number;
+    written: number;
+    patientsCreated: number;
+    conflicts: number;
+    rejected: number;
+  }[];
   quality: QualityReport;
   audit: { events: number; byAction: Record<string, number> };
   llm: { used: boolean; models: string[] };
@@ -96,6 +111,7 @@ export function gatherMethods(template: TemplateWithFields): MethodsData {
     auto: count('auto'),
     llm: count('llm'),
     manual: count('manual'),
+    imported: count('import'),
     empty: count('empty'),
     cells: patients * template.fields.length,
     // Une cellule manuelle sans valeur (« relue, rien à relever ») n'est pas renseignée.
@@ -171,6 +187,21 @@ export function gatherMethods(template: TemplateWithFields): MethodsData {
     runs,
     runSummary,
     provenance,
+    imports: listImports(template.id)
+      .reverse()
+      .map((i) => ({
+        id: i.id,
+        filename: i.filename,
+        sha256: i.sha256,
+        format: i.format,
+        sheet: i.sheet,
+        committedAt: i.committedAt,
+        dataRows: i.dataRows,
+        written: i.written,
+        patientsCreated: i.patientsCreated,
+        conflicts: i.conflicts,
+        rejected: i.rejected,
+      })),
     quality: computeQuality(template),
     audit: {
       events: events.reduce((sum, e) => sum + e.n, 0),
@@ -252,11 +283,23 @@ export function methodsBlocks(data: MethodsData, lang: Lang): Block[] {
           ' Aucune valeur n’avait encore été relue à la date de ce rapport : la fiabilité de l’extraction n’est pas estimée.',
           ' No value had been reviewed at the date of this report: the reliability of the extraction is not estimated.',
         );
+  const importedTotal = data.imports.reduce((sum, i) => sum + i.written, 0);
+  const imports =
+    data.imports.length > 0
+      ? t(
+          ` Par ailleurs, ${n(importedTotal)} valeur(s) ont été importées de ${n(data.imports.length)} tableau(x) tenu(s) par l’équipe (${data.imports
+            .map((i) => `« ${i.filename} »${i.sheet ? `, feuille « ${i.sheet} »` : ''}, empreinte SHA-256 ${i.sha256.slice(0, 12)}…`)
+            .join(' ; ')}) : chacune garde la cellule dont elle provient ; elles ne sont issues ni de l’extraction ni d’une relecture dans l’outil.`,
+          ` In addition, ${n(importedTotal)} value(s) were imported from ${n(data.imports.length)} spreadsheet(s) kept by the team (${data.imports
+            .map((i) => `“${i.filename}”${i.sheet ? `, sheet “${i.sheet}”` : ''}, SHA-256 fingerprint ${i.sha256.slice(0, 12)}…`)
+            .join('; ')}): each keeps the cell it comes from; they result neither from the extraction nor from a review in the tool.`,
+        )
+      : '';
   blocks.push({
     type: 'p',
     text: t(
-      `Les données ont été extraites rétrospectivement de ${n(data.corpus.documents)} documents (${n(data.corpus.patients)} dossiers) à l’aide de l’application PubResearcher, version ${data.tool.version}, selon une fiche d’exploitation de ${n(data.template.fields.length)} variables (empreinte ${fpShort}). L’extraction a été réalisée ${engine}.${ocr} Chaque valeur extraite conserve le document et l’extrait qui la justifient, et toute modification ultérieure est consignée dans un journal horodaté.${review}`,
-      `Data were retrospectively extracted from ${n(data.corpus.documents)} documents (${n(data.corpus.patients)} records) using the PubResearcher application, version ${data.tool.version}, according to a data collection form of ${n(data.template.fields.length)} variables (fingerprint ${fpShort}). Extraction was carried out ${engine}.${ocr} Each extracted value keeps the document and the excerpt that support it, and any later change is recorded in a time-stamped log.${review}`,
+      `Les données ont été extraites rétrospectivement de ${n(data.corpus.documents)} documents (${n(data.corpus.patients)} dossiers) à l’aide de l’application PubResearcher, version ${data.tool.version}, selon une fiche d’exploitation de ${n(data.template.fields.length)} variables (empreinte ${fpShort}). L’extraction a été réalisée ${engine}.${ocr} Chaque valeur extraite conserve le document et l’extrait qui la justifient, et toute modification ultérieure est consignée dans un journal horodaté.${imports}${review}`,
+      `Data were retrospectively extracted from ${n(data.corpus.documents)} documents (${n(data.corpus.patients)} records) using the PubResearcher application, version ${data.tool.version}, according to a data collection form of ${n(data.template.fields.length)} variables (fingerprint ${fpShort}). Extraction was carried out ${engine}.${ocr} Each extracted value keeps the document and the excerpt that support it, and any later change is recorded in a time-stamped log.${imports}${review}`,
     ),
   });
 
@@ -352,10 +395,40 @@ export function methodsBlocks(data: MethodsData, lang: Lang): Block[] {
       [t('Règles (non relues)', 'Rules (not reviewed)'), n(p.auto), p.cells ? pct(p.auto / p.cells) : '—'],
       [t('Modèle de langage (non relues)', 'Language model (not reviewed)'), n(p.llm), p.cells ? pct(p.llm / p.cells) : '—'],
       [t('Décision d’un relecteur', 'Reviewer decision'), n(p.manual), p.cells ? pct(p.manual / p.cells) : '—'],
+      [t('Import de tableau (non relues)', 'Spreadsheet import (not reviewed)'), n(p.imported), p.cells ? pct(p.imported / p.cells) : '—'],
       [t('Cellules renseignées (toutes origines)', 'Filled cells (all sources)'), n(p.filled), p.cells ? pct(p.filled / p.cells) : '—'],
       [t('Cellules du tableau (dossiers × variables)', 'Table cells (records × variables)'), n(p.cells), ''],
     ],
   });
+
+  // ------------------------------------------------------------------ imports
+  if (data.imports.length > 0) {
+    blocks.push({ type: 'h2', text: t('Tableaux importés', 'Imported spreadsheets') });
+    blocks.push({
+      type: 'p',
+      text: t(
+        'Fichiers conservés par l’outil avec leur empreinte : chaque valeur importée cite sa feuille, sa cellule, l’en-tête de sa colonne et son contenu brut. Les cellules converties l’ont été par les mêmes règles que l’extraction (types, options, unités, bornes) ; une valeur relue ou saisie par un relecteur n’est remplacée que sur demande expresse.',
+        'Files kept by the tool with their fingerprint: each imported value cites its sheet, cell, column header and raw content. Cells were converted by the same rules as the extraction (types, options, units, bounds); a value reviewed or typed by a reviewer is only replaced on explicit request.',
+      ),
+    });
+    blocks.push({
+      type: 'table',
+      head: ['#', t('Date', 'Date'), t('Fichier', 'File'), t('Feuille', 'Sheet'), 'SHA-256', t('Lignes', 'Rows'), t('Valeurs écrites', 'Values written'), t('Dossiers créés', 'Records created'), t('Refusées', 'Rejected'), t('Gardées (conflit)', 'Kept (conflict)')],
+      align: ['right', 'left', 'left', 'left', 'left', 'right', 'right', 'right', 'right', 'right'],
+      rows: data.imports.map((i) => [
+        String(i.id),
+        when(i.committedAt),
+        i.filename,
+        i.sheet ?? '—',
+        i.sha256.slice(0, 12),
+        n(i.dataRows),
+        n(i.written),
+        n(i.patientsCreated),
+        n(i.rejected),
+        n(i.conflicts),
+      ]),
+    });
+  }
 
   // --------------------------------------------------------------- fiabilité
   blocks.push({ type: 'h2', text: t('Fiabilité de l’extraction automatique', 'Reliability of automatic extraction') });
@@ -408,6 +481,7 @@ export function methodsBlocks(data: MethodsData, lang: Lang): Block[] {
     confirm: ['valeurs confirmées par un relecteur', 'values confirmed by a reviewer'],
     clear: ['valeurs vidées par un relecteur', 'values emptied by a reviewer'],
     release: ['décisions de relecteur retirées', 'reviewer decisions withdrawn'],
+    import: ['valeurs posées par un import de tableau', 'values set by a spreadsheet import'],
   };
   blocks.push({
     type: 'p',
@@ -456,6 +530,14 @@ export function methodsBlocks(data: MethodsData, lang: Lang): Block[] {
         'Une valeur proposée par un modèle de langage est une proposition : elle n’est retenue que si la citation recopiée par le modèle, ou à défaut la valeur elle-même, est retrouvée dans le texte du document — ce qui ne prouve pas qu’elle y a été lue à cet endroit —, et elle demande une relecture plus attentive qu’une valeur de règle.',
         'A value proposed by a language model is a proposal: it is kept only if the quotation copied by the model, or failing that the value itself, is found in the text of the document — which does not prove that it was read there — and it needs more careful review than a rule-derived value.',
       ),
+      ...(data.imports.length > 0
+        ? [
+            t(
+              'Une valeur importée d’un tableau reprend ce que l’équipe y avait saisi : l’outil en contrôle le format (type, options, unité, bornes), pas l’exactitude par rapport au dossier source.',
+              'A value imported from a spreadsheet repeats what the team had entered there: the tool checks its format (type, options, unit, bounds), not its accuracy against the source record.',
+            ),
+          ]
+        : []),
     ],
   });
 

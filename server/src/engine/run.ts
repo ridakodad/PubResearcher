@@ -3,7 +3,7 @@ import { loadSourceDocs } from '../repo/documents.js';
 import {
   applyAutomaticValues,
   ensureRecord,
-  manualFieldIds,
+  protectedFieldIds,
   type ValueInput,
 } from '../repo/records.js';
 import { extractFieldDetailed } from './rules.js';
@@ -90,7 +90,8 @@ export async function runExtractionForPatient(
 ): Promise<PatientExtractionReport> {
   const mode = options.mode ?? 'rules';
   const record = ensureRecord(template.id, patient.id);
-  const protectedFields = options.overwriteManual ? new Set<number>() : manualFieldIds(record.id);
+  // Décisions des relecteurs et valeurs importées d'un tableau : une passe ne les remplace que sur demande expresse.
+  const protectedFields = options.overwriteManual ? new Set<number>() : protectedFieldIds(record.id);
   const docs = loadSourceDocs(patient.id);
 
   const values: ValueInput[] = [];

@@ -85,6 +85,50 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 2,
+    name: 'Import de tableaux de cohorte',
+    up(connection) {
+      connection.exec(`
+        -- Un tableau (classeur, CSV) importé : le fichier conservé et son empreinte, la feuille, la ligne d'en-tête,
+        -- la colonne des codes, la correspondance colonnes -> variables et le bilan. Une ligne reste « draft » tant que
+        -- l'import n'est pas confirmé ; les brouillons abandonnés sont effacés au démarrage.
+        CREATE TABLE IF NOT EXISTS table_imports (
+          id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+          template_id          INTEGER REFERENCES templates(id) ON DELETE SET NULL,
+          template_name        TEXT,
+          template_fingerprint TEXT,
+          filename             TEXT NOT NULL,
+          stored_name          TEXT NOT NULL,
+          format               TEXT NOT NULL,
+          size                 INTEGER NOT NULL,
+          sha256               TEXT NOT NULL,
+          sheet                TEXT,
+          header_row           INTEGER,
+          code_column          INTEGER,
+          mapping              TEXT NOT NULL DEFAULT '[]',
+          options              TEXT NOT NULL DEFAULT '{}',
+          status               TEXT NOT NULL DEFAULT 'draft',
+          app_version          TEXT NOT NULL,
+          created_at           TEXT NOT NULL,
+          committed_at         TEXT,
+          data_rows            INTEGER NOT NULL DEFAULT 0,
+          patients_created     INTEGER NOT NULL DEFAULT 0,
+          patients_existing    INTEGER NOT NULL DEFAULT 0,
+          written              INTEGER NOT NULL DEFAULT 0,
+          unchanged            INTEGER NOT NULL DEFAULT 0,
+          rejected             INTEGER NOT NULL DEFAULT 0,
+          conflicts            INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_table_imports_sha ON table_imports(sha256);
+      `);
+      // Chaque valeur posée par un import renvoie à cet import dans le journal, comme une valeur extraite à sa passe.
+      if (!hasColumn(connection, 'value_events', 'import_id')) {
+        connection.exec('ALTER TABLE value_events ADD COLUMN import_id INTEGER REFERENCES table_imports(id) ON DELETE SET NULL');
+      }
+      connection.exec('CREATE INDEX IF NOT EXISTS idx_value_events_import ON value_events(import_id)');
+    },
+  },
 ];
 
 /** Version la plus récente que ce code sait produire. */

@@ -60,7 +60,7 @@ recordsRouter.put(
 
       if (mode === 'confirm') {
         const current = stored.get(fieldId);
-        const machine = current && (current.source === 'auto' || current.source === 'llm');
+        const machine = current && (current.source === 'auto' || current.source === 'llm' || current.source === 'import');
         if (!current || (!machine && current.source !== 'manual') || current.value === null) {
           throw badRequest(`Rien à confirmer pour « ${field.label} » : la variable n'a pas de valeur.`);
         }

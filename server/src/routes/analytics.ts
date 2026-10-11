@@ -6,6 +6,7 @@ import { listRecordsForTemplate } from '../repo/records.js';
 import { listDocuments } from '../repo/documents.js';
 import { computeQuality } from '../repo/quality.js';
 import { countCategories, histogram, summarize } from '../lib/stats.js';
+import { isImportEvidence } from '../domain/types.js';
 import type {
   FieldValue,
   TemplateField,
@@ -304,7 +305,7 @@ analyticsRouter.get(
       const documents = listDocuments(patient.id);
 
       const perDocument = new Map<number, { name: string; values: string[] }>();
-      const bySource = { auto: 0, llm: 0, manual: 0 };
+      const bySource = { auto: 0, llm: 0, manual: 0, import: 0 };
       /** Valeurs sans justification : saisies à la main, ou justification perdue. */
       let sansJustification = 0;
       let filled = 0;
@@ -315,8 +316,11 @@ analyticsRouter.get(
         filled++;
         if (value.source === 'manual') bySource.manual++;
         else if (value.source === 'llm') bySource.llm++;
+        else if (value.source === 'import') bySource.import++;
         else bySource.auto++;
 
+        // Une valeur importée est justifiée par une cellule de tableau, pas par un document du dossier.
+        if (isImportEvidence(value.evidence)) continue;
         if (!value.evidence) {
           sansJustification++;
           continue;
@@ -383,12 +387,14 @@ analyticsRouter.get(
       let auto = 0;
       let llm = 0;
       let manual = 0;
+      let imported = 0;
       let empty = 0;
       for (const row of rows) {
         const source = row.sources[field.key];
         if (isEmpty(row.values[field.key] ?? null)) empty++;
         else if (source === 'manual') manual++;
         else if (source === 'llm') llm++;
+        else if (source === 'import') imported++;
         else auto++;
       }
       return {
@@ -399,8 +405,9 @@ analyticsRouter.get(
         auto,
         llm,
         manual,
+        imported,
         empty,
-        rate: rows.length > 0 ? Math.round(((auto + llm + manual) / rows.length) * 100) : 0,
+        rate: rows.length > 0 ? Math.round(((auto + llm + manual + imported) / rows.length) * 100) : 0,
       };
     });
 

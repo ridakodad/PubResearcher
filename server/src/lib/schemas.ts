@@ -218,3 +218,29 @@ export const testRuleSchema = z.object({
   /** Texte libre pour tester une règle sans dossier réel. */
   sampleText: z.string().max(200_000).optional(),
 });
+
+/* ───────────────────────── Import de tableaux de cohorte ───────────────── */
+
+/** Feuille et ligne d'en-tête d'un tableau importé. */
+export const tableStructureSchema = z.object({
+  /** Nom de la feuille ; absent ou `null` pour un CSV (une seule feuille). */
+  sheet: z.string().max(255).nullable().optional(),
+  headerRow: z.number().int().min(1, 'La ligne d’en-tête commence à 1.').max(10_000_000),
+  templateId: z.number().int().positive().optional(),
+});
+
+export const tableImportSchema = tableStructureSchema.extend({
+  codeColumn: z.number().int().min(0).max(100_000),
+  mapping: z
+    .array(z.object({ column: z.number().int().min(0).max(100_000), fieldId: z.number().int().positive() }))
+    .max(2000),
+  options: z
+    .object({
+      createPatients: z.boolean().optional(),
+      overwriteExtracted: z.boolean().optional(),
+      overwriteManual: z.boolean().optional(),
+    })
+    .optional(),
+  /** Empreinte du plan montré par la simulation : l'écriture refuse si ce qu'elle ferait a changé depuis. */
+  expectedPlan: z.string().regex(/^[0-9a-f]{32}$/).optional(),
+});
