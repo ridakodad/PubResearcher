@@ -287,6 +287,15 @@ const UNIT_BY_FORM = new Map<string, string>([
   ...Object.entries(UNIT_SYNONYMS).map(([form, u]): [string, string] => [form, u]),
 ]);
 
+/**
+ * Forme canonique d'une unité reconnue (« mg/l » -> « mg/L », « années » -> « an »), `null` pour une unité que l'outil
+ * ne connaît pas. Sert à rapprocher l'unité écrite dans un en-tête de colonne de celle d'une variable.
+ */
+export function canonicalUnit(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  return UNIT_BY_FORM.get(normalizeUnit(raw)) ?? TIME_UNITS[fold(raw).trim()] ?? null;
+}
+
 /** L'unité écrite juste après le premier nombre : « 85 µmol/L », « 37,5 °C », « 98 % ». */
 const UNIT_AFTER_NUMBER = /-?\d[\d\s.,]*?\s*(°\s?[cf]\b|%|[a-zµμ]+(?:\s*\/\s*[a-zµμ]+)?)(.{0,2})/u;
 

@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { foldForSearch, formatDateTime, formatUsd, modelLabel, plural } from '../lib/format';
 import { FolderUploader } from '../components/FolderUploader';
+import { TableImportModal } from '../components/TableImport';
 import {
   ConfirmButton,
   EmptyState,
@@ -38,6 +39,7 @@ export function DossiersPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
   const [showImport, setShowImport] = useState(false);
+  const [showTable, setShowTable] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [running, setRunning] = useState(false);
   const [lastRun, setLastRun] = useState<ExtractionRunResult | null>(null);
@@ -132,6 +134,13 @@ export function DossiersPage() {
         <div className="page-head-actions">
           <PanelGroupControls keys={['corpus.extraction', 'corpus.liste']} />
           <button className="btn-quiet" onClick={() => setShowCreate(true)}>Nouveau dossier</button>
+          <button
+            onClick={() => setShowTable(true)}
+            disabled={!template}
+            title="Un tableau tenu par l’équipe (une ligne par patient, une colonne par variable) : ses valeurs remplissent la fiche active"
+          >
+            Importer un tableau (Excel, CSV)
+          </button>
           <button className="btn-primary" onClick={() => setShowImport(true)}>
             Importer des dossiers
           </button>
@@ -247,7 +256,7 @@ export function DossiersPage() {
                   </span>
                   <span>
                     <strong>{lastRun.totals.keptManual}</strong>{' '}
-                    <span className="secondary">saisies manuelles préservées</span>
+                    <span className="secondary">valeurs relues ou importées préservées</span>
                   </span>
                   {lastRun.totals.rejected > 0 && (
                     <span title="Valeur trouvée dans le document mais inutilisable : valeur seuil, hors bornes, unité différente. Le détail est sur la page Extraction.">
@@ -295,8 +304,8 @@ export function DossiersPage() {
                 )}
 
                 <div className="small muted" style={{ marginTop: 8 }}>
-                  Les valeurs corrigées à la main ne sont jamais écrasées par une nouvelle
-                  extraction. Ouvrez un dossier pour vérifier chaque valeur et sa source.
+                  Les valeurs corrigées à la main et celles importées d’un tableau ne sont jamais
+                  écrasées par une nouvelle extraction. Ouvrez un dossier pour vérifier chaque valeur et sa source.
                 </div>
               </div>
             )}
@@ -329,13 +338,19 @@ export function DossiersPage() {
           <EmptyState
             title="Aucun dossier pour l’instant"
             action={
-              <button className="btn-primary" onClick={() => setShowImport(true)}>
-                Importer des dossiers
-              </button>
+              <div className="row" style={{ justifyContent: 'center', gap: 8 }}>
+                <button className="btn-primary" onClick={() => setShowImport(true)}>
+                  Importer des dossiers
+                </button>
+                <button onClick={() => setShowTable(true)} disabled={!template}>
+                  Importer un tableau (Excel, CSV)
+                </button>
+              </div>
             }
           >
             Déposez une arborescence de dossiers patients : chaque sous-dossier devient un dossier,
-            ses fichiers sont analysés à l’import.
+            ses fichiers sont analysés à l’import. Votre équipe tient déjà un tableau de la cohorte ? Importez-le :
+            chaque ligne devient un dossier, chaque colonne une variable de la fiche.
           </EmptyState>
         ) : filtered.length === 0 ? (
           <EmptyState title="Aucun résultat">
@@ -403,6 +418,10 @@ export function DossiersPage() {
         <Modal title="Importer des dossiers patients" onClose={() => setShowImport(false)} width={860}>
           <FolderUploader onDone={() => void load()} />
         </Modal>
+      )}
+
+      {showTable && template && (
+        <TableImportModal template={template} onClose={() => setShowTable(false)} onDone={() => void load()} />
       )}
 
       {showCreate && (

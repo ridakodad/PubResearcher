@@ -2,6 +2,7 @@ import { db, nowIso, parseJson } from '../db/index.js';
 import type {
   Evidence,
   FieldValue,
+  ImportEvidence,
   PatientRecord,
   RecordValue,
   ValueOrigin,
@@ -31,7 +32,8 @@ interface ValueRow {
 }
 
 function toValue(row: ValueRow): RecordValue {
-  const originSource = row.origin_source === 'auto' || row.origin_source === 'llm' ? row.origin_source : null;
+  const originSource =
+    row.origin_source === 'auto' || row.origin_source === 'llm' || row.origin_source === 'import' ? row.origin_source : null;
   const origin: ValueOrigin | null = originSource
     ? { source: originSource, value: parseJson<FieldValue>(row.origin_value, null) }
     : null;
@@ -40,7 +42,7 @@ function toValue(row: ValueRow): RecordValue {
     value: parseJson<FieldValue>(row.value, null),
     source: row.source as ValueSource,
     confidence: row.confidence,
-    evidence: row.evidence ? parseJson<Evidence | null>(row.evidence, null) : null,
+    evidence: row.evidence ? parseJson<Evidence | ImportEvidence | null>(row.evidence, null) : null,
     updatedAt: row.updated_at,
     origin,
     reviewedAt: row.reviewed_at,
@@ -108,7 +110,7 @@ export interface HumanEdit {
   mode: HumanMode;
 }
 
-export type EventAction = 'extract' | 'unset' | 'edit' | 'confirm' | 'clear' | 'release';
+export type EventAction = 'extract' | 'unset' | 'edit' | 'confirm' | 'clear' | 'release' | 'import';
 
 const upsertStmt = db.prepare(
   `INSERT INTO record_values
@@ -126,8 +128,8 @@ const upsertStmt = db.prepare(
 );
 
 const eventStmt = db.prepare(
-  `INSERT INTO value_events (record_id, field_id, at, action, old_value, old_source, new_value, new_source, run_id)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  `INSERT INTO value_events (record_id, field_id, at, action, old_value, old_source, new_value, new_source, run_id, import_id)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 );
 
 const touchRecordStmt = db.prepare('UPDATE records SET updated_at = ? WHERE id = ?');
@@ -149,6 +151,7 @@ function logEvent(
   before: ValueRow | undefined,
   after: { value: string | null; source: string } | null,
   runId: number | null,
+  importId: number | null = null,
 ): void {
   eventStmt.run(
     recordId,
@@ -160,6 +163,7 @@ function logEvent(
     after?.value ?? null,
     after?.source ?? null,
     runId,
+    importId,
   );
 }
 
@@ -184,8 +188,8 @@ export interface AutomaticOptions {
  * plus trouvée perd sa valeur automatique au lieu de la conserver en silence.
  * Chaque changement réel est inscrit au journal.
  *
- * Les décisions humaines ne sont jamais retirées ici ; une valeur manuelle n'est
- * remplacée que si l'appelant en donne explicitement une nouvelle (écrasement forcé).
+ * Les décisions humaines et les valeurs importées d'un tableau ne sont jamais retirées ici : une passe ne les a pas
+ * produites. Elles ne sont remplacées que si l'appelant en donne explicitement une nouvelle (écrasement forcé).
  * Une passe ne retire que les sources qu'elle a pu produire (`options.withdraw`).
  */
 export const applyAutomaticValues = db.transaction(
@@ -219,7 +223,7 @@ export const applyAutomaticValues = db.transaction(
 
     const withdraw = options.withdraw ?? (['auto', 'llm'] as const);
     for (const [fieldId, row] of existing) {
-      if (incoming.has(fieldId) || row.source === 'manual') continue;
+      if (incoming.has(fieldId) || row.source === 'manual' || row.source === 'import') continue;
       if ((row.source === 'auto' || row.source === 'llm') && !withdraw.includes(row.source)) continue;
       deleteValueStmt.run(recordId, fieldId);
       // Une ligne « vide » ne portait aucune valeur : l'effacer n'est pas un changement de donnée.
@@ -247,7 +251,9 @@ export const applyHumanEdits = db.transaction((recordId: number, edits: HumanEdi
 
   for (const edit of edits) {
     const before = rows.get(edit.fieldId);
-    const machine = before && (before.source === 'auto' || before.source === 'llm') ? before : undefined;
+    // Ce qui a été proposé sans relecture : une extraction, ou un tableau importé. Le relecteur le confirme ou le corrige.
+    const machine =
+      before && (before.source === 'auto' || before.source === 'llm' || before.source === 'import') ? before : undefined;
 
     if (edit.mode === 'release') {
       if (!before || before.source !== 'manual') continue;
@@ -320,6 +326,64 @@ export function manualFieldIds(recordId: number): Set<number> {
     .prepare(`SELECT field_id FROM record_values WHERE record_id = ? AND source = 'manual'`)
     .all(recordId) as { field_id: number }[];
   return new Set(rows.map((r) => r.field_id));
+}
+
+/**
+ * Variables qu'une passe d'extraction laisse en place : décisions humaines, et valeurs importées d'un tableau de
+ * cohorte — l'équipe les a relevées elle-même, une règle qui lit un compte rendu n'a pas autorité pour les remplacer.
+ */
+export function protectedFieldIds(recordId: number): Set<number> {
+  const rows = db
+    .prepare(`SELECT field_id FROM record_values WHERE record_id = ? AND source IN ('manual', 'import')`)
+    .all(recordId) as { field_id: number }[];
+  return new Set(rows.map((r) => r.field_id));
+}
+
+export interface ImportedValue {
+  recordId: number;
+  fieldId: number;
+  value: FieldValue;
+  evidence: ImportEvidence;
+}
+
+/**
+ * Range les valeurs d'un import de tableau, dans la transaction de l'appelant.
+ *
+ * Source `import`, sans indice de confiance (ce n'est pas une estimation), avec la cellule d'origine pour
+ * justification ; chaque changement est inscrit au journal, rattaché à l'import. L'appelant a déjà décidé quelles
+ * valeurs écrire : celles d'un relecteur, ou d'une extraction, ne lui parviennent que si l'écrasement a été demandé.
+ */
+export function writeImportedValues(values: ImportedValue[], importId: number): { written: number } {
+  const ts = nowIso();
+  const touched = new Set<number>();
+  let written = 0;
+  const rowsByRecord = new Map<number, Map<number, ValueRow>>();
+  for (const v of values) {
+    let rows = rowsByRecord.get(v.recordId);
+    if (!rows) {
+      rows = loadRows(v.recordId);
+      rowsByRecord.set(v.recordId, rows);
+    }
+    const before = rows.get(v.fieldId);
+    const newValue = json(v.value);
+    upsertStmt.run({
+      recordId: v.recordId,
+      fieldId: v.fieldId,
+      value: newValue,
+      source: 'import',
+      confidence: null,
+      evidence: JSON.stringify(v.evidence),
+      updatedAt: ts,
+      originSource: null,
+      originValue: null,
+      reviewedAt: null,
+    });
+    logEvent(v.recordId, v.fieldId, ts, 'import', before, { value: newValue, source: 'import' }, null, importId);
+    touched.add(v.recordId);
+    written++;
+  }
+  for (const recordId of touched) touchRecordStmt.run(ts, recordId);
+  return { written };
 }
 
 /**

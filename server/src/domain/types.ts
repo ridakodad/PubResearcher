@@ -221,16 +221,43 @@ export interface Rejection {
   rule: string;
 }
 
-/** Origine d'une valeur : règle, modèle de langage, saisie manuelle, ou absente. */
-export type ValueSource = 'auto' | 'llm' | 'manual' | 'empty';
+/**
+ * Justification d'une valeur importée d'un tableau de cohorte : le fichier conservé (et son empreinte), la feuille, la
+ * cellule, l'en-tête de sa colonne et son contenu brut. Ce n'est ni une extraction (aucun document n'a été lu) ni une
+ * relecture (personne n'a vérifié la valeur contre le dossier source).
+ */
+export interface ImportEvidence {
+  kind: 'import';
+  importId: number;
+  fileName: string;
+  sha256: string;
+  /** Nom de la feuille ; `null` pour un CSV. */
+  sheet: string | null;
+  /** Référence de la cellule, à la manière du tableur (« E12 »). */
+  cell: string;
+  header: string;
+  /** Contenu de la cellule tel qu'enregistré dans le fichier. */
+  raw: string;
+}
+
+export function isImportEvidence(evidence: Evidence | ImportEvidence | null | undefined): evidence is ImportEvidence {
+  return evidence !== null && evidence !== undefined && (evidence as ImportEvidence).kind === 'import';
+}
 
 /**
- * Ce que la machine avait proposé avant qu'un humain tranche. Présent seulement
- * quand une valeur automatique a été relue : c'est la matière des mesures de
- * fiabilité (valeurs confirmées, corrigées, vidées).
+ * Origine d'une valeur : règle, modèle de langage, saisie ou décision d'un relecteur, import d'un tableau de cohorte,
+ * ou absente. Une valeur importée n'est pas une valeur relue : elle vient d'un tableau tenu par l'équipe, que l'outil
+ * n'a pas vérifié contre le dossier.
+ */
+export type ValueSource = 'auto' | 'llm' | 'manual' | 'import' | 'empty';
+
+/**
+ * Ce que la machine (ou un tableau importé) avait proposé avant qu'un humain tranche. Présent seulement
+ * quand une telle valeur a été relue : pour les valeurs extraites, c'est la matière des mesures de
+ * fiabilité (valeurs confirmées, corrigées, vidées) ; les valeurs importées n'y entrent pas.
  */
 export interface ValueOrigin {
-  source: 'auto' | 'llm';
+  source: 'auto' | 'llm' | 'import';
   value: FieldValue;
 }
 
@@ -239,7 +266,7 @@ export interface RecordValue {
   value: FieldValue;
   source: ValueSource;
   confidence: number | null;
-  evidence: Evidence | null;
+  evidence: Evidence | ImportEvidence | null;
   updatedAt: string;
   /** Proposition de la machine relue par un humain ; `null` si la valeur n'a pas été relue ou a été saisie de zéro. */
   origin: ValueOrigin | null;

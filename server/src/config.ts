@@ -32,6 +32,11 @@ export const uploadsDir = path.join(dataDir, 'uploads');
  * parallèle ne doivent pas coucher le serveur.
  */
 export const incomingDir = path.join(uploadsDir, '.incoming');
+/**
+ * Tableaux de cohorte importés (classeurs, CSV). Conservés comme les documents — ils justifient chaque valeur
+ * importée — et sous `uploads/`, donc compris dans les sauvegardes.
+ */
+export const importsDir = path.join(uploadsDir, 'imports');
 // `DB_PATH=` (vide) vaut « non défini » : un chemin vide ouvrait une base temporaire, perdue au redémarrage.
 export const dbPath = process.env.DB_PATH?.trim() || path.join(dataDir, 'research-tool.db');
 

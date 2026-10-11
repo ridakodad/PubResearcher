@@ -24,6 +24,8 @@ export interface ValueEvent {
   newValue: FieldValue;
   newSource: string | null;
   runId: number | null;
+  /** Import de tableau qui a posé la valeur (voir `repo/imports.ts`). */
+  importId: number | null;
 }
 
 interface EventRow {
@@ -41,11 +43,13 @@ interface EventRow {
   new_value: string | null;
   new_source: string | null;
   run_id: number | null;
+  import_id: number | null;
 }
 
 const SELECT = `
   SELECT e.id, e.record_id, r.patient_id, p.code AS patient_code, e.field_id, f.key AS field_key,
-         f.label AS field_label, e.at, e.action, e.old_value, e.old_source, e.new_value, e.new_source, e.run_id
+         f.label AS field_label, e.at, e.action, e.old_value, e.old_source, e.new_value, e.new_source, e.run_id,
+         e.import_id
     FROM value_events e
     JOIN records r  ON r.id = e.record_id
     JOIN patients p ON p.id = r.patient_id
@@ -67,6 +71,7 @@ function toEvent(row: EventRow): ValueEvent {
     newValue: parseJson<FieldValue>(row.new_value, null),
     newSource: row.new_source,
     runId: row.run_id,
+    importId: row.import_id,
   };
 }
 

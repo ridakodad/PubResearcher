@@ -5,6 +5,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import multer from 'multer';
 import { incomingDir, maxRequestBytes, maxUploadBytes, uploadsDir } from '../config.js';
 import { parseIsolated } from '../extract/isolation.js';
+import { TABLE_EXTENSIONS, TABLE_IMPORT_HINT } from '../extract/index.js';
 import { ocrStatus } from '../extract/ocr.js';
 import { llmStatus } from '../engine/llm.js';
 import { HttpError, asyncHandler, badRequest, intParam, notFound } from '../lib/http.js';
@@ -144,6 +145,17 @@ documentsRouter.post(
  */
 async function importOne(patientId: number, file: Express.Multer.File): Promise<UploadOutcome> {
   const name = displayName(file.originalname);
+  // Un tableau de cohorte déposé avec les comptes rendus deviendrait un seul document texte, rangé dans un seul
+  // dossier, d'où aucune règle ne sait relire les colonnes : on le refuse ici, en indiquant l'import de tableau.
+  // Celui qui veut vraiment garder un CSV comme simple document texte le renomme en .txt.
+  const ext = name.toLowerCase().split('.').pop() ?? '';
+  if (TABLE_EXTENSIONS.has(ext) && name.includes('.')) {
+    return {
+      filename: name,
+      status: 'error',
+      message: `${TABLE_IMPORT_HINT}${ext === 'csv' || ext === 'tsv' ? ' Pour le garder comme simple document texte, renommez-le en .txt.' : ''}`,
+    };
+  }
   let finalPath: string | null = null;
   try {
     const buffer = await fs.readFile(file.path);

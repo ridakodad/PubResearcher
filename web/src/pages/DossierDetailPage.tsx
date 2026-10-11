@@ -11,6 +11,7 @@ import { Meter } from '../components/charts/StatTile';
 import type {
   DocumentMeta,
   FieldValue,
+  ImportEvidence,
   OutOfBounds,
   Patient,
   PatientRecord,
@@ -18,6 +19,7 @@ import type {
   TemplateWithFields,
   ValueEvent,
 } from '../lib/types';
+import { isImportEvidence } from '../lib/types';
 
 export function DossierDetailPage() {
   const params = useParams();
@@ -432,11 +434,15 @@ export function DossierDetailPage() {
 
                       {!edited && stored && (
                         <div className="row field-actions">
-                          {(stored.source === 'auto' || stored.source === 'llm') && stored.value !== null && (
+                          {(stored.source === 'auto' || stored.source === 'llm' || stored.source === 'import') && stored.value !== null && (
                             <button
                               className="btn-sm btn-quiet"
                               onClick={() => void decide(field, 'confirm')}
-                              title="Valider la valeur proposée par l’extraction, telle quelle"
+                              title={
+                                stored.source === 'import'
+                                  ? 'Valider la valeur importée du tableau, après l’avoir vérifiée dans le dossier'
+                                  : 'Valider la valeur proposée par l’extraction, telle quelle'
+                              }
                             >
                               Confirmer
                             </button>
@@ -452,7 +458,8 @@ export function DossierDetailPage() {
                           )}
                           {stored.origin && stored.source === 'manual' && (
                             <span className="small muted">
-                              Proposé : {displayValue(stored.origin.value, field)} ({stored.origin.source === 'llm' ? 'Claude' : 'règle'})
+                              {stored.origin.source === 'import' ? 'Importé' : 'Proposé'} : {displayValue(stored.origin.value, field)} (
+                              {stored.origin.source === 'llm' ? 'Claude' : stored.origin.source === 'import' ? 'tableau' : 'règle'})
                             </span>
                           )}
                         </div>
@@ -461,7 +468,11 @@ export function DossierDetailPage() {
                         <FieldHistory templateId={template.id} patientId={patientId} field={field} version={stored.updatedAt} />
                       )}
 
-                      {!edited && stored?.evidence && (
+                      {!edited && isImportEvidence(stored?.evidence) && (
+                        <ImportJustification evidence={stored.evidence} />
+                      )}
+
+                      {!edited && stored?.evidence && !isImportEvidence(stored.evidence) && (
                         <details style={{ marginTop: 6 }}>
                           <summary
                             className="small"
@@ -486,9 +497,11 @@ export function DossierDetailPage() {
                                 className="link-button"
                                 onClick={() => {
                                   focusNonce.current += 1;
+                                  const evidence = stored.evidence;
+                                  if (!evidence || isImportEvidence(evidence)) return;
                                   setFocus({
-                                    documentId: stored.evidence!.documentId,
-                                    evidence: stored.evidence!,
+                                    documentId: evidence.documentId,
+                                    evidence,
                                     nonce: focusNonce.current,
                                   });
                                 }}
@@ -600,7 +613,35 @@ const ACTION_LABELS: Record<ValueEvent['action'], string> = {
   confirm: 'Confirmé',
   clear: 'Vidé',
   release: 'Main rendue à l’extraction',
+  import: 'Import de tableau',
 };
+
+/**
+ * Justification d'une valeur importée : le fichier (téléchargeable, avec son empreinte), la feuille, la cellule,
+ * l'en-tête de la colonne et ce que la cellule contenait.
+ */
+function ImportJustification({ evidence }: { evidence: ImportEvidence }) {
+  return (
+    <details style={{ marginTop: 6 }}>
+      <summary className="small" style={{ cursor: 'pointer', color: 'var(--text-secondary)' }}>
+        Justification — {evidence.fileName}, {evidence.sheet ? `feuille « ${evidence.sheet} », ` : ''}cellule {evidence.cell}
+      </summary>
+      <div className="small import-evidence">
+        <div>
+          <span className="muted">Colonne</span> « {evidence.header} » <span className="muted">· cellule</span> {evidence.cell}
+        </div>
+        <div style={{ fontStyle: 'italic', marginTop: 4 }}>« {evidence.raw} »</div>
+        <div className="muted" style={{ marginTop: 5 }}>
+          Importé d’un tableau tenu par l’équipe, non relu.{' '}
+          <a href={api.tableImportFileUrl(evidence.importId)} download>
+            Télécharger le tableau d’origine
+          </a>{' '}
+          <span title={`Empreinte SHA-256 du fichier : ${evidence.sha256}`}>(empreinte {evidence.sha256.slice(0, 12)}…)</span>
+        </div>
+      </div>
+    </details>
+  );
+}
 
 /**
  * Historique d'une variable : qui a mis quoi, quand — l'extraction, puis chaque décision d'un relecteur.
@@ -655,6 +696,7 @@ function FieldHistory({
                   e.oldValue !== null && <span className="muted"> (avant : {displayValue(e.oldValue, field)})</span>}
                 {e.action === 'unset' && <span className="muted"> (était : {displayValue(e.oldValue, field)})</span>}
                 {e.runId && <span className="muted"> · passe n° {e.runId}</span>}
+                {e.importId && <span className="muted"> · import n° {e.importId}</span>}
               </span>
             </li>
           ))}

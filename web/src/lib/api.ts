@@ -32,6 +32,11 @@ import type {
   ExtractionRun,
   ValueEdit,
   ValueEvent,
+  TableColumnsResponse,
+  TableImport,
+  TableImportReport,
+  TableImportRequest,
+  TableUploadResponse,
 } from './types';
 
 /** Erreur d'API portant le message renvoyé par le serveur. */
@@ -71,7 +76,14 @@ export function onDataWrite(listener: WriteListener): () => void {
 }
 
 /** Requêtes en écriture qui ne changent ni les dossiers, ni la fiche, ni les valeurs. */
-const NEUTRAL_WRITES = [/^\/templates\/fields\/test/, /^\/biblio\//, /^\/redaction\//];
+const NEUTRAL_WRITES = [
+  /^\/templates\/fields\/test/,
+  /^\/biblio\//,
+  /^\/redaction\//,
+  // Étapes d'un import de tableau qui n'écrivent aucune valeur : réception, colonnes, simulation, abandon.
+  /^\/table-imports$/,
+  /^\/table-imports\/\d+(?:\/columns|\/dry-run)?$/,
+];
 
 function notifyWrite(path: string, method: string): void {
   if (method === 'GET' || NEUTRAL_WRITES.some((pattern) => pattern.test(path))) return;
@@ -166,6 +178,21 @@ export const api = {
       body: form,
     });
   },
+  uploadTable: async (file: File): Promise<TableUploadResponse> => {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    return request<TableUploadResponse>('/table-imports', { method: 'POST', body: form });
+  },
+  tableColumns: (id: number, body: { sheet: string | null; headerRow: number; templateId?: number }) =>
+    post<TableColumnsResponse>(`/table-imports/${id}/columns`, body),
+  tableDryRun: (id: number, body: TableImportRequest) =>
+    post<{ report: TableImportReport }>(`/table-imports/${id}/dry-run`, body, { timeoutMs: 0 }),
+  tableCommit: (id: number, body: TableImportRequest) =>
+    post<{ import: TableImport; report: TableImportReport }>(`/table-imports/${id}/commit`, body, { timeoutMs: 0 }),
+  abandonTableImport: (id: number) => del(`/table-imports/${id}`),
+  listTableImports: (templateId?: number) =>
+    get<{ imports: TableImport[] }>(`/table-imports${templateId ? `?templateId=${templateId}` : ''}`),
+  tableImportFileUrl: (id: number) => `/api/table-imports/${id}/file`,
   getDocumentText: (id: number) => get<{ text: string }>(`/documents/${id}/text`),
   documentFileUrl: (id: number) => `/api/documents/${id}/file`,
   reparseDocument: (id: number) => post<{ document: DocumentMeta }>(`/documents/${id}/reparse`),

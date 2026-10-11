@@ -201,6 +201,17 @@ function NumberInput({
 export function SourceBadge({ stored }: { stored: RecordValue | undefined }) {
   if (!stored || stored.source === 'empty') return <span className="badge badge-empty">Non renseigné</span>;
 
+  if (stored.source === 'import') {
+    return (
+      <span
+        className="badge badge-import"
+        title="Importé d’un tableau de cohorte : la justification cite le fichier, la feuille et la cellule. Valeur non relue — confirmez-la ou corrigez-la après vérification dans le dossier."
+      >
+        Importé
+      </span>
+    );
+  }
+
   if (stored.source === 'manual') {
     const origin = stored.origin;
     if (!origin) {
@@ -210,13 +221,14 @@ export function SourceBadge({ stored }: { stored: RecordValue | undefined }) {
         <span className="badge badge-manual" title="Valeur saisie par un relecteur">Saisi</span>
       );
     }
+    const proposal = origin.source === 'import' ? 'La valeur importée du tableau' : 'La proposition de l’extraction';
     if (stored.value === null) {
-      return <span className="badge badge-manual" title="La proposition de l’extraction a été écartée">Vidé</span>;
+      return <span className="badge badge-manual" title={`${proposal} a été écartée`}>Vidé</span>;
     }
     return sameValue(stored.value, origin.value) ? (
-      <span className="badge badge-manual" title="La proposition de l’extraction a été confirmée">Confirmé</span>
+      <span className="badge badge-manual" title={`${proposal} a été confirmée`}>Confirmé</span>
     ) : (
-      <span className="badge badge-manual" title="La proposition de l’extraction a été corrigée">Corrigé</span>
+      <span className="badge badge-manual" title={`${proposal} a été corrigée`}>Corrigé</span>
     );
   }
 

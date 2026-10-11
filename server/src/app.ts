@@ -16,6 +16,7 @@ import { exportRouter } from './routes/export.js';
 import { redactionRouter } from './routes/redaction.js';
 import { biblioRouter } from './routes/biblio.js';
 import { llmRouter } from './routes/llm.js';
+import { importsRouter } from './routes/imports.js';
 
 export interface AppOptions {
   /** Mot de passe d'accès ; par défaut `APP_PASSWORD`. `null` supprime tout contrôle d'accès. */
@@ -79,6 +80,7 @@ export function createApp(options: AppOptions = {}): Express {
 
   app.use('/api/patients', patientsRouter);
   app.use('/api', documentsRouter);
+  app.use('/api/table-imports', importsRouter);
   app.use('/api/templates', templatesRouter);
   app.use('/api/records', recordsRouter);
   app.use('/api/analytics', analyticsRouter);

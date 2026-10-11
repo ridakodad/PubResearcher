@@ -15,6 +15,9 @@ import { wilsonInterval } from '../lib/stats.js';
  * - ajoutée   : la machine n'avait rien trouvé, le relecteur a saisi une valeur ;
  * - vide confirmée : la machine n'avait rien trouvé, le relecteur confirme qu'il n'y a rien.
  *
+ * Les valeurs importées d'un tableau de cohorte n'entrent pas dans ces mesures : ce ne sont pas des propositions de
+ * l'extraction, et les confirmer ne dit rien de sa fiabilité.
+ *
  * Ces mesures n'ont de portée que si les dossiers relus sont tirés au hasard : relire d'abord les valeurs
  * douteuses fait baisser la concordance affichée. Le rapport le rappelle.
  */
@@ -114,6 +117,9 @@ export function computeQuality(template: TemplateWithFields): QualityReport {
   for (const row of rows) {
     const counts = perField.get(row.field_id);
     if (!counts) continue;
+    // Les valeurs importées d'un tableau — et les décisions prises sur elles — ne disent rien de la fiabilité de
+    // l'extraction : elles ne sont comptées nulle part ici (le rapport « Méthodes » les dénombre à part).
+    if (row.source === 'import' || row.origin_source === 'import') continue;
     if (row.source === 'auto' || row.source === 'llm') {
       counts.unreviewed++;
     } else if (row.source === 'manual') {

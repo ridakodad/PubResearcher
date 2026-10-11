@@ -7,6 +7,7 @@ import { shutdownParsers } from './extract/isolation.js';
 import { shutdownOcr } from './extract/ocr.js';
 import { recoverInterruptedSearches } from './repo/biblio.js';
 import { purgeIncoming } from './repo/documents.js';
+import { purgeStaleImportDrafts } from './repo/imports.js';
 import { recoverInterruptedRuns } from './repo/runs.js';
 import { isLoopback } from './lib/security.js';
 import { closeDatabase, migration } from './db/index.js';
@@ -18,6 +19,7 @@ purgeIncoming();
 seedIfEmpty();
 recoverInterruptedSearches();
 recoverInterruptedRuns();
+purgeStaleImportDrafts();
 
 const server = createApp().listen(port, host, () => {
   const shown = isLoopback(host) ? 'localhost' : host;

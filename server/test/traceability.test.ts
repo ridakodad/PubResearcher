@@ -213,7 +213,7 @@ describe('rapport sur un corpus relu', () => {
     assert.equal(r.status, 200);
     assert.match(r.headers.get('content-type') ?? '', /text\/csv/);
     const lines = r.body.replace(/^﻿/, '').trim().split('\r\n');
-    assert.equal(lines[0], 'evenement;horodatage;dossier;variable;libelle;action;valeur_avant;origine_avant;valeur_apres;origine_apres;passe');
+    assert.equal(lines[0], 'evenement;horodatage;dossier;variable;libelle;action;valeur_avant;origine_avant;valeur_apres;origine_apres;passe;import');
     const rows = lines.slice(1).map((l) => l.split(';'));
     const ids = rows.map((c) => Number(c[0]));
     assert.deepEqual(ids, [...ids].sort((a, b) => a - b), 'ordre chronologique');

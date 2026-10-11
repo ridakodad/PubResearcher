@@ -1,7 +1,7 @@
 import zlib from 'node:zlib';
 
 /**
- * Écriture d'archives ZIP.
+ * Écriture (et, plus bas, lecture) d'archives ZIP.
  *
  * Les formats bureautiques modernes — `.xlsx`, `.pptx`, `.docx` — sont des
  * archives ZIP de fichiers XML. Les produire ne demande donc qu'un écrivain
@@ -119,4 +119,117 @@ export function escapeXml(value: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
+}
+
+/* ───────────────────────────────── Lecture ─────────────────────────────── */
+
+/**
+ * Lecture d'archives ZIP, pour les classeurs `.xlsx` reçus.
+ *
+ * Le pendant de l'écrivain ci-dessus, et pas davantage : l'annuaire central, puis la décompression d'une partie à la
+ * demande. Une archive reçue est une donnée hostile jusqu'à preuve du contraire — quelques kilo-octets peuvent se
+ * gonfler en gigaoctets. L'annuaire annonce la taille décompressée de chaque partie : on la plafonne avant d'ouvrir,
+ * et la décompression elle-même s'arrête à la taille annoncée (`maxOutputLength`), de sorte qu'une archive qui ment
+ * sur ses tailles ne peut pas en produire davantage.
+ */
+
+export interface ZipReadEntry {
+  name: string;
+  method: number;
+  flags: number;
+  compressedSize: number;
+  uncompressedSize: number;
+  localHeaderOffset: number;
+}
+
+export class ZipReadError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ZipReadError';
+  }
+}
+
+export interface ZipReader {
+  entries: Map<string, ZipReadEntry>;
+  /** Somme des tailles décompressées annoncées. */
+  totalUncompressed: number;
+  /** Contenu décompressé d'une partie, `null` si elle n'existe pas. */
+  read(name: string): Buffer | null;
+}
+
+export function openZip(buffer: Buffer): ZipReader {
+  const from = Math.max(0, buffer.length - 22 - 0xffff);
+  let eocd = -1;
+  for (let i = buffer.length - 22; i >= from; i--) {
+    if (buffer.readUInt32LE(i) === 0x06054b50) {
+      eocd = i;
+      break;
+    }
+  }
+  if (eocd < 0) throw new ZipReadError('Ce fichier n’est pas une archive ZIP (classeur .xlsx tronqué ou d’un autre format).');
+
+  const count = buffer.readUInt16LE(eocd + 10);
+  const size = buffer.readUInt32LE(eocd + 12);
+  const offset = buffer.readUInt32LE(eocd + 16);
+  if (count === 0xffff || size === 0xffffffff || offset === 0xffffffff) {
+    throw new ZipReadError('Archive au format ZIP64 : trop volumineuse pour un tableau de cohorte.');
+  }
+  if (offset + size > buffer.length) throw new ZipReadError('Archive ZIP tronquée : l’annuaire dépasse la fin du fichier.');
+
+  const entries = new Map<string, ZipReadEntry>();
+  let total = 0;
+  let p = offset;
+  for (let n = 0; n < count; n++) {
+    if (p + 46 > buffer.length || buffer.readUInt32LE(p) !== 0x02014b50) {
+      throw new ZipReadError('Archive ZIP corrompue : annuaire illisible.');
+    }
+    const flags = buffer.readUInt16LE(p + 8);
+    const method = buffer.readUInt16LE(p + 10);
+    const compressedSize = buffer.readUInt32LE(p + 20);
+    const uncompressedSize = buffer.readUInt32LE(p + 24);
+    const nameLength = buffer.readUInt16LE(p + 28);
+    const extraLength = buffer.readUInt16LE(p + 30);
+    const commentLength = buffer.readUInt16LE(p + 32);
+    const localHeaderOffset = buffer.readUInt32LE(p + 42);
+    if (compressedSize === 0xffffffff || uncompressedSize === 0xffffffff || localHeaderOffset === 0xffffffff) {
+      throw new ZipReadError('Archive au format ZIP64 : trop volumineuse pour un tableau de cohorte.');
+    }
+    const name = buffer.toString('utf8', p + 46, p + 46 + nameLength).replace(/\\/g, '/');
+    entries.set(name, { name, method, flags, compressedSize, uncompressedSize, localHeaderOffset });
+    total += uncompressedSize;
+    p += 46 + nameLength + extraLength + commentLength;
+  }
+
+  return {
+    entries,
+    totalUncompressed: total,
+    read(name) {
+      const entry = entries.get(name);
+      if (!entry) return null;
+      if (entry.flags & 0x1) throw new ZipReadError('Classeur chiffré (protégé par mot de passe) : retirez la protection, puis réimportez-le.');
+      const at = entry.localHeaderOffset;
+      if (at + 30 > buffer.length || buffer.readUInt32LE(at) !== 0x04034b50) {
+        throw new ZipReadError(`Archive ZIP corrompue : partie « ${name} » introuvable.`);
+      }
+      const start = at + 30 + buffer.readUInt16LE(at + 26) + buffer.readUInt16LE(at + 28);
+      const end = start + entry.compressedSize;
+      if (end > buffer.length) throw new ZipReadError(`Archive ZIP tronquée : partie « ${name} » incomplète.`);
+      const body = buffer.subarray(start, end);
+      if (entry.method === 0) {
+        if (entry.compressedSize !== entry.uncompressedSize) throw new ZipReadError(`Archive ZIP corrompue : partie « ${name} ».`);
+        return Buffer.from(body);
+      }
+      if (entry.method !== 8) throw new ZipReadError(`Méthode de compression non prise en charge (${entry.method}) pour « ${name} ».`);
+      try {
+        // La sortie est bornée à la taille annoncée : une partie qui se gonfle au-delà est refusée, pas décompressée.
+        return zlib.inflateRawSync(body, { maxOutputLength: Math.max(entry.uncompressedSize, 1) });
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === 'ERR_BUFFER_TOO_LARGE' || error instanceof RangeError) {
+          throw new ZipReadError(`Archive piégée : la partie « ${name} » se décompresse au-delà de la taille qu’elle annonce.`);
+        }
+        throw new ZipReadError(`Archive ZIP corrompue : partie « ${name} » illisible.`);
+      }
+    },
+  };
 }

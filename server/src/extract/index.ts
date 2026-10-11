@@ -145,14 +145,13 @@ async function runExtractor(
       const ext = filename.toLowerCase().split('.').pop() ?? '';
       const legacy: Record<string, string> = {
         doc: 'Ancien format Word (.doc) : enregistrez-le en .docx ou en PDF',
-        xls: 'Feuille de calcul Excel : exportez-la en CSV ou en PDF',
-        xlsx: 'Feuille de calcul Excel : exportez-la en CSV ou en PDF',
         ppt: 'Présentation PowerPoint : exportez-la en PDF',
         pptx: 'Présentation PowerPoint : exportez-la en PDF',
         odt: 'Document OpenDocument : enregistrez-le en .docx ou en PDF',
         zip: 'Archive : décompressez-la et importez les fichiers qu’elle contient',
         exe: 'Programme exécutable : ce n’est pas un document',
       };
+      if (TABLE_EXTENSIONS.has(ext)) throw new Error(`Format non pris en charge (${filename}). ${TABLE_IMPORT_HINT}`);
       throw new Error(
         legacy[ext]
           ? `Format non pris en charge (${filename}). ${legacy[ext]}, puis réimportez-le.`
@@ -161,6 +160,12 @@ async function runExtractor(
     }
   }
 }
+
+/** Extensions d'un tableau de cohorte : elles relèvent de l'import de tableau, pas de l'import de documents. */
+export const TABLE_EXTENSIONS = new Set(['xlsx', 'xlsm', 'xls', 'ods', 'csv', 'tsv']);
+
+export const TABLE_IMPORT_HINT =
+  'C’est un tableau, pas un compte rendu : importez-le avec « Importer un tableau (Excel, CSV) », sur la page Dossiers patients — chaque ligne y devient un dossier, chaque colonne une variable.';
 
 /**
  * Fichier « texte » : texte brut, RTF ou HTML, reconnus à leur contenu plutôt
