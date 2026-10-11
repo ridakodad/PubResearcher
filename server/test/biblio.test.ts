@@ -344,6 +344,32 @@ describe('bibliothèque — rapprochement des notices', () => {
     assert.equal(flow.screened, 1);
   });
 
+  test('des identifiants différents l’emportent sur un titre ou un DOI communs (cas réels de PubMed)', () => {
+    const base = pubmedRefs()[0]!;
+    const letter = (pmid: string, doi: string | null) => ({
+      ...base,
+      title: 'Duration of antibiotics in complicated appendicitis',
+      year: 2023,
+      pmid,
+      pmcid: null,
+      doi,
+    });
+    // Quatre lettres au Lancet : même titre, PMID et DOI différents.
+    const lancet = [
+      letter('37838436', '10.1016/s0140-6736(23)01567-2'),
+      letter('37838434', '10.1016/s0140-6736(23)01565-9'),
+      letter('37838433', '10.1016/s0140-6736(23)01566-0'),
+    ];
+    assert.deepEqual(repo.addRefsFromSearch(newSearch('pubmed'), lancet), { added: 3, duplicates: 0 });
+    // Correspondance du NEJM : cinq PMID publiés sous un même DOI.
+    const nejm = ['33657306', '33657305'].map((pmid) => ({ ...letter(pmid, '10.1056/nejmc2035865'), title: `NEJM letter ${pmid}` }));
+    assert.deepEqual(repo.addRefsFromSearch(newSearch('pubmed'), nejm), { added: 2, duplicates: 0 });
+    // Une notice Embase sans PMID, au même DOI qu'une lettre : c'est bien la même.
+    const embase = { ...letter('', '10.1016/s0140-6736(23)01565-9'), pmid: null, source: 'embase' as const };
+    assert.deepEqual(repo.addRefsFromSearch(newSearch('pubmed'), [embase]), { added: 0, duplicates: 1 });
+    assert.equal(repo.counts().total, 5);
+  });
+
   test('les recherches interrompues par un arrêt du serveur sont closes en erreur', () => {
     newSearch('pubmed');
     assert.equal(repo.recoverInterruptedSearches(), 1);

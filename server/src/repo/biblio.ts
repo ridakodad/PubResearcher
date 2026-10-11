@@ -255,35 +255,54 @@ const yearsCompatible = (a: number | null, b: number | null): boolean =>
   a === null || b === null || Math.abs(a - b) <= YEAR_TOLERANCE;
 
 /**
+ * Deux notices qui portent chacune un identifiant fort, différent, désignent
+ * deux articles — même si leurs titres coïncident. Sur une vraie recherche
+ * PubMed, c'est fréquent : cinq lettres à l'éditeur intitulées « Duration of
+ * antibiotics in complicated appendicitis », une revue Cochrane et sa mise à
+ * jour, ou les réponses d'un même auteur publiées sous un DOI commun. Les
+ * fusionner fausserait le nombre de références à trier.
+ */
+function conflicts(row: RefRow, ref: BiblioRefInput, by: 'doi' | 'pmcid' | 'title'): boolean {
+  if (row.pmid && ref.pmid && row.pmid !== ref.pmid) return true;
+  return by === 'title' && row.doi !== null && ref.doi !== null && row.doi !== ref.doi;
+}
+
+/**
  * Cherche la notice déjà connue qui désigne le même article.
  *
- * Par ordre de fiabilité : DOI, PMID, puis titre normalisé. Le rapprochement
- * par titre exige des années compatibles — « Editorial » et sa réponse portent
- * parfois le même titre — et sait lire un titre tronqué par Google Scholar,
- * dans les deux sens (la notice connue est tronquée, ou la nouvelle l'est).
+ * Par ordre de fiabilité : DOI, PMID, PMCID, puis titre normalisé. Un
+ * rapprochement est refusé quand les deux notices portent des PMID différents
+ * (ou, pour un rapprochement par titre, des DOI différents) : voir `conflicts`.
+ * Le rapprochement par titre exige aussi des années compatibles — « Editorial »
+ * et sa réponse portent parfois le même titre — et sait lire un titre tronqué
+ * par Google Scholar, dans les deux sens (la notice connue est tronquée, ou la
+ * nouvelle l'est).
  */
 function findExisting(ref: BiblioRefInput): RefRow | null {
-  if (ref.doi) {
-    const row = db.prepare('SELECT * FROM biblio_refs WHERE doi = ? LIMIT 1').get(ref.doi) as RefRow | undefined;
-    if (row) return row;
-  }
   if (ref.pmid) {
     const row = db.prepare('SELECT * FROM biblio_refs WHERE pmid = ? LIMIT 1').get(ref.pmid) as RefRow | undefined;
     if (row) return row;
   }
+  if (ref.doi) {
+    const rows = db.prepare('SELECT * FROM biblio_refs WHERE doi = ?').all(ref.doi) as RefRow[];
+    const row = rows.find((r) => !conflicts(r, ref, 'doi'));
+    if (row) return row;
+  }
   // Scholar pointe souvent vers la copie PMC de l'article : l'identifiant PMC suffit à le reconnaître.
   if (ref.pmcid) {
-    const row = db.prepare('SELECT * FROM biblio_refs WHERE pmcid = ? LIMIT 1').get(ref.pmcid) as RefRow | undefined;
+    const rows = db.prepare('SELECT * FROM biblio_refs WHERE pmcid = ?').all(ref.pmcid) as RefRow[];
+    const row = rows.find((r) => !conflicts(r, ref, 'pmcid'));
     if (row) return row;
   }
 
   const norm = normTitle(ref.title);
   if (norm.length < 12) return null; // un titre trop court ne dit rien
+  const sameWork = (r: RefRow) => yearsCompatible(r.year, ref.year) && !conflicts(r, ref, 'title');
 
   const exact = db
     .prepare('SELECT * FROM biblio_refs WHERE norm_title = ?')
     .all(norm) as RefRow[];
-  const byExact = exact.find((r) => yearsCompatible(r.year, ref.year));
+  const byExact = exact.find(sameWork);
   if (byExact) return byExact;
 
   // Titre tronqué (le préfixe des titres connus) ou notice connue tronquée.
@@ -292,13 +311,13 @@ function findExisting(ref: BiblioRefInput): RefRow | null {
     const rows = db
       .prepare(`SELECT * FROM biblio_refs WHERE norm_title LIKE ? || '%'`)
       .all(norm) as RefRow[];
-    const hit = rows.find((r) => yearsCompatible(r.year, ref.year));
+    const hit = rows.find(sameWork);
     if (hit) return hit;
   }
   const knownTruncated = db
     .prepare(`SELECT * FROM biblio_refs WHERE title_truncated = 1 AND ? LIKE norm_title || '%'`)
     .all(norm) as RefRow[];
-  return knownTruncated.find((r) => r.norm_title.length >= 25 && yearsCompatible(r.year, ref.year)) ?? null;
+  return knownTruncated.find((r) => r.norm_title.length >= 25 && sameWork(r)) ?? null;
 }
 
 const orNull = <T>(current: T | null, incoming: T | null): T | null => current ?? incoming;
