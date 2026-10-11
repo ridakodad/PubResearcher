@@ -178,7 +178,7 @@ export function ApiKeyPanel({ onChange, compact = false }: { onChange?: (status:
         </div>
       )}
       {!editing && status?.source === 'app' && (
-        <div className="card-body small muted" style={{ paddingTop: 0 }}>
+        <div className="card-body small muted" style={{ paddingTop: 'var(--s2)', paddingBottom: 'var(--s3)' }}>
           <IconCheck size={12} /> Les passes par Claude sont facturées sur votre compte Anthropic.
         </div>
       )}
