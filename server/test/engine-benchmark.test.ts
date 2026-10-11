@@ -110,6 +110,8 @@ const CASES: Case[] = [
   { key: 'tabagisme', text: "Pas de tabagisme, pas d'éthylisme.", expect: false },
   { key: 'tabagisme', text: 'Jamais fumeur.', expect: false },
   { key: 'tabagisme', text: 'Son frère est fumeur.', expect: null },
+  { key: 'tabagisme', text: 'Tabagisme sevré depuis 5 ans', expect: false, note: 'sevré : pas de tabagisme actuel' },
+  { key: 'tabagisme', text: 'Ancien fumeur, 30 PA.', expect: false, note: 'ancien fumeur : pas de tabagisme actuel' },
   { key: 'fievre', text: 'Fièvre : oui', expect: true },
   { key: 'fievre', text: 'Patiente fébrile à 39°C.', expect: true },
   { key: 'fievre', text: 'Apyrétique, pas de fièvre.', expect: false },
@@ -176,7 +178,6 @@ interface Limit extends Case {
 }
 const LIMITES: Limit[] = [
   { key: 'tabagisme', text: 'Tabac : 20 paquets-années', expect: true, actual: null, why: 'une quantité n’est pas reconnue comme « oui »' },
-  { key: 'tabagisme', text: 'Tabagisme sevré depuis 5 ans', expect: undefined, actual: true, why: 'ancien fumeur : la fiche ne distingue pas actuel et sevré (à définir pour votre étude)' },
   { key: 'sexe', text: 'Le patient a été admis pour douleurs abdominales.', expect: undefined, actual: null, why: '« patient » est un masculin générique : un sexe inventé vaut moins qu’un vide' },
   { key: 'hemoglobine', text: 'Hémoglobine : 11 g/dL puis 9,5 g/dL à J3', expect: undefined, actual: 11, why: 'la première valeur gagne : aucune notion de chronologie' },
 ];

@@ -96,9 +96,12 @@ describe('règle mot-clé — négations après le terme', () => {
     }
   });
 
-  test('une règle sans négation déclarée ne lit pas ce qui suit (pas de régression)', () => {
+  test('une règle sans négation déclarée ne nie jamais, mais n’affirme plus une absence établie', () => {
+    // Les qualificatifs génériques (« exclue », « éliminé », « sevré ») s'appliquent à toute variable oui/non :
+    // sans `emitIfNegated`, la mention ne donne ni « Oui » ni « Non ».
     const bare = keyword({ any: ['hta'] });
-    assert.equal(extractField(bare, [doc('HTA exclue.')])?.value, true);
+    assert.equal(extractField(bare, [doc('HTA exclue.')]), null);
+    assert.equal(extractField(bare, [doc('HTA traitée.')])?.value, true);
   });
 });
 

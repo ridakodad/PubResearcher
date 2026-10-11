@@ -1,9 +1,14 @@
 import type { FieldType, FieldValue, FieldPostProcess } from '../domain/types.js';
 import { findTerm, fold } from './fold.js';
+import { describeStatus, qualifyAnswer } from './qualifiers.js';
 
+/**
+ * `conflict` : la valeur écrite en contient plusieurs (« favorable puis décès ») — ce n'est pas une valeur
+ * illisible qu'une règle de repli pourrait remplacer, c'est un choix qui revient au relecteur.
+ */
 export type CoerceResult =
   | { ok: true; value: FieldValue }
-  | { ok: false; reason: string };
+  | { ok: false; reason: string; conflict?: boolean };
 
 const MONTHS_FR: Record<string, number> = {
   janvier: 1, janv: 1, jan: 1,
@@ -143,6 +148,11 @@ const NON_AVEC_QUALIFICATIF =
 export function parseBoolean(raw: string): boolean | null {
   const s = fold(cleanText(raw));
   if (s.length === 0) return null;
+  // « non renseigné », « NR », « ? », « probable », « éliminé », « sevré » : la lecture mot à mot se tromperait
+  // (« non renseigné » commence par « non »). Ces réponses sont qualifiées d'abord.
+  const qualified = qualifyAnswer(s);
+  if (qualified === 'ruled-out') return false;
+  if (qualified !== null) return null;
   // Notations de carnet : « (+) » et « (-) ».
   if (/^\(\s*\+\s*\)/.test(s)) return true;
   if (/^\(\s*[-\u2013\u2212]\s*\)/.test(s)) return false;
@@ -290,15 +300,97 @@ const UNIT_BY_FORM = new Map<string, string>([
 /** L'unité écrite juste après le premier nombre : « 85 µmol/L », « 37,5 °C », « 98 % ». */
 const UNIT_AFTER_NUMBER = /-?\d[\d\s.,]*?\s*(°\s?[cf]\b|%|[a-zµμ]+(?:\s*\/\s*[a-zµμ]+)?)(.{0,2})/u;
 
+/**
+ * Unité composée écrite plus loin dans la valeur : « 98 (N : 60-110) µmol/L », ou « 8O µmol/L » où l'OCR a glissé une
+ * lettre entre le nombre et l'unité. Seules les écritures sans ambiguïté comptent — avec une barre, un degré, un « % »
+ * ou « mmHg » : une lettre isolée (« l », « g », « m ») est trop souvent un mot pour valoir unité.
+ */
+const COMPOUND_UNIT = /(?:^|[^a-zµμ0-9])((?:[a-zµμ]+\s*\/\s*[a-zµμ]+)|°\s?[cf]\b|%|mmhg\b)/gu;
+
 function unitMismatch(text: string, unit: string | null | undefined): string | null {
   const wanted = unit ? UNIT_BY_FORM.get(normalizeUnit(unit)) : undefined;
   if (!wanted) return null;
-  const m = UNIT_AFTER_NUMBER.exec(fold(text));
-  if (!m?.[1]) return null;
-  // « mg.L-1 », « mg·L⁻¹ », « mg/24h », « mg/1 » (L lu 1 par l'OCR) : unité composée qu'on ne sait pas lire d'un bloc.
-  if (/^[.·∙⁻/-]\s*[a-zµμ0-9]/i.test(m[2] ?? '')) return null;
-  const found = UNIT_BY_FORM.get(normalizeUnit(m[1]));
-  return found && found !== wanted ? found : null;
+  const folded = fold(text);
+  const m = UNIT_AFTER_NUMBER.exec(folded);
+  if (m?.[1]) {
+    // « mg.L-1 », « mg·L⁻¹ », « mg/24h », « mg/1 » (L lu 1 par l'OCR) : unité composée qu'on ne sait pas lire d'un bloc.
+    if (/^[.·∙⁻/-]\s*[a-zµμ0-9]/i.test(m[2] ?? '')) return null;
+    const found = UNIT_BY_FORM.get(normalizeUnit(m[1]));
+    if (found) return found !== wanted ? found : null;
+  }
+  // Pas d'unité connue collée au nombre : la première unité composée connue de la valeur fait foi.
+  COMPOUND_UNIT.lastIndex = 0;
+  for (let c = COMPOUND_UNIT.exec(folded); c !== null; c = COMPOUND_UNIT.exec(folded)) {
+    const found = UNIT_BY_FORM.get(normalizeUnit(c[1]!));
+    if (found) return found !== wanted ? found : null;
+  }
+  return null;
+}
+
+/** Caractères que l'OCR confond avec un chiffre : O/o pour 0, l/I pour 1 (la barre « | » sépare souvent des cellules). */
+const OCR_LOOKALIKE = /[OoIl]/;
+
+/**
+ * Le premier nombre de la valeur touche-t-il une lettre que l'OCR substitue à un chiffre ? Renvoie le fragment
+ * suspect (« 1O », « 7l », « O5 »), ou `null`.
+ *
+ * Seule une lettre isolée compte : « 10mg » (unité collée) et « PaO2 » (la lettre appartient à un mot) passent.
+ */
+export function ocrSuspect(text: string): string | null {
+  const m = /\d+(?:[.,]\d+)?/.exec(text);
+  if (!m) return null;
+  const from = m.index;
+  const to = from + m[0].length;
+  const isLetter = (ch: string | undefined) => ch !== undefined && /\p{L}/u.test(ch);
+  const next = text[to];
+  if (next !== undefined && OCR_LOOKALIKE.test(next) && !isLetter(text[to + 1])) {
+    return text.slice(from, to + 1 + (/\d/.test(text[to + 1] ?? '') ? 1 : 0));
+  }
+  const prev = text[from - 1];
+  if (prev !== undefined && OCR_LOOKALIKE.test(prev) && !isLetter(text[from - 2])) {
+    return text.slice(from - 1, to);
+  }
+  return null;
+}
+
+/**
+ * « 38°5 » : notation française d'une température, 38,5 °C. Lue telle quelle, elle donnait 38 — ou rien, le « 5 »
+ * suivant le degré n'étant pas une unité. Seul un chiffre isolé après le degré est lu comme décimale.
+ */
+function degreeDecimal(text: string): string {
+  return text.replace(/(\d)\s?°\s?(\d)(?![\d.,])/, '$1,$2');
+}
+
+/** Négation qui précède une option citée : « favorable, sans décès ». */
+const OPTION_NEGATED = /(?:pas d(?:e|u|es)?|sans|aucun|aucune|absence d(?:e|u|es)?|ni|non|jamais)[\s']*$/;
+
+/**
+ * Options distinctes citées dans la valeur — directement ou par la table de correspondances —, sans compter celles
+ * qui sont niées. « Favorable puis décès » en cite deux ; « Évolution simple » une seule (« simple » → Favorable).
+ */
+function optionsCited(raw: string, options: string[], map: Record<string, string> | undefined): string[] {
+  const s = fold(cleanText(raw));
+  if (s.length === 0) return [];
+  const cited = new Set<string>();
+  const consider = (term: string, option: string | undefined) => {
+    const f = fold(term).trim();
+    if (!option || f.length < 3) return;
+    let from = 0;
+    for (;;) {
+      const at = findTerm(s, f, from);
+      if (at === -1) return;
+      from = at + f.length;
+      if (!OPTION_NEGATED.test(s.slice(Math.max(0, at - 20), at))) {
+        cited.add(option);
+        return;
+      }
+    }
+  };
+  for (const opt of options) consider(opt, opt);
+  for (const [from, to] of Object.entries(map ?? {})) {
+    consider(from, options.find((o) => fold(o) === fold(to)));
+  }
+  return [...cited];
 }
 
 export function coerce(
@@ -338,43 +430,16 @@ export function coerce(
 
     case 'number':
     case 'integer': {
-      // « < 5 » dit seulement que la valeur est sous le seuil de détection :
-      // la lire « 5 » biaiserait toute moyenne. On la laisse à la saisie humaine.
-      if (/^[(\s]*(?:[<>]=?|[\u2264\u2265])\s*-?\d/.test(text)) {
-        return { ok: false, reason: `valeur seuil « ${text} » : à saisir à la main` };
-      }
-      const mismatch = timeUnitMismatch(text, unit);
-      if (mismatch) {
+      // Une lettre collée au nombre (« 1O », « 7l ») est presque toujours un chiffre mal lu par l'OCR : lire
+      // le nombre jusqu'à elle donnerait 1 pour 10 et 7 pour 71, sans qu'aucune borne ne s'en aperçoive.
+      const ocr = ocrSuspect(text);
+      if (ocr) {
         return {
           ok: false,
-          reason: `unité « ${mismatch} » différente de « ${unit} » dans « ${text} » : à saisir à la main`,
+          reason: `caractère ambigu « ${ocr} » dans « ${text} » (lecture optique probable : O pour 0, l ou I pour 1) : à vérifier puis saisir à la main`,
         };
       }
-      const other = post?.scale ? null : unitMismatch(text, unit);
-      if (other) {
-        return {
-          ok: false,
-          reason: `unité « ${other} » différente de « ${unit} » dans « ${text} » : à convertir puis à saisir à la main`,
-        };
-      }
-      const n = parseNumber(text);
-      if (n === null) return { ok: false, reason: `nombre introuvable dans « ${text} »` };
-      let v = post?.scale ? n * post.scale : n;
-      if (type === 'integer') {
-        // Un arrondi silencieux fabriquerait une donnée (3,5 jours -> 4) : la valeur décimale est
-        // écartée et signalée, le relecteur tranche. L'écart de virgule flottante (61.0000000001) passe.
-        if (Math.abs(v - Math.round(v)) > 1e-9) {
-          return { ok: false, reason: `valeur décimale ${v} pour une variable entière : à saisir à la main` };
-        }
-        v = Math.round(v);
-      }
-      if (post?.min !== undefined && v < post.min) {
-        return { ok: false, reason: `valeur ${v} sous le minimum ${post.min}` };
-      }
-      if (post?.max !== undefined && v > post.max) {
-        return { ok: false, reason: `valeur ${v} au-dessus du maximum ${post.max}` };
-      }
-      return { ok: true, value: v };
+      return coerceNumber(degreeDecimal(text), type, post, unit);
     }
 
     case 'date': {
@@ -386,6 +451,14 @@ export function coerce(
 
     case 'boolean': {
       const mapped = applyValueMap(text, post?.valueMap);
+      // Une correspondance déclarée par l'utilisateur prime ; sinon, « non renseigné » ou « probable »
+      // sont dits comme tels plutôt que confondus avec un booléen illisible.
+      if (mapped === text) {
+        const qualified = qualifyAnswer(fold(text));
+        if (qualified === 'not-documented' || qualified === 'uncertain' || qualified === 'contradicted') {
+          return { ok: false, reason: `${describeStatus(qualified)} (« ${text} »)` };
+        }
+      }
       const b = parseBoolean(mapped);
       return b === null
         ? { ok: false, reason: `booléen non reconnu dans « ${text} »` }
@@ -393,6 +466,16 @@ export function coerce(
     }
 
     case 'enum': {
+      // « Favorable puis décès » cite deux options : prendre la première de la liste serait un choix
+      // silencieux, et le mauvais une fois sur deux. La valeur est signalée, et tranchée à la main.
+      const cited = optionsCited(text, options, post?.valueMap);
+      if (cited.length > 1) {
+        return {
+          ok: false,
+          conflict: true,
+          reason: `plusieurs options citées (${cited.join(', ')}) dans « ${text} » : à trancher à la main`,
+        };
+      }
       const mapped = applyValueMap(text, post?.valueMap);
       // Le mapping peut déjà renvoyer une option canonique.
       const direct = options.find((o) => fold(o) === fold(mapped));
@@ -423,4 +506,50 @@ export function coerce(
     default:
       return { ok: false, reason: `type inconnu ${String(type)}` };
   }
+}
+
+/** Lecture d'un nombre, une fois écartés les caractères ambigus de l'OCR. */
+function coerceNumber(
+  text: string,
+  type: 'number' | 'integer',
+  post: FieldPostProcess | undefined,
+  unit: string | null | undefined,
+): CoerceResult {
+  // « < 5 » dit seulement que la valeur est sous le seuil de détection :
+  // la lire « 5 » biaiserait toute moyenne. On la laisse à la saisie humaine.
+  if (/^[(\s]*(?:[<>]=?|[\u2264\u2265])\s*-?\d/.test(text)) {
+    return { ok: false, reason: `valeur seuil « ${text} » : à saisir à la main` };
+  }
+  const mismatch = timeUnitMismatch(text, unit);
+  if (mismatch) {
+    return {
+      ok: false,
+      reason: `unité « ${mismatch} » différente de « ${unit} » dans « ${text} » : à saisir à la main`,
+    };
+  }
+  const other = post?.scale ? null : unitMismatch(text, unit);
+  if (other) {
+    return {
+      ok: false,
+      reason: `unité « ${other} » différente de « ${unit} » dans « ${text} » : à convertir puis à saisir à la main`,
+    };
+  }
+  const n = parseNumber(text);
+  if (n === null) return { ok: false, reason: `nombre introuvable dans « ${text} »` };
+  let v = post?.scale ? n * post.scale : n;
+  if (type === 'integer') {
+    // Un arrondi silencieux fabriquerait une donnée (3,5 jours -> 4) : la valeur décimale est
+    // écartée et signalée, le relecteur tranche. L'écart de virgule flottante (61.0000000001) passe.
+    if (Math.abs(v - Math.round(v)) > 1e-9) {
+      return { ok: false, reason: `valeur décimale ${v} pour une variable entière : à saisir à la main` };
+    }
+    v = Math.round(v);
+  }
+  if (post?.min !== undefined && v < post.min) {
+    return { ok: false, reason: `valeur ${v} sous le minimum ${post.min}` };
+  }
+  if (post?.max !== undefined && v > post.max) {
+    return { ok: false, reason: `valeur ${v} au-dessus du maximum ${post.max}` };
+  }
+  return { ok: true, value: v };
 }
