@@ -1,0 +1,95 @@
+PubResearcher {{VERSION}} pour macOS ({{TARGET}}) — version prête à l'emploi
+==========================================================================
+
+Rien à installer : le moteur Node.js ({{NODE_VERSION}}) est fourni dans le dossier « app ».
+Aucune connexion internet n'est nécessaire pour démarrer, importer des dossiers ni lire
+les documents scannés (la reconnaissance de texte fonctionne hors ligne). Internet ne sert
+qu'aux fonctions qui l'annoncent : remplissage par Claude, recherche bibliographique.
+
+Choisir la bonne archive : « mac-arm64 » pour les Mac Apple (M1, M2, M3, M4…),
+« mac-x64 » pour les Mac Intel (menu Pomme › À propos de ce Mac › « Puce » ou « Processeur »).
+
+
+1. Démarrer
+-----------
+
+  1. Double-cliquez sur le fichier .zip téléchargé : le dossier « PubResearcher » apparaît.
+     Rangez-le où vous voulez (par exemple dans Applications ou Documents).
+  2. Premier lancement (l'application n'est pas encore signée par Apple) :
+       • macOS 14 (Sonoma) ou plus ancien : clic droit (ou Ctrl+clic) sur
+         PubResearcher.command › « Ouvrir », puis « Ouvrir » dans la fenêtre d'alerte.
+       • macOS 15 (Sequoia) ou plus récent : double-cliquez sur PubResearcher.command ;
+         macOS refuse et propose « Terminé ». Ouvrez alors Réglages Système ›
+         Confidentialité et sécurité, descendez jusqu'à « PubResearcher.command a été
+         bloqué… » et cliquez sur « Ouvrir quand même », puis confirmez (mot de passe
+         ou Touch ID).
+     Cette autorisation n'est demandée qu'une fois.
+  3. Une fenêtre du Terminal s'ouvre et le navigateur affiche http://localhost:4000.
+
+  Laissez la fenêtre du Terminal ouverte tant que vous travaillez : la fermer (ou Ctrl+C)
+  arrête PubResearcher.
+
+  Ensuite, vous pouvez aussi lancer PubResearcher.app (même dossier), qui ouvre la même
+  fenêtre. Gardez-la dans le dossier PubResearcher, à côté du dossier « app ».
+
+  Un double-clic alors que PubResearcher est déjà ouvert rouvre simplement le navigateur.
+
+  Pour l'administrateur : `xattr -dr com.apple.quarantine <dossier PubResearcher>` lève
+  la marque de téléchargement en une fois (c'est ce que fait PubResearcher.command).
+
+
+2. Où sont vos données
+----------------------
+
+  ~/Library/Application Support/PubResearcher
+  (Finder › Aller › Aller au dossier…, puis collez ce chemin)
+
+  Elles ne sont PAS dans le dossier de l'application : vous pouvez le supprimer ou le
+  remplacer sans rien perdre. Pour les mettre ailleurs (disque chiffré, partage d'étude) :
+      DATA_DIR=/Volumes/Etude/donnees ./PubResearcher.command
+
+  Ces données contiennent des informations de patients : protégez le poste et les copies.
+
+
+3. Sauvegarder
+--------------
+
+  Fermez PubResearcher, puis copiez le dossier ~/Library/Application Support/PubResearcher
+  en lieu sûr (disque chiffré). Pour restaurer, remettez-le à sa place, application fermée.
+
+
+4. Mettre à jour
+----------------
+
+  1. Fermez PubResearcher et faites une sauvegarde (§ 3).
+  2. Téléchargez la nouvelle archive (le numéro de version figure dans son nom),
+     décompressez-la, et remplacez l'ancien dossier PubResearcher par le nouveau.
+     Le premier lancement redemande l'autorisation (§ 1, étape 2).
+  3. Vos données sont reprises, et la base est mise à niveau toute seule si besoin
+     (« Base mise à jour » s'affiche dans la fenêtre).
+
+  Revenir à une version plus ancienne après une mise à niveau de la base n'est pas
+  possible sans la sauvegarde faite avant : l'application le dit et refuse de démarrer.
+
+
+5. En cas de problème
+---------------------
+
+  • « Le port 4000 est déjà occupé » : un autre programme utilise ce port. Fermez-le, ou,
+    dans le Terminal, depuis ce dossier :  PORT=4100 ./PubResearcher.command
+  • « Ces données sont déjà utilisées par une autre instance » : une fenêtre de
+    PubResearcher est déjà ouverte ; utilisez-la ou fermez-la.
+  • « Bad CPU type » ou rien ne se passe : vous avez pris l'archive d'un autre type de Mac.
+
+  Documentation complète : https://github.com/ridakodad/PubResearcher#readme
+
+
+Contenu du dossier
+------------------
+
+  PubResearcher.command   le lanceur (double-clic)
+  PubResearcher.app       le même lanceur, sous forme d'application
+  app/                    l'application : serveur, interface, modules, moteur Node.js
+  app/node/LICENSE        licence de Node.js et des bibliothèques qu'il embarque
+
+  Version {{VERSION}}, cible {{TARGET}}, construite depuis le commit {{COMMIT}}.

@@ -6,3 +6,7 @@ data/
 .env
 .env.local
 *.tsbuildinfo
+# Version prête à l'emploi (npm run package) : archives, téléchargements de Node.js, copies de travail.
+dist-packages/
+.package-cache/
+.package-work/

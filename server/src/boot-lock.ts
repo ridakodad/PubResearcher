@@ -5,7 +5,8 @@
  * crée le fichier et applique les migrations dès qu'il est chargé. Un second processus doit s'arrêter avant.
  */
 import './lib/env-guard.js';
-import { dataDir, port } from './config.js';
+import { dataDir, packageInfo, port } from './config.js';
+import { launchHints } from './lib/data-dir.js';
 import { DataInUseError, acquireDataLock } from './lib/data-lock.js';
 import { nodeVersionProblem } from './lib/node-version.js';
 import { fatalStartup } from './lib/startup-error.js';
@@ -27,9 +28,8 @@ try {
         `Deux instances sur les mêmes données se disputent la base. Deux possibilités :\n\n` +
         `  • Utiliser l'instance déjà ouverte (ou la fermer : Ctrl+C dans sa fenêtre), puis relancer.\n` +
         `  • Démarrer une seconde instance SÉPARÉE, avec ses propres données :\n` +
-        `        macOS/Linux :  PORT=4100 DATA_DIR=./data-2 npm start\n` +
-        `        Windows     :  $env:PORT=4100; $env:DATA_DIR="./data-2"; npm start\n\n` +
-        `Si aucune instance n'est ouverte, supprimez le fichier ${error.lockFile} et relancez.\n`,
+        launchHints(packageInfo !== null).secondInstance +
+        `\nSi aucune instance n'est ouverte, supprimez le fichier ${error.lockFile} et relancez.\n`,
     );
     process.exit(1);
   }

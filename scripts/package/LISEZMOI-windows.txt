@@ -1,0 +1,87 @@
+PubResearcher {{VERSION}} pour Windows (64 bits) — version prête à l'emploi
+==========================================================================
+
+Rien à installer : le moteur Node.js ({{NODE_VERSION}}) est fourni dans le dossier « app ».
+Aucune connexion internet n'est nécessaire pour démarrer, importer des dossiers ni lire
+les documents scannés (la reconnaissance de texte fonctionne hors ligne). Internet ne sert
+qu'aux fonctions qui l'annoncent : remplissage par Claude, recherche bibliographique.
+
+
+1. Démarrer
+-----------
+
+  1. Avant de décompresser : clic droit sur le fichier .zip › Propriétés › cochez
+     « Débloquer » en bas de l'onglet Général › OK. (Si la case n'existe pas, passez.)
+     Cela évite les avertissements de Windows à chaque lancement.
+  2. Clic droit sur le fichier .zip › « Extraire tout… » › Extraire.
+     Ne lancez rien depuis l'intérieur du .zip sans l'avoir extrait.
+  3. Dans le dossier extrait, ouvrez « PubResearcher », puis double-cliquez sur
+     PubResearcher.cmd. Le navigateur s'ouvre sur http://localhost:4000.
+
+  Laissez la fenêtre noire ouverte tant que vous travaillez : la fermer arrête PubResearcher.
+
+  Premier lancement — avertissements possibles (l'application n'est pas encore signée) :
+    • « Windows a protégé votre ordinateur » (SmartScreen) : cliquez sur
+      « Informations complémentaires », puis « Exécuter quand même ».
+    • « Le fichier ouvert présente un risque de sécurité » / « Éditeur inconnu » :
+      cliquez sur « Exécuter ».
+  Ces messages ne réapparaissent plus si vous avez coché « Débloquer » (étape 1).
+
+  Un double-clic alors que PubResearcher est déjà ouvert rouvre simplement le navigateur.
+
+
+2. Où sont vos données
+----------------------
+
+  %LOCALAPPDATA%\PubResearcher   (par exemple C:\Users\<vous>\AppData\Local\PubResearcher)
+
+  Elles ne sont PAS dans le dossier de l'application : vous pouvez le supprimer ou le
+  remplacer sans rien perdre. Pour les mettre ailleurs (disque chiffré, partage d'étude),
+  définissez la variable d'environnement DATA_DIR avant de lancer PubResearcher.cmd.
+
+  Ces données contiennent des informations de patients : protégez le poste et les copies.
+
+
+3. Sauvegarder
+--------------
+
+  Fermez la fenêtre de PubResearcher, puis copiez le dossier
+  %LOCALAPPDATA%\PubResearcher en lieu sûr (disque chiffré). Pour restaurer, remettez-le
+  à sa place, application fermée.
+
+
+4. Mettre à jour
+----------------
+
+  1. Fermez PubResearcher et faites une sauvegarde (§ 3).
+  2. Téléchargez la nouvelle archive (le numéro de version figure dans son nom),
+     décompressez-la, et remplacez l'ancien dossier PubResearcher par le nouveau.
+  3. Lancez PubResearcher.cmd : vos données sont reprises, et la base est mise à niveau
+     toute seule si besoin (« Base mise à jour » s'affiche dans la fenêtre).
+
+  Revenir à une version plus ancienne après une mise à niveau de la base n'est pas
+  possible sans la sauvegarde faite avant : l'application le dit et refuse de démarrer.
+
+
+5. En cas de problème
+---------------------
+
+  • « Le port 4000 est déjà occupé » : un autre programme utilise ce port. Fermez-le, ou
+    lancez PubResearcher sur un autre port depuis PowerShell, dans ce dossier :
+        $env:PORT=4100; .\PubResearcher.cmd
+  • « Ces données sont déjà utilisées par une autre instance » : une fenêtre de
+    PubResearcher est déjà ouverte ; utilisez-la ou fermez-la.
+  • Le dossier des données est inutilisable : le message dit pourquoi (droits, disque
+    plein…). Choisissez un autre dossier avec DATA_DIR.
+
+  Documentation complète : https://github.com/ridakodad/PubResearcher#readme
+
+
+Contenu du dossier
+------------------
+
+  PubResearcher.cmd     le lanceur (double-clic)
+  app\                  l'application : serveur, interface, modules, moteur Node.js
+  app\node\LICENSE      licence de Node.js et des bibliothèques qu'il embarque
+
+  Version {{VERSION}}, cible {{TARGET}}, construite depuis le commit {{COMMIT}}.

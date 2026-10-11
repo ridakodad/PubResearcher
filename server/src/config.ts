@@ -2,6 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { NUMERIC_SETTINGS, readNumericEnv } from './lib/env-check.js';
+import { currentDataDirContext, readPackageInfo, resolveDataDir } from './lib/data-dir.js';
 
 // Conservé ici : les tests et les scripts l'importent depuis la configuration.
 export { readIntEnv } from './lib/env-check.js';
@@ -21,8 +22,14 @@ function fromEnv(name: 'PORT' | 'MAX_UPLOAD_BYTES' | 'MAX_REQUEST_BYTES', fallba
 /** Racine du dépôt (server/src -> server -> racine, ou server/dist -> server -> racine). */
 export const repoRoot = path.resolve(here, '..', '..');
 
-/** Répertoire de données : base SQLite + fichiers uploadés. */
-export const dataDir = path.resolve(process.env.DATA_DIR?.trim() || path.join(repoRoot, 'data'));
+/** Version prête à l'emploi (archive dézippée, Node.js fourni) : décrite par `pubresearcher-package.json`, sinon `null`. */
+export const packageInfo = readPackageInfo(repoRoot);
+
+/**
+ * Répertoire de données : base SQLite + fichiers uploadés. `DATA_DIR`, sinon `data/` à la racine (sources) ou, pour la
+ * version prête à l'emploi, le dossier de données de l'utilisateur — hors du dossier que remplace une mise à jour.
+ */
+export const dataDir = resolveDataDir(currentDataDirContext(repoRoot, packageInfo !== null));
 
 export const uploadsDir = path.join(dataDir, 'uploads');
 /**

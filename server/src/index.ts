@@ -1,6 +1,7 @@
 import './boot-lock.js';
 import fs from 'node:fs';
-import { appPassword, dataDir, ensureDataDirs, host, port, webDistDir } from './config.js';
+import { appPassword, dataDir, ensureDataDirs, host, packageInfo, port, webDistDir } from './config.js';
+import { launchHints } from './lib/data-dir.js';
 import { seedIfEmpty } from './db/seed.js';
 import { createApp } from './app.js';
 import { shutdownParsers } from './extract/isolation.js';
@@ -74,12 +75,11 @@ server.on('error', (error: NodeJS.ErrnoException) => {
       `\nLe port ${port} est déjà occupé.\n\n` +
         `C'est presque toujours une instance de cette application restée ouverte\n` +
         `dans une autre fenêtre — ou un autre programme qui utilise ce port. Deux options :\n\n` +
-        `  • Fermez l'autre fenêtre (Ctrl+C y suffit), puis relancez « npm start ».\n` +
+        `  • Fermez l'autre fenêtre (Ctrl+C y suffit), puis ${launchHints(packageInfo !== null).relaunch}.\n` +
         `  • Ou démarrez sur un autre port, en gardant les mêmes données : impossible tant que l'autre\n` +
         `    instance tourne (les deux se disputeraient la base). Pour deux instances séparées, donnez\n` +
         `    aussi un dossier de données distinct :\n` +
-        `        Windows  :  $env:PORT=4100; $env:DATA_DIR="./data-2"; npm start\n` +
-        `        macOS/Linux :  PORT=4100 DATA_DIR=./data-2 npm start\n`,
+        launchHints(packageInfo !== null).secondInstance,
     );
   } else if (error.code === 'EACCES') {
     console.error(

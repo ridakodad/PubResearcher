@@ -1,0 +1,75 @@
+PubResearcher {{VERSION}} pour Linux (x86-64, glibc) — version prête à l'emploi
+==========================================================================
+
+Rien à installer : le moteur Node.js ({{NODE_VERSION}}) est fourni dans le dossier « app ».
+Aucune connexion internet n'est nécessaire pour démarrer, importer des dossiers ni lire
+les documents scannés (la reconnaissance de texte fonctionne hors ligne). Internet ne sert
+qu'aux fonctions qui l'annoncent : remplissage par Claude, recherche bibliographique.
+
+Distributions récentes à glibc (Ubuntu 20.04+, Debian 11+, Fedora…). Alpine (musl) :
+utilisez la version depuis les sources.
+
+
+1. Démarrer
+-----------
+
+      tar -xzf PubResearcher-{{VERSION}}-{{TARGET}}.tar.gz
+      ./PubResearcher/pubresearcher.sh
+
+  Le navigateur s'ouvre sur http://localhost:4000 (sinon, ouvrez cette adresse).
+  Laissez le terminal ouvert tant que vous travaillez : Ctrl+C arrête PubResearcher.
+  Sans écran (serveur) : PUBRESEARCHER_NO_BROWSER=1 ./PubResearcher/pubresearcher.sh
+
+  Un second lancement alors que PubResearcher est déjà ouvert rouvre simplement le navigateur.
+
+
+2. Où sont vos données
+----------------------
+
+  ~/.local/share/pubresearcher   (ou $XDG_DATA_HOME/pubresearcher)
+
+  Elles ne sont PAS dans le dossier de l'application : vous pouvez le supprimer ou le
+  remplacer sans rien perdre. Pour les mettre ailleurs (disque chiffré, partage d'étude) :
+      DATA_DIR=/srv/etude/donnees ./PubResearcher/pubresearcher.sh
+
+  Ces données contiennent des informations de patients : protégez le poste et les copies.
+
+
+3. Sauvegarder
+--------------
+
+  Arrêtez PubResearcher, puis copiez le dossier de données en lieu sûr (disque chiffré).
+  Pour restaurer, remettez-le à sa place, application arrêtée.
+
+
+4. Mettre à jour
+----------------
+
+  1. Arrêtez PubResearcher et faites une sauvegarde (§ 3).
+  2. Décompressez la nouvelle archive (le numéro de version figure dans son nom) et
+     remplacez l'ancien dossier PubResearcher par le nouveau.
+  3. Relancez : vos données sont reprises, et la base est mise à niveau toute seule si
+     besoin (« Base mise à jour » s'affiche).
+
+  Revenir à une version plus ancienne après une mise à niveau de la base n'est pas
+  possible sans la sauvegarde faite avant : l'application le dit et refuse de démarrer.
+
+
+5. En cas de problème
+---------------------
+
+  • « Le port 4000 est déjà occupé » : PORT=4100 ./PubResearcher/pubresearcher.sh
+  • « Ces données sont déjà utilisées par une autre instance » : PubResearcher est déjà
+    lancé ailleurs ; utilisez-le ou arrêtez-le.
+
+  Documentation complète : https://github.com/ridakodad/PubResearcher#readme
+
+
+Contenu du dossier
+------------------
+
+  pubresearcher.sh      le lanceur
+  app/                  l'application : serveur, interface, modules, moteur Node.js
+  app/node/LICENSE      licence de Node.js et des bibliothèques qu'il embarque
+
+  Version {{VERSION}}, cible {{TARGET}}, construite depuis le commit {{COMMIT}}.
