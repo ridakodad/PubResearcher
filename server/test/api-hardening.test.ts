@@ -21,6 +21,8 @@ process.env.DATA_DIR = tmpDir;
 process.env.DB_PATH = path.join(tmpDir, 'test.db');
 process.env.OCR_ENABLED = '0';
 delete process.env.APIFY_TOKEN;
+// Aucune requête vers le vrai NCBI : une adresse fermée.
+process.env.NCBI_EUTILS_BASE = 'http://127.0.0.1:9/entrez/eutils';
 
 const { createApp } = await import('../src/app.js');
 const { seedIfEmpty } = await import('../src/db/seed.js');
@@ -484,6 +486,7 @@ describe('exports bibliographiques : aucun caractère de contrôle, aucune struc
     publicationTypes: [],
     citedBy: null,
     citedByUrl: null,
+    refType: null,
     ...over,
   });
 
@@ -509,7 +512,7 @@ describe('exports bibliographiques : aucun caractère de contrôle, aucune struc
   test('BibTeX : pas de caractère de contrôle, accolades échappées, une entrée par référence', () => {
     const bib = toBibtex([hostile, ref({ id: 8, title: 'Autre' })]);
     assert.doesNotMatch(bib.replace(/\n/g, ''), /\p{Cc}/u);
-    assert.equal((bib.match(/^@article\{/gm) ?? []).length, 2, 'le « @article » du résumé n’a pas ouvert une entrée');
+    assert.equal((bib.match(/^@\w+\{/gm) ?? []).length, 2, 'le « @article » du résumé n’a pas ouvert une entrée');
     assert.ok(bib.includes('\\{injecte'), 'les accolades du résumé sont échappées');
   });
 });
@@ -859,7 +862,8 @@ describe('corps de requête de toute forme : jamais d’erreur 500, jamais de fu
       body: { field: { key: 'k', label: 'K', type: 'integer', extraction: { enabled: true, rules: [{ kind: 'label', labels: ['Âge'] }] } }, sampleText: 'Âge : 54 ans' },
       expect: [200],
     },
-    { method: 'POST', path: '/api/biblio/searches', body: { query: 'asthme', sources: ['pubmed'], maxResults: 5, sort: 'relevance' }, expect: [409] },
+    // Google Scholar sans jeton Apify : refusé avant tout appel réseau (PubMed, lui, interrogerait le NCBI).
+    { method: 'POST', path: '/api/biblio/searches', body: { query: 'asthme', sources: ['scholar'], maxResults: 5, sort: 'relevance' }, expect: [409] },
     { method: 'PATCH', path: '/api/biblio/refs/1', body: { decision: 'include', note: 'x' }, expect: [404] },
     { method: 'POST', path: '/api/redaction/message', body: { templateId, messages: [{ role: 'user', content: 'Bonjour' }] }, expect: [200], stream: true },
   ];

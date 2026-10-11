@@ -3,14 +3,82 @@
  * Miroir côté interface : `web/src/lib/types.ts` (section « Revue bibliographique »).
  */
 
-/** Sources interrogeables, chacune par un acteur Apify. */
-export const BIBLIO_SOURCES = ['pubmed', 'scholar'] as const;
+/**
+ * Sources d'une référence : les deux qu'on interroge d'ici (PubMed par les
+ * E-utilities du NCBI, Google Scholar par un acteur Apify) et les bases dont on
+ * importe un export (RIS, nbib, BibTeX, CSV).
+ */
+export const SEARCHABLE_SOURCES = ['pubmed', 'scholar'] as const;
+export type SearchableSource = (typeof SEARCHABLE_SOURCES)[number];
+
+export const BIBLIO_SOURCES = [
+  'pubmed',
+  'scholar',
+  'embase',
+  'central',
+  'scopus',
+  'wos',
+  'lissa',
+  'cinahl',
+  'psycinfo',
+  'clinicaltrials',
+  'ictrp',
+  'other_db',
+  'other',
+] as const;
 export type BiblioSource = (typeof BIBLIO_SOURCES)[number];
 
 export const SOURCE_LABELS: Record<BiblioSource, string> = {
   pubmed: 'PubMed',
   scholar: 'Google Scholar',
+  embase: 'Embase',
+  central: 'Cochrane CENTRAL',
+  scopus: 'Scopus',
+  wos: 'Web of Science',
+  lissa: 'LiSSa',
+  cinahl: 'CINAHL',
+  psycinfo: 'PsycINFO',
+  clinicaltrials: 'ClinicalTrials.gov',
+  ictrp: 'OMS ICTRP',
+  other_db: 'Autre base de données',
+  other: 'Autre (citations, sites, experts…)',
 };
+
+/**
+ * Colonne du diagramme PRISMA 2020 où se comptent les notices d'une source.
+ * Google Scholar est un moteur de recherche, pas une base bibliographique : il
+ * se range, comme les sites web et la recherche de citations, sous « autres
+ * méthodes ».
+ */
+export type PrismaCategory = 'database' | 'register' | 'other';
+export const SOURCE_CATEGORY: Record<BiblioSource, PrismaCategory> = {
+  pubmed: 'database',
+  scholar: 'other',
+  embase: 'database',
+  central: 'database',
+  scopus: 'database',
+  wos: 'database',
+  lissa: 'database',
+  cinahl: 'database',
+  psycinfo: 'database',
+  clinicaltrials: 'register',
+  ictrp: 'register',
+  other_db: 'database',
+  other: 'other',
+};
+
+export const isBiblioSource = (value: unknown): value is BiblioSource =>
+  typeof value === 'string' && (BIBLIO_SOURCES as readonly string[]).includes(value);
+
+/**
+ * Types de référence, codés comme le champ `TY` du format RIS. Un import garde
+ * le type que la base d'origine a donné ; PubMed le déduit de ses types de
+ * publication.
+ */
+export const REF_TYPES = ['JOUR', 'CONF', 'BOOK', 'CHAP', 'THES', 'RPRT', 'GEN', 'UNPB', 'ELEC', 'DATA'] as const;
+export type RefType = (typeof REF_TYPES)[number];
+export const isRefType = (value: unknown): value is RefType =>
+  typeof value === 'string' && (REF_TYPES as readonly string[]).includes(value);
 
 /** Tri d'une référence. `pending` = pas encore lue. */
 export const DECISIONS = ['pending', 'include', 'maybe', 'exclude'] as const;
@@ -24,8 +92,10 @@ export const DECISION_LABELS: Record<Decision, string> = {
 };
 
 /**
- * Motifs d'exclusion. Ce sont eux que le diagramme de flux dénombre : une
- * exclusion sans motif ne se compte nulle part, le serveur la refuse.
+ * Motifs d'exclusion, que le diagramme de flux dénombre. Au tri sur titre et
+ * résumé, PRISMA 2020 n'exige pas de motif : une exclusion sans motif est
+ * acceptée et se compte sous « motif non précisé ». Le motif devient
+ * obligatoire à l'évaluation du texte intégral.
  */
 export const EXCLUSION_REASONS = {
   population: 'Population hors sujet',
@@ -67,9 +137,12 @@ export interface BiblioRefInput {
   publicationTypes: string[];
   citedBy: number | null;
   citedByUrl: string | null;
+  /** Type RIS de la référence, quand la source le dit ; sinon déduit à l'export. */
+  refType?: RefType | null;
 }
 
-export interface BiblioRef extends Omit<BiblioRefInput, 'source'> {
+export interface BiblioRef extends Omit<BiblioRefInput, 'source' | 'refType'> {
+  refType: RefType | null;
   id: number;
   /** Toutes les sources qui ont rendu cette référence. */
   sources: BiblioSource[];
@@ -84,20 +157,39 @@ export interface BiblioRef extends Omit<BiblioRefInput, 'source'> {
 
 export type SearchStatus = 'running' | 'ok' | 'error';
 export type SearchSort = 'relevance' | 'date';
+/** Une interrogation lancée d'ici, ou l'import d'un fichier exporté d'une autre base. */
+export type SearchKind = 'search' | 'import';
 
-/** Une interrogation d'une source : la chaîne exacte, sa date, ce qu'elle a rendu. */
+/**
+ * Une interrogation d'une source — ou un import — : la chaîne exacte, sa date,
+ * ce qu'elle a rendu. C'est le journal de recherche que PRISMA-S demande.
+ */
 export interface BiblioSearch {
   id: number;
+  kind: SearchKind;
   source: BiblioSource;
+  /** Service interrogé (« NCBI E-utilities », acteur Apify) ou format du fichier importé. */
   actor: string;
   query: string;
+  /** Chaîne réellement transmise, quand elle diffère de `query` (balises PubMed retirées pour Scholar). */
+  sentQuery: string | null;
+  /** Traduction de l'équation par PubMed (termes MeSH développés, dates) : la chaîne qui a vraiment tourné. */
+  queryTranslation: string | null;
+  /** Nom du fichier importé. */
+  fileName: string | null;
+  /** Nom libre de la source, pour « Autre ». */
+  sourceLabel: string | null;
   yearFrom: number | null;
   yearTo: number | null;
   maxResults: number;
   sort: SearchSort;
   status: SearchStatus;
   error: string | null;
-  /** Références exploitables rendues par l'acteur. */
+  /** Avertissements de la passe (plafond atteint, balises retirées, lignes écartées…). */
+  warnings: string[];
+  /** Nombre total de résultats annoncé par la source (`Count` de PubMed) ; `null` quand elle ne le dit pas. */
+  totalCount: number | null;
+  /** Références exploitables rendues par la source, ou lues dans le fichier. */
   returned: number;
   /** Lignes rendues mais inexploitables (sans titre, message d'accompagnement…). */
   skipped: number;
@@ -115,13 +207,30 @@ export interface BiblioCounts {
   include: number;
   maybe: number;
   exclude: number;
-  bySource: { pubmed: number; scholar: number; both: number };
+  /** Références par source (une référence trouvée par deux sources compte pour chacune). */
+  bySource: Partial<Record<BiblioSource, number>>;
+  /** Références trouvées par au moins deux sources. */
+  multiSource: number;
 }
 
-/** Données du diagramme de flux, calculées des recherches et des décisions. */
+export interface PrismaSourceCount {
+  source: BiblioSource;
+  label: string;
+  category: PrismaCategory;
+  count: number;
+}
+
+/**
+ * Données du diagramme de flux, calculées des recherches, des imports et des
+ * décisions (voir `prisma()` dans `repo/biblio.ts` pour les définitions).
+ */
 export interface BiblioPrisma {
   identified: number;
-  bySource: { pubmed: number; scholar: number };
+  /** Notices identifiées, source par source, avec la colonne PRISMA de chacune. */
+  bySource: PrismaSourceCount[];
+  identifiedDatabases: number;
+  identifiedRegisters: number;
+  identifiedOther: number;
   duplicatesRemoved: number;
   screened: number;
   excluded: number;

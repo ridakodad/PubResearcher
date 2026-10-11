@@ -1,9 +1,12 @@
 import { db, nowIso, parseJson } from '../db/index.js';
 import { isTruncated, normTitle } from '../biblio/normalize.js';
 import {
-  BIBLIO_SOURCES,
   DECISIONS,
+  SOURCE_CATEGORY,
+  SOURCE_LABELS,
+  isBiblioSource,
   isExclusionReason,
+  isRefType,
   type BiblioCounts,
   type BiblioPrisma,
   type BiblioRef,
@@ -12,6 +15,8 @@ import {
   type BiblioSource,
   type Decision,
   type ExclusionReason,
+  type PrismaSourceCount,
+  type SearchKind,
   type SearchSort,
   type SearchStatus,
 } from '../biblio/types.js';
@@ -42,6 +47,7 @@ interface RefRow {
   cited_by: number | null;
   cited_by_url: string | null;
   sources: string;
+  ref_type: string | null;
   decision: string;
   exclusion_reason: string | null;
   note: string | null;
@@ -52,6 +58,7 @@ interface RefRow {
 
 interface SearchRow {
   id: number;
+  kind: string;
   source: string;
   actor: string;
   query: string;
@@ -67,9 +74,15 @@ interface SearchRow {
   duplicates: number;
   duration_ms: number | null;
   queried_at: string;
+  sent_query: string | null;
+  query_translation: string | null;
+  file_name: string | null;
+  source_label: string | null;
+  warnings: string;
+  total_count: number | null;
 }
 
-const isSource = (v: unknown): v is BiblioSource => BIBLIO_SOURCES.includes(v as BiblioSource);
+const isSource = isBiblioSource;
 const isDecision = (v: unknown): v is Decision => DECISIONS.includes(v as Decision);
 
 function toRef(row: RefRow): BiblioRef {
@@ -96,6 +109,7 @@ function toRef(row: RefRow): BiblioRef {
     publicationTypes: parseJson<string[]>(row.publication_types, []),
     citedBy: row.cited_by,
     citedByUrl: row.cited_by_url,
+    refType: isRefType(row.ref_type) ? row.ref_type : null,
     decision: isDecision(row.decision) ? row.decision : 'pending',
     exclusionReason: isExclusionReason(row.exclusion_reason) ? row.exclusion_reason : null,
     note: row.note,
@@ -108,9 +122,14 @@ function toRef(row: RefRow): BiblioRef {
 function toSearch(row: SearchRow): BiblioSearch {
   return {
     id: row.id,
+    kind: row.kind === 'import' ? 'import' : 'search',
     source: isSource(row.source) ? row.source : 'pubmed',
     actor: row.actor,
     query: row.query,
+    sentQuery: row.sent_query,
+    queryTranslation: row.query_translation,
+    fileName: row.file_name,
+    sourceLabel: row.source_label,
     yearFrom: row.year_from,
     yearTo: row.year_to,
     maxResults: row.max_results,
@@ -119,6 +138,8 @@ function toSearch(row: SearchRow): BiblioSearch {
       ? (row.status as SearchStatus)
       : 'error',
     error: row.error,
+    warnings: parseJson<unknown[]>(row.warnings, []).filter((w): w is string => typeof w === 'string'),
+    totalCount: row.total_count,
     returned: row.returned,
     skipped: row.skipped,
     added: row.added,
@@ -131,9 +152,13 @@ function toSearch(row: SearchRow): BiblioSearch {
 /* ─────────────────────────────── Recherches ────────────────────────────── */
 
 export function createSearch(input: {
+  kind?: SearchKind;
   source: BiblioSource;
   actor: string;
   query: string;
+  sentQuery?: string | null;
+  fileName?: string | null;
+  sourceLabel?: string | null;
   yearFrom: number | null;
   yearTo: number | null;
   maxResults: number;
@@ -142,13 +167,17 @@ export function createSearch(input: {
   const result = db
     .prepare(
       `INSERT INTO biblio_searches
-         (source, actor, query, year_from, year_to, max_results, sort, status, queried_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'running', ?)`,
+         (kind, source, actor, query, sent_query, file_name, source_label, year_from, year_to, max_results, sort, status, queried_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?)`,
     )
     .run(
+      input.kind ?? 'search',
       input.source,
       input.actor,
       input.query,
+      input.sentQuery ?? null,
+      input.fileName ?? null,
+      input.sourceLabel ?? null,
       input.yearFrom,
       input.yearTo,
       input.maxResults,
@@ -158,22 +187,37 @@ export function createSearch(input: {
   return Number(result.lastInsertRowid);
 }
 
+/** Ce qu'une passe a appris de la source, réussie ou non : le journal de recherche le garde. */
+interface SearchFacts {
+  totalCount?: number | null;
+  queryTranslation?: string | null;
+  warnings?: string[];
+}
+
 export function finishSearch(
   id: number,
   outcome:
-    | { status: 'ok'; returned: number; skipped: number; added: number; duplicates: number; durationMs: number }
-    | { status: 'error'; error: string; durationMs: number },
+    | ({ status: 'ok'; returned: number; skipped: number; added: number; duplicates: number; durationMs: number } & SearchFacts)
+    | ({ status: 'error'; error: string; durationMs: number } & SearchFacts),
 ): BiblioSearch {
+  const facts = [
+    outcome.totalCount ?? null,
+    outcome.queryTranslation ?? null,
+    JSON.stringify(outcome.warnings ?? []),
+  ];
   if (outcome.status === 'ok') {
     db.prepare(
       `UPDATE biblio_searches
-          SET status = 'ok', returned = ?, skipped = ?, added = ?, duplicates = ?, duration_ms = ?
+          SET status = 'ok', returned = ?, skipped = ?, added = ?, duplicates = ?, duration_ms = ?,
+              total_count = ?, query_translation = ?, warnings = ?
         WHERE id = ?`,
-    ).run(outcome.returned, outcome.skipped, outcome.added, outcome.duplicates, outcome.durationMs, id);
+    ).run(outcome.returned, outcome.skipped, outcome.added, outcome.duplicates, outcome.durationMs, ...facts, id);
   } else {
     db.prepare(
-      `UPDATE biblio_searches SET status = 'error', error = ?, duration_ms = ? WHERE id = ?`,
-    ).run(outcome.error, outcome.durationMs, id);
+      `UPDATE biblio_searches
+          SET status = 'error', error = ?, duration_ms = ?, total_count = ?, query_translation = ?, warnings = ?
+        WHERE id = ?`,
+    ).run(outcome.error, outcome.durationMs, ...facts, id);
   }
   return getSearch(id) as BiblioSearch;
 }
@@ -268,6 +312,7 @@ function mergeRefs(existing: RefRow, incoming: BiblioRefInput): void {
   // Le titre complet l'emporte sur le titre tronqué ; PubMed fait foi pour la revue et les auteurs.
   const incomingTruncated = isTruncated(incoming.title);
   const takeTitle = known.titleTruncated && !incomingTruncated;
+  // Une notice PubMed (API ou export .nbib) fait foi pour les auteurs et la revue.
   const fromPubmed = incoming.source === 'pubmed';
 
   db.prepare(
@@ -276,7 +321,7 @@ function mergeRefs(existing: RefRow, incoming: BiblioRefInput): void {
        authors = ?, year = ?, journal = ?, volume = ?, issue = ?, pages = ?,
        doi = ?, pmid = ?, pmcid = ?, url = ?, pdf_url = ?, abstract = ?, snippet = ?,
        keywords = ?, mesh_terms = ?, publication_types = ?,
-       cited_by = ?, cited_by_url = ?, sources = ?, updated_at = ?
+       cited_by = ?, cited_by_url = ?, sources = ?, ref_type = ?, updated_at = ?
      WHERE id = ?`,
   ).run(
     takeTitle ? incoming.title : known.title,
@@ -301,25 +346,33 @@ function mergeRefs(existing: RefRow, incoming: BiblioRefInput): void {
     known.citedBy === null ? incoming.citedBy : Math.max(known.citedBy, incoming.citedBy ?? 0),
     orNull(known.citedByUrl, incoming.citedByUrl),
     JSON.stringify(sources),
+    fromPubmed && incoming.refType ? incoming.refType : (known.refType ?? incoming.refType ?? null),
     nowIso(),
     existing.id,
   );
 }
 
 /**
- * Verse les références d'une recherche dans la bibliothèque.
+ * Verse les références d'une recherche (ou d'un import) dans la bibliothèque.
  *
  * Une référence déjà connue — même DOI, même PMID, ou même titre — n'est pas
  * dupliquée : elle s'enrichit (la notice Google Scholar apporte le nombre de
- * citations, la notice PubMed le résumé) et la recherche y est rattachée. Le
- * dénombrement en sort tel que le diagramme de flux le demande : références
- * identifiées, dont autant de doublons, d'où autant de références à trier.
+ * citations, la notice PubMed le résumé) et la recherche y est rattachée.
+ *
+ * `added` et `duplicates` décrivent CETTE passe, pour son bilan et
+ * l'historique : relancer une équation donne « 0 nouvelle, n déjà connues ».
+ * Le diagramme de flux, lui, ne les additionne pas d'une passe à l'autre : il
+ * se calcule des rattachements (`biblio_hits`), voir `prisma()`. Deux notices
+ * d'une même liste qui désignent le même article sont comptées dans `copies`.
  */
 export const addRefsFromSearch = db.transaction(
   (searchId: number, refs: BiblioRefInput[]): { added: number; duplicates: number } => {
     let added = 0;
     let duplicates = 0;
-    const hit = db.prepare('INSERT OR IGNORE INTO biblio_hits (search_id, ref_id, rank) VALUES (?, ?, ?)');
+    const hit = db.prepare(
+      `INSERT INTO biblio_hits (search_id, ref_id, rank, copies) VALUES (?, ?, ?, 1)
+       ON CONFLICT (search_id, ref_id) DO UPDATE SET copies = copies + 1`,
+    );
 
     refs.forEach((ref, index) => {
       const existing = findExisting(ref);
@@ -335,8 +388,8 @@ export const addRefsFromSearch = db.transaction(
           `INSERT INTO biblio_refs
              (norm_title, title_truncated, title, authors, year, journal, volume, issue, pages,
               doi, pmid, pmcid, url, pdf_url, abstract, snippet, keywords, mesh_terms,
-              publication_types, cited_by, cited_by_url, sources, first_search_id, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              publication_types, cited_by, cited_by_url, sources, ref_type, first_search_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           normTitle(ref.title),
@@ -361,6 +414,7 @@ export const addRefsFromSearch = db.transaction(
           ref.citedBy,
           ref.citedByUrl,
           JSON.stringify([ref.source]),
+          ref.refType ?? null,
           searchId,
           now,
           now,
@@ -391,7 +445,8 @@ function whereOf(filter: RefFilter): { sql: string; params: unknown[] } {
     params.push(filter.decision);
   }
   if (filter.source === 'both') {
-    parts.push(`sources LIKE '%"pubmed"%' AND sources LIKE '%"scholar"%'`);
+    // « Trouvées par plusieurs sources ».
+    parts.push('json_array_length(sources) > 1');
   } else if (filter.source) {
     parts.push('sources LIKE ?');
     params.push(`%"${filter.source}"%`);
@@ -492,7 +547,11 @@ export function updateRefDecision(
   const decision = patch.decision ?? current.decision;
   // Le motif n'a de sens que pour une exclusion : il disparaît avec elle.
   const reason =
-    decision === 'exclude' ? (patch.exclusionReason ?? current.exclusionReason) : null;
+    decision === 'exclude'
+      ? patch.exclusionReason === undefined
+        ? current.exclusionReason
+        : patch.exclusionReason
+      : null;
   const note = patch.note === undefined ? current.note : patch.note?.trim() || null;
 
   db.prepare(
@@ -509,15 +568,18 @@ export function counts(): BiblioCounts {
     .all() as { decision: string; n: number }[];
   const count = (d: Decision) => byDecision.find((r) => r.decision === d)?.n ?? 0;
 
-  const sources = db
+  const perSource = db
     .prepare(
-      `SELECT
-         COALESCE(SUM(sources LIKE '%"pubmed"%'), 0) AS pubmed,
-         COALESCE(SUM(sources LIKE '%"scholar"%'), 0) AS scholar,
-         COALESCE(SUM(sources LIKE '%"pubmed"%' AND sources LIKE '%"scholar"%'), 0) AS both_sources
-       FROM biblio_refs`,
+      `SELECT s.value AS source, COUNT(*) AS n
+         FROM biblio_refs r, json_each(r.sources) s
+        GROUP BY s.value`,
     )
-    .get() as { pubmed: number; scholar: number; both_sources: number };
+    .all() as { source: string; n: number }[];
+  const bySource: BiblioCounts['bySource'] = {};
+  for (const row of perSource) if (isSource(row.source)) bySource[row.source] = row.n;
+  const multi = db.prepare('SELECT COUNT(*) AS n FROM biblio_refs WHERE json_array_length(sources) > 1').get() as {
+    n: number;
+  };
 
   return {
     total: byDecision.reduce((sum, r) => sum + r.n, 0),
@@ -525,23 +587,65 @@ export function counts(): BiblioCounts {
     include: count('include'),
     maybe: count('maybe'),
     exclude: count('exclude'),
-    bySource: { pubmed: sources.pubmed, scholar: sources.scholar, both: sources.both_sources },
+    bySource,
+    multiSource: multi.n,
   };
 }
 
 /**
- * Chiffres du diagramme de flux. Aucun n'est saisi : les références
- * identifiées et les doublons viennent des recherches réussies, le reste de
+ * Chiffres du diagramme de flux. Aucun n'est saisi : ils se calculent des
+ * rattachements entre recherches réussies et références (`biblio_hits`), et de
  * l'état de tri.
+ *
+ * - **Notices identifiées, par source** : pour chaque source (PubMed, Embase…),
+ *   le nombre de notices DISTINCTES que ses recherches et imports réussis ont
+ *   rendues. Une référence rendue par trois passes de la même source — la même
+ *   équation relancée, ou deux équations qui se recoupent — compte UNE fois
+ *   pour cette source : relancer une recherche ne gonfle plus le diagramme.
+ *   Deux notices d'un même export qui désignent le même article (doublon
+ *   interne, `copies`) comptent pour deux, comme dans le fichier.
+ * - **Notices identifiées** : la somme des sources, rangées dans leur colonne
+ *   PRISMA 2020 (bases de données, registres, autres méthodes — Google
+ *   Scholar en fait partie).
+ * - **Doublons retirés** : identifiées − références uniques. Un article
+ *   trouvé par PubMed et par Embase compte une fois par source, puis une fois
+ *   comme doublon.
+ * - **À trier** : les références uniques de la bibliothèque.
+ *
+ * Ainsi « identifiées − doublons = à trier » tient toujours, quel que soit le
+ * nombre de passes.
  */
 export function prisma(): BiblioPrisma {
-  const searches = db
+  const rows = db
     .prepare(
-      `SELECT source, COALESCE(SUM(returned), 0) AS returned, COALESCE(SUM(duplicates), 0) AS duplicates
-         FROM biblio_searches WHERE status = 'ok' GROUP BY source`,
+      `SELECT source, COALESCE(SUM(copies), 0) AS n FROM (
+         SELECT s.source AS source, h.ref_id AS ref_id, MAX(h.copies) AS copies
+           FROM biblio_hits h JOIN biblio_searches s ON s.id = h.search_id
+          WHERE s.status = 'ok'
+          GROUP BY s.source, h.ref_id
+       ) GROUP BY source`,
     )
-    .all() as { source: string; returned: number; duplicates: number }[];
-  const returned = (s: BiblioSource) => searches.find((r) => r.source === s)?.returned ?? 0;
+    .all() as { source: string; n: number }[];
+
+  // « Autre » : les noms libres donnés aux imports sont repris dans le libellé.
+  const labels = db
+    .prepare(
+      `SELECT source, GROUP_CONCAT(DISTINCT source_label) AS labels
+         FROM biblio_searches WHERE status = 'ok' AND source_label IS NOT NULL AND source_label <> ''
+        GROUP BY source`,
+    )
+    .all() as { source: string; labels: string | null }[];
+  const labelOf = (source: BiblioSource): string => {
+    const named = labels.find((l) => l.source === source)?.labels;
+    return named ? `${SOURCE_LABELS[source]} : ${named.split(',').join(', ')}` : SOURCE_LABELS[source];
+  };
+
+  const bySource: PrismaSourceCount[] = rows
+    .filter((r): r is { source: BiblioSource; n: number } => isSource(r.source) && r.n > 0)
+    .map((r) => ({ source: r.source, label: labelOf(r.source), category: SOURCE_CATEGORY[r.source], count: r.n }))
+    .sort((a, b) => b.count - a.count);
+  const sum = (category?: string) =>
+    bySource.filter((r) => category === undefined || r.category === category).reduce((total, r) => total + r.count, 0);
 
   const c = counts();
   const byReason = db
@@ -551,10 +655,14 @@ export function prisma(): BiblioPrisma {
     )
     .all() as { reason: string | null; n: number }[];
 
+  const identified = sum();
   return {
-    identified: returned('pubmed') + returned('scholar'),
-    bySource: { pubmed: returned('pubmed'), scholar: returned('scholar') },
-    duplicatesRemoved: searches.reduce((sum, r) => sum + r.duplicates, 0),
+    identified,
+    bySource,
+    identifiedDatabases: sum('database'),
+    identifiedRegisters: sum('register'),
+    identifiedOther: sum('other'),
+    duplicatesRemoved: Math.max(0, identified - c.total),
     screened: c.total,
     excluded: c.exclude,
     excludedByReason: byReason.map((r) => ({
