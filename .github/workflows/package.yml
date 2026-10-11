@@ -10,6 +10,13 @@ on:
   workflow_dispatch:
   push:
     tags: ['v*']
+    # Et à chaque modification de l'empaquetage sur la branche de travail : l'essai sur les trois systèmes suit le code.
+    branches: [landing]
+    paths:
+      - 'scripts/package/**'
+      - 'scripts/package.mjs'
+      - '.github/workflows/package.yml'
+      - 'package.json'
 
 permissions:
   contents: read
@@ -47,8 +54,13 @@ jobs:
       - name: Essai de l'archive
         shell: bash
         run: |
-          archive=$(ls dist-packages/PubResearcher-*-${{ matrix.target }}.zip dist-packages/PubResearcher-*-${{ matrix.target }}.tar.gz 2>/dev/null | head -n 1)
-          node scripts/package/smoke-test.mjs "$archive"
+          # Une seule archive par système (.tar.gz sous Linux, .zip ailleurs). Pas de « ls » d'un fichier absent : le
+          # shell des Actions (set -eo pipefail) arrêterait l'étape avant l'essai.
+          shopt -s nullglob
+          archives=(dist-packages/PubResearcher-*-${{ matrix.target }}.zip dist-packages/PubResearcher-*-${{ matrix.target }}.tar.gz)
+          ls -la dist-packages
+          if [ ${#archives[@]} -ne 1 ]; then echo "::error title=Essai::archive introuvable ou en double (${#archives[@]})"; exit 1; fi
+          node scripts/package/smoke-test.mjs "${archives[0]}"
 
       - uses: actions/upload-artifact@v4
         with:

@@ -152,6 +152,8 @@ try {
   }
 } catch (error) {
   console.error(`\nÉCHEC : ${error.message}\n\nSortie de l'application :\n${output}`);
+  // Sur GitHub Actions, la cause s'affiche dans les annotations de l'exécution, sans ouvrir le journal.
+  if (process.env.GITHUB_ACTIONS) console.log(`::error title=Essai de l'archive::${error.message.replace(/\r?\n/g, ' ')}`);
   stop();
   await exited;
   process.exit(1);
