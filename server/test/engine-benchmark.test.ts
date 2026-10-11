@@ -163,6 +163,41 @@ const CASES: Case[] = [
   { key: 'modalite_imagerie', text: 'Imagerie : scanner et IRM', expect: ['Scanner', 'IRM'] },
   { key: 'modalite_imagerie', text: 'Le patient affirme ne rien avoir de grave.', expect: null, note: '« irm » dans « affirme »' },
   { key: 'numero_dossier', text: 'N° dossier : 24-0153', expect: '24-0153' },
+
+  // ── Hypothèse, absence établie, épisode passé, non renseigné : jamais un « Oui » (ni un « Non ») inventé
+  { key: 'diabete', text: 'Suspicion de diabète, HbA1c à contrôler.', expect: null, note: 'hypothèse' },
+  { key: 'diabete', text: 'Diabète à éliminer devant une glycosurie.', expect: null, note: '« à éliminer » : hypothèse' },
+  { key: 'diabete', text: 'Diabète éliminé par HGPO.', expect: false, note: '« éliminé » : absence établie' },
+  { key: 'diabete', text: 'ATCD : DT2 sous metformine.', expect: true, note: 'sigle' },
+  { key: 'diabete', text: 'DNID connu.', expect: true, note: 'sigle' },
+  { key: 'diabete', text: 'Diabète gestationnel en 2012, résolutif.', expect: null, note: 'épisode passé et clos' },
+  { key: 'diabete', text: 'Diabète : non renseigné', expect: null, note: 'information absente : pas un « Non »' },
+  { key: 'hta', text: 'HTA ? (MAPA prévue)', expect: null, note: '« ? »' },
+  { key: 'hta', text: 'HTA probable, à confirmer.', expect: null },
+  { key: 'hta', text: 'HTA ancienne, sous bithérapie.', expect: null, note: '« ancienne » : de longue date ou arrêtée ? ambigu, jamais un « Non »' },
+  { key: 'tabagisme', text: 'Tabac : ancien', expect: false },
+  { key: 'tabagisme', text: 'Ex-fumeur (20 PA).', expect: false },
+  { key: 'tabagisme', text: 'Tabagisme : NR', expect: null },
+  { key: 'tabagisme', text: 'Statut tabagique inconnu.', expect: null },
+  { key: 'fievre', text: 'Antécédents : pneumopathie fébrile en 2017. Pas de fièvre ce jour.', expect: false, note: 'antécédent écarté, épisode en cours lu' },
+  { key: 'fievre', text: 'Antécédent de fièvre typhoïde.', expect: null },
+  { key: 'fievre', text: 'Sans antécédent notable, admise pour fièvre.', expect: true, note: 'une rubrique niée n’ouvre pas les antécédents' },
+  { key: 'complications', text: 'Pas de complication précoce ; abcès de paroi à J8.', expect: null, note: 'négation restreinte : ni oui ni non' },
+  { key: 'complications', text: 'Aucune complication, mais reprise au bloc à J3.', expect: null, note: 'négation contredite' },
+  { key: 'complications', text: 'Complications : aucune', expect: false },
+
+  // ── Lecture optique, notation de la température, date d'entrée
+  { key: 'crp', text: 'CRP : 2O mg/L', expect: null, note: 'O pour 0 : jamais lu 2' },
+  { key: 'age', text: 'Âge : 6l ans', expect: null, note: 'l pour 1 : jamais lu 6' },
+  { key: 'creatinine', text: 'Créatinine : 7O µmol/L', expect: null, note: 'lettre parasite : l’unité reste contrôlée' },
+  { key: 'creatinine', text: 'Créatinine : 90 (N : 60-110) µmol/L', expect: null, note: 'unité écrite après les normes' },
+  { key: 'temperature', text: 'T 39°2 à l’admission.', expect: 39.2, note: '« 39°2 » vaut 39,2' },
+  { key: 'date_admission', text: 'Mme Y., entrée le 05/04/2024 pour dyspnée.', expect: '2024-04-05' },
+
+  // ── Plusieurs options citées : signalées, pas tranchées au hasard de l'ordre de la liste
+  { key: 'evolution', text: 'Évolution : stationnaire puis défavorable.', expect: null },
+  { key: 'evolution', text: 'Évolution : favorable sans décès.', expect: 'Favorable', note: 'option niée ignorée' },
+  { key: 'traitement', text: 'Traitement : antibiothérapie puis colectomie.', expect: ['Médical', 'Chirurgical'] },
 ];
 
 /* ───────────────────────────── limites connues ─────────────────────────── */
