@@ -1,5 +1,7 @@
+import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { CodeBlock } from '../components/CodeBlock';
+import { IntroVideo } from '../components/IntroVideo';
 import { ThemedShot } from '../components/ThemedShot';
 import {
   IconArrow,
@@ -125,14 +127,23 @@ const NEVER = [
   'Aucun cookie publicitaire, aucun outil de mesure d’audience',
 ];
 
-const FAQ = [
+const FAQ: readonly { q: string; a: ReactNode }[] = [
   {
     q: 'Dois-je créer un compte pour utiliser l’application ?',
     a: 'Non. L’application tourne sur votre ordinateur et ne demande aucun compte. Ce site est sa porte d’entrée : il présente l’outil, enregistre l’engagement d’anonymisation que vous prenez et vous mène à l’application, qui le redemande avant le premier import.',
   },
   {
     q: 'Combien cela coûte-t-il ?',
-    a: 'L’application ne coûte rien. Seules les fonctions de Claude, facultatives — l’extraction et la rédaction assistée —, ont un coût : vous enregistrez dans l’application votre propre clé d’API Anthropic et payez Anthropic directement, à l’usage, de l’ordre de 0,05 à 0,20 $US par dossier ordinaire avec le modèle par défaut. Chaque passe est chiffrée avant d’être lancée, et PubResearcher ne prélève rien au passage. La revue bibliographique passe, de même, par votre propre compte Apify.',
+    a: (
+      <>
+        L’application ne coûte rien. Seules les fonctions de Claude, facultatives — l’extraction et la rédaction assistée —,
+        ont un coût : vous enregistrez dans l’application votre propre clé d’API Anthropic et payez Anthropic directement,
+        à l’usage, de l’ordre de 0,05 à 0,20{'\u00a0'}$US par dossier ordinaire avec le modèle par défaut. Chaque passe est
+        chiffrée avant d’être lancée, et PubResearcher ne prélève rien au passage. Le guide{' '}
+        <Link to="/activer-claude">Activer Claude</Link> vous mène pas à pas jusqu’à votre clé. La revue bibliographique
+        passe, de même, par votre propre compte Apify.
+      </>
+    ),
   },
   {
     q: 'Mes dossiers patients sont-ils envoyés quelque part ?',
@@ -154,7 +165,7 @@ const FAQ = [
     q: 'Cela fonctionne-t-il sur téléphone ou tablette ?',
     a: 'Non : l’application demande un ordinateur (Windows, macOS ou Linux) avec Node.js 22.13 ou plus récent. Ce site, lui, se consulte partout.',
   },
-] as const;
+];
 
 function ProofCard() {
   return (
@@ -211,8 +222,8 @@ export function LandingPage() {
                   Créer mon accès <IconArrow size={18} />
                 </Link>
               )}
-              <Link className="btn btn-glass btn-lg" to={{ pathname: '/', hash: '#parcours' }}>
-                Voir le parcours
+              <Link className="btn btn-glass btn-lg" to={{ pathname: '/', hash: '#apercu' }}>
+                Voir la démonstration ({'1\u00a0min\u00a035'})
               </Link>
             </div>
             <p className="hero-note">
@@ -264,7 +275,14 @@ export function LandingPage() {
           <div className="section-head">
             <p className="eyebrow">Aperçu</p>
             <h2 id="tour-title">L’application, avec les dossiers fictifs de la démonstration.</h2>
-            <p className="lead">Deux écrans, tels qu’ils s’ouvrent sur votre ordinateur : celui où l’on relit, et celui qui précède tout import.</p>
+            <p className="lead">
+              Une minute et demie de démonstration, filmée sur l’application réelle ; puis deux écrans, tels qu’ils s’ouvrent sur
+              votre ordinateur : celui où l’on relit, et celui qui précède tout import.
+            </p>
+          </div>
+
+          <div className="tour-video">
+            <IntroVideo preload="none" />
           </div>
 
           <div className="tour">

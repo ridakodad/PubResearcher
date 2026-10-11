@@ -8,7 +8,7 @@ L'espace de travail d'une étude rétrospective, sur votre poste. D'un côté, c
 
 Pensée pour un travail de thèse ou une étude rétrospective : on part d'une pile de dossiers, on obtient un tableau exploitable dans Excel, R ou SPSS — sans ressaisir chaque variable à la main, et sans perdre la trace de l'origine de chaque valeur.
 
-**Version 1.4.0** · Node.js ≥ 22.13 · un seul processus, aucun module natif à compiler · 816 tests
+**Version 1.5.0** · Node.js ≥ 22.13 · un seul processus, aucun module natif à compiler · 828 tests
 
 > **Données de santé.** Par défaut l'outil n'écoute que sur le poste et n'envoie **rien** hors de la machine. Il n'anonymise pas : importez des documents pseudonymisés. Avant tout import, l'application demande de **confirmer une charte d'anonymisation** (cinq engagements, rappelés à chaque nouvelle version du texte). Lisez [Sécurité et données](docs/securite-et-donnees.md) avant la première étude.
 
@@ -19,6 +19,8 @@ Pensée pour un travail de thèse ou une étude rétrospective : on part d'une p
 | Thème sombre | Sur écran étroit |
 |---|---|
 | ![Plan de travail, thème sombre](docs/img/theme-sombre.png) | ![Sur mobile, la navigation devient une pastille flottante](docs/img/mobile.png) |
+
+**En vidéo** : [PubResearcher en 1 min 35](landing/public/video/presentation-pubresearcher.mp4) — l'application réelle, filmée sur les dossiers fictifs de la démonstration (import, charte d'anonymisation, extraction, relecture, résultats, export). Sans son, sous-titrée ; c'est celle que le site montre à la première inscription.
 
 ## Documentation
 
@@ -163,9 +165,14 @@ Les règles excellent sur ce qui est structuré. Elles atteignent leur limite su
 
 **Chacun utilise sa propre clé d'API Anthropic** : PubResearcher ne facture rien et ne revend pas d'IA ; ce que consomment Claude et l'assistant de rédaction est facturé directement sur votre compte Anthropic.
 
-1. Créez une clé dans la [console d'Anthropic](https://console.anthropic.com/settings/keys) (compte gratuit, puis crédit prépayé) et fixez-y une **limite de dépenses mensuelle**.
-2. Dans PubResearcher : **Extraction › Clé d'API Anthropic**, collez la clé, puis « Vérifier et enregistrer ». Le serveur la vérifie auprès d'Anthropic (une requête gratuite) avant de l'enregistrer.
-3. Choisissez « Règles puis Claude » : l'écran affiche une **fourchette de coût en dollars** avant la passe, et le **coût réel** après.
+Personne ne se perd en chemin : la page **Activer Claude** de l'application (colonne de gauche) mène pas à pas, en mots simples, avec à chaque étape le lien direct vers la bonne page de la console d'Anthropic. Cinq minutes, une seule fois :
+
+1. Créer son compte dans la [console d'Anthropic](https://platform.claude.com/) ;
+2. y [acheter du crédit](https://platform.claude.com/settings/billing) — 5 $US suffisent pour essayer ; sans recharge automatique, on ne peut pas dépenser plus ;
+3. y [créer la clé](https://platform.claude.com/settings/keys) (« Create key ») ;
+4. la coller dans PubResearcher, qui la fait vérifier par Anthropic avant de l'enregistrer.
+
+Le même guide est en ligne sur la page d'accueil (`/activer-claude`), pour préparer sa clé avant même d'installer l'outil. Une clé qui vaut pour plusieurs espaces de travail d'Anthropic est acceptée telle quelle : l'outil trouve seul l'espace par défaut. Ensuite, en mode « Règles puis Claude », l'écran affiche une **fourchette de coût en dollars** avant chaque passe, et le **coût réel** après.
 
 La clé reste **sur la machine qui fait tourner l'outil**, dans `DATA_DIR/anthropic-key.json` (lisible du seul compte de service) : ni dans la base, ni dans les sauvegardes, ni dans les exports, et l'interface n'en montre plus que les quatre derniers caractères. « Retirer » l'efface.
 
@@ -179,6 +186,7 @@ npm start
 | Variable | Défaut | Rôle |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | — | Clé de secours, si aucune n'est saisie dans l'application |
+| `ANTHROPIC_WORKSPACE_ID` | — | Espace de travail d'Anthropic à nommer avec cette clé de secours, si elle en couvre plusieurs (une clé saisie dans l'application le trouve seule) |
 | `LLM_MODEL` | `claude-opus-5-5` | Modèle utilisé (Claude Opus 5.5 : 4 $US par million de jetons lus, 20 $US par million écrits). `claude-sonnet-5-5` coûte deux fois moins |
 | `LLM_EFFORT` | `high` | Profondeur de raisonnement ; `medium` ou `low` réduisent le coût sur de grandes séries |
 | `LLM_MAX_CHARS_PER_DOC` | `60000` | Texte transmis par document ; au-delà, tronqué et signalé au modèle |
@@ -281,6 +289,6 @@ cd landing && node --test e2e/flows.test.mjs   # 25 parcours de la page d'accuei
 
 Les tests couvrent le moteur (repliage, typage, chaque famille de règles, négation, unités, expressions surveillées), la chaîne complète — import, extraction, relecture, export — sur de vrais fichiers PDF, DOCX, DICOM et images (PNG, JPEG avec EXIF, TIFF) construits par les fixtures, un **vrai processus serveur** (démarrage, verrou, réglages invalides, arrêt par signal), l'isolation sur de vrais fichiers piégés, le SDK d'Anthropic contre un faux serveur, et la revue bibliographique contre un faux serveur Apify qui rejoue de vraies sorties.
 
-Le [rapport de validation](docs/validation.md) donne les mesures (banc d'essai du moteur, 97 fichiers hostiles, 25 arrêts brutaux, 1 000 à 5 000 dossiers, 64 combinaisons d'accessibilité, la suite sous cinq versions de Node — mesurées sur la 1.1.0, le moteur étant inchangé ; les § 1.2 à 1.4 disent ce qui a été rejoué pour la 1.2.0, la 1.3.0 et la 1.4.0, le § 13 ce qui a été mesuré sur la page d'accueil) **et ce qui n'a pas été vérifié** : aucun corpus clinique réel, le mode « Claude » jamais exécuté contre l'API réelle, Excel et PowerPoint jamais ouverts, Chromium seulement.
+Le [rapport de validation](docs/validation.md) donne les mesures (banc d'essai du moteur, 97 fichiers hostiles, 25 arrêts brutaux, 1 000 à 5 000 dossiers, 64 combinaisons d'accessibilité, la suite sous cinq versions de Node — mesurées sur la 1.1.0, le moteur étant inchangé ; les § 1.2 à 1.5 disent ce qui a été rejoué pour les versions 1.2.0 à 1.5.0, le § 13 ce qui a été mesuré sur la page d'accueil) **et ce qui n'a pas été vérifié** : aucun corpus clinique réel, le mode « Claude » jamais exécuté contre l'API réelle, Excel et PowerPoint jamais ouverts, Chromium seulement.
 
 `npm audit` (10 octobre 2026) : 3 avis modérés, dans la seule chaîne `mammoth` → `argparse` → `sprintf-js`, sans chemin atteignable avec une entrée utilisateur ; la « correction » proposée est un retour en arrière de `mammoth` — ne la lancez pas.

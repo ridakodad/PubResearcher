@@ -2,6 +2,33 @@
 
 Le format suit l'ordre des versions, de la plus récente à la plus ancienne ; l'historique git de ce dépôt commence à la 1.2.0, les versions antérieures n'y sont décrites qu'ici. Les numéros de version sont ceux de `package.json` ; le rapport « Méthodes et traçabilité » consigne la version qui a produit un jeu de données.
 
+## 1.5.0 — 11 octobre 2026
+
+**Personne ne se perd en chemin vers sa clé, et la valeur de l'outil se voit dès l'inscription.**
+
+### Application
+
+- **Page « Activer Claude »** (colonne de gauche ; l'entrée devient « Claude » une fois la clé en service) : en mots simples, ce qu'est une clé d'API et ce que coûte Claude, puis trois étapes chez Anthropic — créer son compte, ajouter du crédit, créer la clé —, chacune avec un bouton qui ouvre **directement la bonne page de la console** (`platform.claude.com`), les réglages à choisir et la précision qui évite de se tromper ; enfin le champ où coller la clé (avec « Afficher » pour vérifier ce qu'on a collé). Chaque étape se coche et se replie ; un dépannage répond aux cas courants (clé refusée, crédit épuisé, clé expirée, se passer de Claude, données des patients).
+- Sur *Extraction* et *Rédaction*, tant que Claude n'est pas activé : un encadré court qui mène au guide, avec le raccourci « J'ai déjà une clé ». La pastille du plan de travail et l'encadré de *Dossiers patients* y mènent aussi.
+- **Toute clé fonctionne** : une clé personnelle qui vaut pour plusieurs espaces de travail d'Anthropic (qui doit sinon nommer son espace à chaque requête) est acceptée — la vérification trouve seule l'espace par défaut et l'enregistre avec la clé. Côté serveur administré : `ANTHROPIC_WORKSPACE_ID`.
+- **Refus traduits en plus** : limite de dépenses atteinte, plafond mensuel du compte, clé expirée — chacun avec quoi faire, et sans réessai inutile.
+- **Correctif** : les compteurs du rail et du plan de travail restaient périmés après un import, une passe ou une relecture jusqu'au rechargement de la page ; ils se recomptent maintenant après chaque écriture.
+
+### Page d'accueil
+
+- **Présentation vidéo à la première inscription** : avant le profil, « Bienvenue dans PubResearcher » montre l'application réelle en 1 min 35 — import avec la charte d'anonymisation, extraction, relecture d'une valeur et de sa source, résultats, export, Claude en option —, sur des dossiers fictifs. Jamais de lecture automatique ; sans son, sous-titrée ; son déroulé écrit se déplie dessous ; « Commencer le parcours » la passe, et elle ne revient pas dans la même session. La même vidéo est sur la page d'accueil (« Voir la démonstration ») et sur la page d'accès.
+- **Page publique « Activer Claude »** (`/activer-claude`) : le même guide que l'application, mot pour mot, pour préparer sa clé avant d'installer l'outil — sans aucun champ : la clé se colle dans l'application, jamais sur le site. Liée depuis la page d'accès, la question sur le coût et le pied de page.
+
+### Tests et outillage
+
+- **828 tests** (816 en 1.4.0) ; **27 parcours** de bout en bout du site (25 en 1.4.0) ; le serveur statique des parcours sert aussi la vidéo.
+- Le contrôle des secrets du site cherche une vraie clé (`sk-ant-` suivi d'au moins vingt caractères), plus la simple mention du préfixe, que le guide cite.
+- Versions : `pubresearcher`, `@pubresearcher/server`, `@pubresearcher/web`, `@pubresearcher/landing` en 1.5.0.
+
+### Documentation
+
+- Mis à jour : README (la vidéo, le guide), [Guide du chercheur](guide-chercheur.md) (§ 5, messages), [Guide de l'administrateur](guide-administrateur.md) (§ 4.5 : espaces de travail, `ANTHROPIC_WORKSPACE_ID`), [Sécurité et données personnelles](securite-et-donnees.md), [Architecture](architecture.md), [Référence de l'API](reference-api.md) (`workspace`), [Page d'accueil](page-d-accueil.md), [Rapport de validation](validation.md) (§ 1.5).
+
 ## 1.4.0 — 11 octobre 2026
 
 **Votre clé, votre facture.** Chacun utilise désormais **sa propre clé d'API Anthropic**, saisie dans l'application : PubResearcher ne facture rien et ne revend pas d'IA ; ce que consomment l'extraction par Claude et la rédaction assistée est facturé directement sur le compte Anthropic du titulaire de la clé, au prix public. Avant chaque passe, l'écran donne une **fourchette de coût en dollars** ; après, le **coût constaté**.

@@ -10,6 +10,7 @@ import {
   IconFolders,
   IconForm,
   IconGauge,
+  IconKey,
   IconSidebar,
   IconWrite,
   IconTable,
@@ -18,6 +19,7 @@ import {
 import { WorkspaceProvider, useWorkspace } from './lib/workspace';
 import { readSetting, writeSetting } from './lib/storage';
 import { BibliographiePage } from './pages/BibliographiePage';
+import { ClaudePage } from './pages/ClaudePage';
 import { DossiersPage } from './pages/DossiersPage';
 import { DossierDetailPage } from './pages/DossierDetailPage';
 import { FichePage } from './pages/FichePage';
@@ -52,7 +54,9 @@ interface Tool {
 }
 
 function ToolRail({ collapsed }: { collapsed: boolean }) {
-  const { patients, fields, completeness, loading } = useWorkspace();
+  const { patients, fields, completeness, loading, capabilities } = useWorkspace();
+  // « Activer Claude » tant qu'aucune clé n'est en service : l'entrée dit ce qu'il reste à faire.
+  const claudeOn = capabilities?.llm.available === true;
   const { pathname, search, hash } = useLocation();
   const nav = useRef<HTMLElement>(null);
 
@@ -101,6 +105,7 @@ function ToolRail({ collapsed }: { collapsed: boolean }) {
         },
         { to: '/extraction', label: 'Extraction', short: 'Extraction', icon: IconExtract, matchPrefix: '/extraction' },
         { to: '/redaction', label: 'Rédaction', short: 'Rédaction', icon: IconWrite, matchPrefix: '/redaction' },
+        { to: '/claude', label: claudeOn ? 'Claude' : 'Activer Claude', short: 'Claude', icon: IconKey, matchPrefix: '/claude' },
       ],
     },
     {
@@ -213,6 +218,7 @@ const TITLES: [prefix: string, title: string][] = [
   ['/fiche', "Fiche d’exploitation"],
   ['/extraction', 'Extraction'],
   ['/redaction', 'Rédaction assistée'],
+  ['/claude', 'Activer Claude'],
   ['/resultats', 'Résultats'],
 ];
 
@@ -311,6 +317,7 @@ export function App() {
                 <Route path="/fiche" element={<FichePage />} />
                 <Route path="/extraction" element={<ExtractionPage />} />
                 <Route path="/redaction" element={<RedactionPage />} />
+                <Route path="/claude" element={<ClaudePage />} />
                 <Route path="/resultats" element={<ResultatsPage />} />
                 <Route path="/index.html" element={<Navigate to="/" replace />} />
                 <Route

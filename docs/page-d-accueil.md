@@ -8,11 +8,12 @@ Le site public de PubResearcher : il présente l'outil, propose de créer un acc
 
 | Adresse | Page | Accès |
 |---|---|---|
-| `/` | Accueil : l'outil en une phrase, un exemple fictif de valeur et de source, les outils, un aperçu de l'application, le parcours en quatre étapes, la section « PubResearcher n'anonymise rien », l'installation, les questions (dont le coût : l'application ne coûte rien, l'IA se paie avec sa propre clé) | public |
+| `/` | Accueil : l'outil en une phrase, un exemple fictif de valeur et de source, les outils, un aperçu de l'application (la **présentation vidéo**, puis deux captures), le parcours en quatre étapes, la section « PubResearcher n'anonymise rien », l'installation, les questions (dont le coût : l'application ne coûte rien, l'IA se paie avec sa propre clé) | public |
 | `/inscription` | « Créer mon accès » : Google en premier, puis nom, e-mail, mot de passe | public |
 | `/connexion` | « Se connecter » : mêmes moyens ; « Mot de passe oublié ? » | public |
-| `/bienvenue` | Parcours d'accueil en trois étapes : **profil**, **étude**, **engagement** (la charte d'anonymisation) | connecté |
-| `/acces` | « Ouvrir l'application », mode d'emploi du premier lancement, récapitulatif des réponses, rappel adapté à l'autorisation de l'étude | connecté, parcours terminé |
+| `/bienvenue` | À la toute première arrivée, une **présentation vidéo** de l'outil (1 min 35, sans son, sous-titrée, déroulé écrit dépliable ; « Commencer le parcours » la passe). Puis le parcours d'accueil en trois étapes : **profil**, **étude**, **engagement** (la charte d'anonymisation) | connecté |
+| `/acces` | « Ouvrir l'application », mode d'emploi du premier lancement, **« Activer Claude (facultatif) »**, récapitulatif des réponses, rappel adapté à l'autorisation de l'étude, la présentation vidéo à revoir | connecté, parcours terminé |
+| `/activer-claude` | Le guide pas à pas pour obtenir sa clé d'API Anthropic — le même texte que la page de l'application (copie comparée par un test) : compte, crédit, création de la clé, chacun avec le lien direct vers la page de la console ; puis où la coller (dans l'application, **jamais sur ce site**, qui n'a aucun champ pour elle) | public |
 | `/mot-de-passe` | Demander un lien de réinitialisation ; choisir un nouveau mot de passe ; explique un lien reçu qui n'a pas pu servir | public / connecté |
 | `/deconnexion` | Déconnecte **ce navigateur** puis revient à l'accueil. Atteinte autrement que par un bouton du site (lien venu d'ailleurs, adresse tapée), elle demande d'abord confirmation | — |
 | `/confidentialite` | Ce qui est conservé, pourquoi, où ; comment le faire effacer | public |
@@ -48,7 +49,7 @@ Dans **Supabase** (projet du responsable du site), jamais ailleurs :
 | Type d'étude, ordre de grandeur du nombre de dossiers, lieu d'hébergement prévu, état de l'autorisation | `public.profiles` | idem — jamais une évaluation |
 | Version de la charte confirmée, engagements cochés, date | `public.consents` | garder la trace de l'engagement pris |
 
-Dans le **navigateur** : la session ouverte par Supabase (`localStorage`, clé `sb-…-auth-token`) et le choix du thème (`theme`). Aucun cookie, aucun traceur, aucun outil de mesure d'audience.
+Dans le **navigateur** : la session ouverte par Supabase (`localStorage`, clé `sb-…-auth-token`), le choix du thème (`theme`) et, le temps de la session de navigation, le fait d'avoir vu la présentation vidéo (`sessionStorage`, `pr:presentation-vue`, sans identifiant de compte). Aucun cookie, aucun traceur, aucun outil de mesure d'audience. La vidéo est servie par le site lui-même (aucun lecteur ni service tiers).
 
 ### 3.2 Ce qui n'est jamais reçu
 
@@ -208,7 +209,7 @@ Si votre établissement exploite l'application sur un serveur (voir le [guide de
 | Règles d'accès par ligne et droits de la migration (cinq règles ; retrait de tout, puis droits colonne par colonne ; aucun droit pour un visiteur ; dates posées par la base ; journal en ajout seul) ; le site n'écrit que des colonnes autorisées ; `.env.production` ne contient que l'adresse et la clé publique | idem | dépôt |
 | Politique de sécurité du contenu, en-têtes, absence de script ou de style en ligne, de secret, de lien mort | idem | dépôt |
 | Contrastes WCAG 2.2 AA des jetons, deux thèmes | `npm test` — `server/test/web-contrast.test.ts` (lit les **deux** feuilles de style) | dépôt |
-| 25 parcours dans un vrai navigateur, contre un faux Supabase (inscription avec confirmation, lien ouvert ailleurs, liens « token_hash » sur un autre appareil, réinitialisation ratée puis réussie sur téléphone, envoi refusé par le serveur par défaut, Google/PKCE, Google pas encore activé, connexion, reprise, modification, pannes, déconnexion et déconnexion à confirmer, adresses abîmées, redirections, clavier, 320 → 1 440 px) | `cd landing && node --test e2e/flows.test.mjs` (Playwright requis) | dépôt, `landing/e2e/` |
+| 27 parcours dans un vrai navigateur, contre un faux Supabase (présentation vidéo à la première inscription, guide « Activer Claude », inscription avec confirmation, lien ouvert ailleurs, liens « token_hash » sur un autre appareil, réinitialisation ratée puis réussie sur téléphone, envoi refusé par le serveur par défaut, Google/PKCE, Google pas encore activé, connexion, reprise, modification, pannes, déconnexion et déconnexion à confirmer, adresses abîmées, redirections, clavier, 320 → 1 440 px) | `cd landing && node --test e2e/flows.test.mjs` (Playwright requis) | dépôt, `landing/e2e/` |
 | **Projet réel** : 17 contrôles des règles et des droits (deux comptes simulés, transaction annulée), refus sans connexion par HTTP, codes d'erreur réels (`invalid_credentials`), en-têtes CORS, conseillers de sécurité et de performance | requêtes SQL et HTTP, 11 octobre 2026 | § 3.3 ; [rapport de validation, § 13](validation.md#13-page-daccueil-et-charte-danonymisation-130) |
 | Accessibilité (axe-core), contraste du **rendu**, anneaux de focus | scripts de validation, non publiés | [rapport de validation, § 13](validation.md#13-page-daccueil-et-charte-danonymisation-130) |
 
@@ -258,4 +259,4 @@ Le faux Supabase (`landing/e2e/fake-supabase.mjs`) imite le **protocole** — fo
 | `landing/src/styles.css` | Feuille de style : jetons copiés de l'application, puis composants |
 | `landing/supabase/migrations/` | Tables, contraintes, règles d'accès par ligne, droits par colonne (numéro = version enregistrée sur le projet) |
 | `landing/e2e/` | Parcours dans un navigateur : serveur statique à la manière de Vercel, faux Supabase, scénarios |
-| `landing/public/` | Icône, image de partage, `robots.txt`, script du thème, captures de l'application (WebP, claires et sombres) |
+| `landing/public/` | Icône, image de partage, `robots.txt`, script du thème, captures de l'application (WebP, claires et sombres), présentation vidéo (`video/` : MP4 H.264 pour la plupart des navigateurs, WebM VP9 pour ceux qui ne lisent pas le H.264, affiche JPEG) |

@@ -123,6 +123,18 @@ async function login(page, origin, { email = ME.email, password = ME.password, n
   await page.getByRole('button', { name: 'Me connecter' }).click();
 }
 
+/**
+ * Arrivée sur le parcours d'accueil : à la toute première visite d'un compte, la présentation vidéo s'affiche d'abord ;
+ * on la passe pour atteindre le profil.
+ */
+async function profileStep(page) {
+  const intro = page.getByRole('heading', { name: 'Bienvenue dans PubResearcher' });
+  const profile = page.getByRole('heading', { name: 'Qui êtes-vous ?' });
+  await intro.or(profile).waitFor();
+  if (await intro.isVisible()) await page.getByRole('button', { name: 'Commencer le parcours' }).click();
+  await profile.waitFor();
+}
+
 async function fillProfile(page, { country = 'Maroc' } = {}) {
   await page.getByLabel('Fonction').selectOption('interne');
   await page.getByLabel('Établissement ou laboratoire').fill('CHU Ibn Rochd, Casablanca');
@@ -213,7 +225,7 @@ describe('site configuré (faux Supabase)', { skip }, () => {
 
     // L'utilisateur ouvre le lien du courriel.
     await page.goto(fake.confirmationLink(ME.email));
-    await page.getByRole('heading', { name: 'Qui êtes-vous ?' }).waitFor();
+    await profileStep(page);
     assert.equal(await page.getByLabel('Nom et prénom').inputValue(), ME.name, 'le nom saisi à l’inscription préremplit le profil');
     assert.equal(new URL(page.url()).search, '', 'le code d’échange est retiré de l’adresse');
     const [exchange] = fake.requests('POST /auth/v1/token');
@@ -246,7 +258,7 @@ describe('site configuré (faux Supabase)', { skip }, () => {
     // L'adresse est confirmée côté service : le mot de passe suffit.
     await login(second.page, site.origin);
     await second.page.waitForURL('**/bienvenue');
-    await second.page.getByRole('heading', { name: 'Qui êtes-vous ?' }).waitFor();
+    await profileStep(second.page);
     await second.context.close();
   });
 
@@ -266,7 +278,7 @@ describe('site configuré (faux Supabase)', { skip }, () => {
     // Ouvert sur un autre appareil : pas de vérificateur PKCE, et pourtant connecté, directement sur le parcours.
     const second = await openSite(site, { fake });
     await second.page.goto(link);
-    await second.page.getByRole('heading', { name: 'Qui êtes-vous ?' }).waitFor();
+    await profileStep(second.page);
     assert.equal(new URL(second.page.url()).pathname, '/bienvenue');
     assert.equal(new URL(second.page.url()).search, '', 'le jeton a quitté l’adresse');
     const [verify] = fake.requests('POST /auth/v1/verify');
@@ -295,7 +307,7 @@ describe('site configuré (faux Supabase)', { skip }, () => {
     await page.getByRole('button', { name: 'Créer mon accès' }).last().click();
 
     await page.waitForURL('**/bienvenue');
-    await page.getByRole('heading', { name: 'Qui êtes-vous ?' }).waitFor();
+    await profileStep(page);
     const user = fake.users.get(ME.email);
 
     await fillProfile(page);
@@ -356,7 +368,7 @@ describe('site configuré (faux Supabase)', { skip }, () => {
     await page.getByRole('button', { name: 'Continuer avec Google' }).click();
 
     await page.waitForURL('**/bienvenue');
-    await page.getByRole('heading', { name: 'Qui êtes-vous ?' }).waitFor();
+    await profileStep(page);
     assert.equal(fake.requests('GET /auth/v1/settings').length, 1, 'le site vérifie d’abord que Google est activé');
     const [authorize] = fake.requests('GET /auth/v1/authorize');
     assert.equal(authorize.query.provider, 'google');
@@ -387,7 +399,7 @@ describe('site configuré (faux Supabase)', { skip }, () => {
     fake.fail('GET /auth/v1/settings', 503, { message: 'Service Unavailable' });
     await google.click();
     await page.waitForURL('**/bienvenue');
-    await page.getByRole('heading', { name: 'Qui êtes-vous ?' }).waitFor();
+    await profileStep(page);
     assert.equal(fake.requests('GET /auth/v1/authorize').length, 1);
     assert.deepEqual(unexpected(problems, { allowNetwork: true }), [], 'seule la panne programmée apparaît');
     await context.close();
@@ -599,7 +611,7 @@ describe('site configuré (faux Supabase)', { skip }, () => {
     await page.waitForURL('**/bienvenue');
     await page.waitForURL('**/acces');
     await page.getByRole('link', { name: 'Modifier mes réponses' }).click();
-    await page.getByRole('heading', { name: 'Qui êtes-vous ?' }).waitFor();
+    await profileStep(page);
     await page.getByText('Étape 1 sur 2').waitFor();
     assert.equal(await page.getByLabel('Pays').inputValue(), 'Maroc');
     await fillProfile(page, { country: 'Tunisie' });
@@ -677,7 +689,7 @@ describe('site configuré (faux Supabase)', { skip }, () => {
 
     await login(page, site.origin, { email: second.email });
     await page.waitForURL('**/bienvenue');
-    await page.getByRole('heading', { name: 'Qui êtes-vous ?' }).waitFor();
+    await profileStep(page);
     assert.equal(await page.getByLabel('Pays').inputValue(), '', 'rien du profil du premier utilisateur');
     assert.equal(await page.getByLabel('Nom et prénom').inputValue(), 'Dr Deuxième');
     assert.ok(readFilters(fake).includes(`eq.${second.id}`));
@@ -692,6 +704,7 @@ describe('site configuré (faux Supabase)', { skip }, () => {
     const { page, problems, context } = await openSite(site, { fake });
     await login(page, site.origin);
     await page.waitForURL('**/acces');
+    await page.getByRole('heading', { level: 1, name: /Bonjour/ }).waitFor();
 
     await page.goto(site.origin + '/deconnexion'); // comme un lien posé sur une autre page du web
     await page.getByRole('heading', { name: 'Se déconnecter ?' }).waitFor();
@@ -733,7 +746,7 @@ describe('site configuré (faux Supabase)', { skip }, () => {
     await page.waitForURL('**/bienvenue');
     // Chaque option proposée par les listes déroulantes est acceptée telle quelle par les contraintes de la migration.
     // (`evaluateAll` n'attend pas : on attend d'abord que le formulaire soit affiché, profil chargé.)
-    await page.getByRole('heading', { name: 'Qui êtes-vous ?' }).waitFor();
+    await profileStep(page);
     await page.getByLabel('Fonction').waitFor();
     const roles = await page.getByLabel('Fonction').locator('option').evaluateAll((nodes) => nodes.map((n) => n.value).filter(Boolean));
     assert.ok(roles.length >= 6);
@@ -797,6 +810,85 @@ describe('site configuré (faux Supabase)', { skip }, () => {
     assert.deepEqual(external.filter((href) => !href.startsWith(origin)), [], 'un lien vers un autre site s’ouvre dans un nouvel onglet');
     await context.close();
   });
+  test('première inscription : la présentation vidéo d’abord, une seule fois, puis le profil', async () => {
+    const fake = new FakeSupabase({ confirmEmail: false });
+    seedUser(fake);
+    const { page, problems, context } = await openSite(site, { fake });
+    await login(page, site.origin);
+    await page.waitForURL('**/bienvenue');
+    await page.getByRole('heading', { name: 'Bienvenue dans PubResearcher' }).waitFor();
+
+    // La vidéo : commandes, jamais de lecture automatique, servie par le site (la politique de sécurité l'admet).
+    const video = page.locator('video');
+    assert.equal(await video.getAttribute('autoplay'), null, 'pas de lecture automatique');
+    assert.notEqual(await video.getAttribute('controls'), null, 'avec ses commandes');
+    assert.match(await video.getAttribute('aria-label'), /1 min 35/);
+    const sources = await page.locator('video source').evaluateAll((nodes) => nodes.map((n) => [n.getAttribute('src'), n.getAttribute('type')]));
+    assert.deepEqual(sources, [
+      ['/video/presentation-pubresearcher.mp4', 'video/mp4; codecs="avc1.640028"'],
+      ['/video/presentation-pubresearcher.webm', 'video/webm; codecs="vp9"'],
+    ]);
+    for (const [src, type] of sources) {
+      const file = await page.request.get(site.origin + src);
+      assert.equal(file.status(), 200);
+      assert.equal(file.headers()['content-type'], type.split(';')[0]);
+      assert.ok((await file.body()).length > 1_000_000, 'la vraie vidéo, pas la page HTML');
+    }
+    const poster = await page.request.get(site.origin + (await video.getAttribute('poster')));
+    assert.equal(poster.headers()['content-type'], 'image/jpeg');
+    // La vidéo se charge bel et bien dans le navigateur (métadonnées : durée réelle).
+    const duration = await video.evaluate((v) => new Promise((resolve) => {
+      if (v.readyState >= 1) resolve(v.duration);
+      else v.addEventListener('loadedmetadata', () => resolve(v.duration), { once: true });
+    }));
+    assert.ok(duration > 90 && duration < 100, `durée lue : ${duration}`);
+
+    // Son équivalent texte.
+    await page.getByText('Lire le déroulé de la vidéo').click();
+    assert.equal(await page.locator('.intro-transcript li').count(), 11);
+
+    await page.getByRole('button', { name: 'Commencer le parcours' }).click();
+    await page.getByRole('heading', { name: 'Qui êtes-vous ?' }).waitFor();
+    assert.equal(await page.evaluate(() => document.activeElement?.textContent), 'Qui êtes-vous ?', 'le titre de l’étape prend le focus');
+    // Recharger au milieu du parcours ne remontre pas la vidéo.
+    await page.reload();
+    await page.getByRole('heading', { name: 'Qui êtes-vous ?' }).waitFor();
+    assert.equal(await page.getByRole('heading', { name: 'Bienvenue dans PubResearcher' }).count(), 0);
+    const stored = await page.evaluate(() => Object.keys(localStorage).filter((k) => !/^sb-.+-auth-token$/.test(k)));
+    assert.ok(stored.every((key) => key === 'theme'), `localStorage : ${stored}`);
+    assert.deepEqual(unexpected(problems), []);
+    await context.close();
+  });
+
+  test('« Activer Claude » : un guide public qui mène aux bonnes pages de la console, sans jamais demander la clé', async () => {
+    const fake = new FakeSupabase();
+    const me = seedUser(fake);
+    seedProfile(fake, me);
+    seedConsent(fake, me);
+    const { page, problems, context } = await openSite(site, { fake });
+    await page.goto(site.origin + '/activer-claude');
+    await page.getByRole('heading', { name: 'Activer Claude', level: 1 }).waitFor();
+    const links = await page.locator('.guide-step a[target="_blank"]').evaluateAll((as) => as.map((a) => [a.getAttribute('href'), a.getAttribute('rel')]));
+    assert.deepEqual(links, [
+      ['https://platform.claude.com/', 'noopener noreferrer'],
+      ['https://platform.claude.com/settings/billing', 'noopener noreferrer'],
+      ['https://platform.claude.com/settings/keys', 'noopener noreferrer'],
+    ]);
+    assert.equal(await page.locator('main input, main textarea').count(), 0, 'aucun champ : la clé se colle dans l’application');
+    await page.getByText(/ne la collez jamais ailleurs/).waitFor();
+    assert.equal(await page.title(), 'Activer Claude — PubResearcher');
+    // Depuis l'accès, et depuis la question sur le coût.
+    await login(page, site.origin, { next: '?suite=%2Facces' });
+    await page.waitForURL('**/acces');
+    await page.getByRole('link', { name: /Obtenir ma clé, pas à pas/ }).click();
+    await page.waitForURL('**/activer-claude');
+    await page.goto(site.origin + '/');
+    await page.getByText('Combien cela coûte-t-il ?').click();
+    await page.locator('.faq-item').getByRole('link', { name: 'Activer Claude' }).click();
+    await page.waitForURL('**/activer-claude');
+    assert.deepEqual(unexpected(problems), []);
+    await context.close();
+  });
 });
 
 // ------------------------------------------------------------------------------------------------ aperçu ---
@@ -822,7 +914,7 @@ describe('site en mode aperçu (aucune variable VITE_SUPABASE_*)', { skip }, () 
     await page.goto(site.origin + '/inscription');
     await page.getByRole('button', { name: 'Continuer avec Google (aperçu)' }).click();
     await page.waitForURL('**/bienvenue');
-    await page.getByRole('heading', { name: 'Qui êtes-vous ?' }).waitFor();
+    await profileStep(page);
     assert.deepEqual(outside, [], 'aucune requête vers un autre site');
     assert.ok(requests.every((url) => url.startsWith(site.origin)), 'tout vient du site lui-même');
     assert.ok(!requests.some((url) => /supabase/.test(url)));
@@ -839,6 +931,7 @@ describe('site en mode aperçu (aucune variable VITE_SUPABASE_*)', { skip }, () 
     await page.getByLabel('Confirmez le mot de passe').fill(ME.password);
     await page.getByRole('button', { name: 'Créer mon accès' }).last().click();
     await page.waitForURL('**/bienvenue');
+    await profileStep(page);
     await fillProfile(page);
     await page.getByLabel('Type d’étude').selectOption('these');
     await page.getByText('Moins de 100 dossiers').click();

@@ -1077,3 +1077,60 @@ th { font-weight: 600; color: var(--text-secondary); font-size: 0.75rem; text-tr
   }
   .spinner { animation: none; border-top-color: var(--brand); border-right-color: var(--brand); }
 }
+
+/* ======================================================== présentation ==== */
+
+/*
+ * La vidéo de présentation : l'application réelle, filmée sur les dossiers fictifs. Jamais de lecture automatique ;
+ * le déroulé écrit se déplie sous la vidéo.
+ */
+.intro-video { margin: 0; display: flex; flex-direction: column; gap: var(--s3); }
+.intro-video-frame {
+  border-radius: 20px; overflow: hidden;
+  border: 1px solid var(--border-strong);
+  background: var(--night);
+  box-shadow: var(--shadow-3);
+  aspect-ratio: 16 / 9;
+}
+.intro-video-frame video { display: block; width: 100%; height: 100%; object-fit: contain; background: var(--night); }
+.intro-video figcaption { font-size: 0.88rem; color: var(--text-secondary); }
+.intro-transcript ol { margin: 0; padding: 0 var(--s5) var(--s4) calc(var(--s5) + 1.1em); display: flex; flex-direction: column; gap: var(--s2); color: var(--text-secondary); font-size: 0.9rem; max-width: 76ch; }
+
+.intro-card { display: flex; flex-direction: column; gap: var(--s4); }
+.intro-card .lead { margin: 0; }
+.intro-card .form-actions { margin-top: 0; }
+.intro-next { margin: 0; color: var(--text-secondary); }
+
+.tour-video { max-width: 880px; margin: 0 auto var(--s6); }
+.access-video { margin-top: var(--s5); }
+
+/* ======================================================= activer Claude ==== */
+
+.guide-page { padding-top: var(--s6); padding-bottom: 88px; display: flex; flex-direction: column; gap: var(--s4); }
+.guide-page h1 { font-size: clamp(1.8rem, 4vw, 2.4rem); }
+.guide-page .lead { margin: 0; }
+.guide-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s3); }
+.guide-step {
+  display: flex; flex-direction: column; gap: var(--s3);
+  padding: var(--s5);
+  background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+}
+.guide-step-paste { border-color: var(--brand); }
+.guide-step-head { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
+.guide-step-head h2 { font-size: 1.1rem; margin: 0; flex: 1 1 220px; min-width: 0; text-wrap: balance; }
+.guide-num {
+  flex: none; display: inline-grid; place-items: center;
+  width: 34px; height: 34px; border-radius: 50%;
+  background: var(--brand-soft); color: var(--brand-strong);
+  font-weight: 700; font-size: 0.95rem; font-variant-numeric: tabular-nums;
+}
+.guide-time { font-size: 0.8rem; color: var(--text-muted); white-space: nowrap; }
+.guide-actions { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: var(--s2); line-height: 1.6; max-width: 72ch; }
+.guide-text { margin: 0; color: var(--text-secondary); max-width: 72ch; }
+.guide-tip { margin: 0; display: flex; gap: var(--s2); align-items: flex-start; font-size: 0.86rem; color: var(--text-secondary); max-width: 72ch; }
+.guide-tip > .icon { flex: none; margin-top: 3px; color: var(--brand); }
+.guide-help { display: flex; flex-direction: column; gap: var(--s2); margin-top: var(--s3); }
+.guide-help h2 { font-size: 1.15rem; margin-bottom: var(--s1); }
+@media (max-width: 560px) { .guide-step { padding: var(--s4); } }

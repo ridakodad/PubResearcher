@@ -2,8 +2,9 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { TemplateWithFields } from '../domain/types.js';
 import type { FieldStats } from '../routes/analytics.js';
 import { numberOr } from '../lib/env-check.js';
-import { keyStore } from './api-key.js';
-import { isCreditError, NO_KEY_REASON } from './llm.js';
+import { clientIdentity, clientOptions, keyStore } from './api-key.js';
+import { explainProblem, explainRefusedKey, problemOf } from './anthropic-errors.js';
+import { NO_KEY_REASON } from './llm.js';
 
 /**
  * Assistant de rédaction scientifique.
@@ -42,9 +43,9 @@ function getClient(): Anthropic | null {
     clientKey = '';
     return null;
   }
-  if (!client || clientKey !== active.key) {
-    client = new Anthropic({ apiKey: active.key });
-    clientKey = active.key;
+  if (!client || clientKey !== clientIdentity(active)) {
+    client = new Anthropic(clientOptions(active));
+    clientKey = clientIdentity(active);
   }
   return client;
 }
@@ -234,19 +235,13 @@ export async function streamReply(
 }
 
 function toChatError(error: unknown): ChatError {
+  const problem = problemOf(error);
+  if (problem) return new ChatError(explainProblem(problem, keyStore.active()?.source ?? null), false);
   if (error instanceof Anthropic.RateLimitError) {
     return new ChatError('Limite de débit atteinte. Réessayez dans un instant.', true);
   }
   if (error instanceof Anthropic.AuthenticationError) {
-    return new ChatError(
-      keyStore.active()?.source === 'env'
-        ? 'Clé API refusée. Vérifiez ANTHROPIC_API_KEY.'
-        : 'Anthropic refuse votre clé d’API : elle a été désactivée ou supprimée. Enregistrez-en une nouvelle (Extraction › Clé d’API).',
-      false,
-    );
-  }
-  if (isCreditError(error)) {
-    return new ChatError('Crédit épuisé sur votre compte Anthropic : rechargez-le dans la console d’Anthropic (Billing).', false);
+    return new ChatError(explainRefusedKey(keyStore.active()?.source ?? null), false);
   }
   if (error instanceof Anthropic.PermissionDeniedError) {
     return new ChatError(`Accès refusé au modèle « ${model} » pour cette clé.`, false);

@@ -193,15 +193,8 @@ export function ExtractionPage() {
         />
       </div>
 
-      {!llmReady && (
-        <p className="secondary small" style={{ margin: 0 }}>
-          Les règles traitent les libellés ; Claude traite en plus le texte rédigé, où aucun libellé n’annonce la valeur.
-          Pour l’activer, enregistrez votre clé d’API Anthropic :
-        </p>
-      )}
       {(!llmReady || mode !== 'rules') && (
         <ApiKeyPanel
-          compact={llmReady}
           onChange={(key) => {
             // Une clé vient d'être enregistrée : on passe au mode recommandé, et l'estimation du coût s'affiche.
             if (key.available) setMode((current) => (current === 'rules' ? 'hybrid' : current));

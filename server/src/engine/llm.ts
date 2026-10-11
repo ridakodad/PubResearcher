@@ -2,7 +2,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { Evidence, FieldValue, TemplateField } from '../domain/types.js';
 import { coerce } from './coerce.js';
 import { numberOr } from '../lib/env-check.js';
-import { keyStore, type KeySource } from './api-key.js';
+import { clientIdentity, clientOptions, keyStore, type KeySource } from './api-key.js';
+import { explainProblem, explainRefusedKey, problemOf } from './anthropic-errors.js';
 import { locateEvidence } from './llm-verify.js';
 import { estimateCost, type CostEstimate } from './pricing.js';
 import {
@@ -49,7 +50,7 @@ const maxTokens = numberOr(process.env.LLM_MAX_TOKENS, 16_000, 256);
 
 /** Raison affichée quand aucune clé n'est disponible. */
 export const NO_KEY_REASON =
-  "Aucune clé d'API Anthropic : ajoutez la vôtre dans l'application (Extraction › Clé d'API), ou renseignez ANTHROPIC_API_KEY dans l'environnement du serveur.";
+  "Claude n'est pas activé : aucune clé d'API Anthropic. Ajoutez la vôtre dans l'application (page « Activer Claude », 5 minutes), ou renseignez ANTHROPIC_API_KEY dans l'environnement du serveur.";
 
 let client: Anthropic | null = null;
 let clientKey = '';
@@ -62,9 +63,9 @@ function getClient(): Anthropic | null {
     clientKey = '';
     return null;
   }
-  if (!client || clientKey !== active.key) {
-    client = new Anthropic({ apiKey: active.key });
-    clientKey = active.key;
+  if (!client || clientKey !== clientIdentity(active)) {
+    client = new Anthropic(clientOptions(active));
+    clientKey = clientIdentity(active);
   }
   return client;
 }
@@ -271,22 +272,14 @@ function mentionsFallback(error: unknown): boolean {
 }
 
 function toLlmError(error: unknown): LlmError {
+  // Crédit, limite de dépenses, plafond mensuel, espace de travail : à l'utilisateur d'agir, réessayer n'y change rien.
+  const problem = problemOf(error);
+  if (problem) return new LlmError(explainProblem(problem, keyStore.active()?.source ?? null), false);
   if (error instanceof Anthropic.RateLimitError) {
     return new LlmError('Limite de débit atteinte. Relancez l’extraction dans un instant.', true);
   }
   if (error instanceof Anthropic.AuthenticationError) {
-    return new LlmError(
-      keyStore.active()?.source === 'env'
-        ? 'Clé API refusée. Vérifiez ANTHROPIC_API_KEY.'
-        : 'Anthropic refuse votre clé d’API : elle a été désactivée ou supprimée. Enregistrez-en une nouvelle (Extraction › Clé d’API).',
-      false,
-    );
-  }
-  if (isCreditError(error)) {
-    return new LlmError(
-      'Crédit épuisé sur votre compte Anthropic : rechargez-le dans la console d’Anthropic (Billing), puis relancez la passe.',
-      false,
-    );
+    return new LlmError(explainRefusedKey(keyStore.active()?.source ?? null), false);
   }
   if (error instanceof Anthropic.PermissionDeniedError) {
     return new LlmError(`Accès refusé au modèle « ${model} » pour cette clé.`, false);
@@ -306,11 +299,6 @@ function toLlmError(error: unknown): LlmError {
 /** Un message d'erreur qui répéterait la clé d'API (passerelle, mandataire) ne la fait pas parvenir à l'interface. */
 function withoutKey(message: string): string {
   return keyStore.redact(message);
-}
-
-/** Crédit insuffisant sur le compte de la clé : Anthropic répond 400 avec un message explicite. */
-export function isCreditError(error: unknown): boolean {
-  return error instanceof Anthropic.APIError && error.status === 400 && /credit balance/i.test(error.message);
 }
 
 /**

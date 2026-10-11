@@ -154,12 +154,16 @@ Avant d'extraire, deux minutes évitent des heures de doute :
 
 > **Données de santé.** Les modes « Règles puis Claude » et « Claude seul » **envoient le texte des documents** à l'API d'Anthropic (sous les noms « Document 1 », « Document 2 »… : ni les noms de fichier ni le code du dossier ne partent, mais le texte, lui, part tel quel). Cette sortie de données relève des mêmes autorisations que tout traitement externalisé de données de santé, et se décide avant l'usage. Le mode « Règles seules » n'en envoie aucune. Sans clé d'API, les deux autres modes sont indisponibles. Voir [Sécurité et données](securite-et-donnees.md).
 
-**Votre clé d'API Anthropic.** Les modes « Claude » et la rédaction assistée utilisent **votre** clé : vous payez Anthropic directement, à l'usage, et PubResearcher ne facture rien. Une seule fois :
+**Votre clé d'API Anthropic : la page « Activer Claude ».** Les modes « Claude » et la rédaction assistée utilisent **votre** clé : vous payez Anthropic directement, à l'usage, et PubResearcher ne facture rien. La page *Activer Claude* (colonne de gauche ; le même guide est sur la page d'accueil du site, à l'adresse `/activer-claude`) vous y mène en quatre étapes, cinq minutes en tout, avec à chaque fois un bouton qui ouvre directement la bonne page de la console d'Anthropic :
 
-1. créez une clé dans la [console d'Anthropic](https://console.anthropic.com/settings/keys) (compte gratuit, puis crédit prépayé) et **fixez-y une limite de dépenses mensuelle** : c'est votre garde-fou ;
-2. sur la page *Extraction*, panneau **Clé d'API Anthropic**, collez-la (elle commence par « sk-ant- ») puis *Vérifier et enregistrer*. L'outil la fait vérifier par Anthropic avant de l'enregistrer : une clé erronée, désactivée ou sans crédit est refusée avec la raison, et rien n'est gardé.
+1. **Créer votre compte Anthropic** ([console](https://platform.claude.com/)), avec votre adresse e-mail ou votre compte Google. Un abonnement à Claude (claude.ai) ne remplace pas ce compte : l'API se règle à part.
+2. **Ajouter du crédit** ([facturation](https://platform.claude.com/settings/billing)) : 5 $US suffisent pour essayer sur quelques dizaines de dossiers. Sans recharge automatique (« auto-reload »), vous ne pourrez jamais dépenser plus que ce crédit ; « Spend limits » fixe en plus un plafond mensuel.
+3. **Créer la clé** ([clés](https://platform.claude.com/settings/keys)) : « Create key », nom « PubResearcher », expiration « Never » si la console le propose, espace de travail « Default Workspace » si elle le demande. Copiez-la tout de suite : elle commence par « sk-ant- » et ne s'affiche qu'une fois.
+4. **La coller** dans le champ de l'étape 4, puis *Vérifier et activer*. L'outil la fait vérifier par Anthropic : une clé erronée, expirée ou désactivée est refusée avec la raison, et rien n'est gardé. Une clé qui vaut pour plusieurs espaces de travail est acceptée : l'outil choisit seul l'espace par défaut.
 
-Elle reste sur l'ordinateur qui fait tourner l'outil, hors de la base, des sauvegardes et des exports ; l'écran n'en montre plus que les quatre derniers caractères. *Changer de clé* la remplace, *Retirer* l'efface. Si votre administrateur a fourni une clé pour le serveur, le panneau l'indique (« Clé fournie par le serveur ») et *Utiliser ma propre clé* la remplace par la vôtre.
+Chaque étape se coche (*C'est fait*) et se replie ; la page s'en souvient si vous la quittez pour la console. Une fois la clé enregistrée, la page devient *Claude est activé* : la clé (ses quatre derniers caractères), *Changer de clé*, *Retirer*, et un dépannage en mots simples. Sur les pages *Extraction* et *Rédaction*, tant que Claude n'est pas activé, un encadré mène au guide, avec un raccourci *J'ai déjà une clé*.
+
+La clé reste sur l'ordinateur qui fait tourner l'outil, hors de la base, des sauvegardes et des exports ; l'écran n'en montre plus que les quatre derniers caractères. Si votre administrateur a fourni une clé pour le serveur, la page l'indique (« Clé fournie par le serveur ») et *Utiliser ma propre clé* la remplace par la vôtre.
 
 **Ce que coûte une passe.** Dès qu'un mode « Claude » est choisi, la page affiche une **fourchette en dollars** pour tous les dossiers, calculée sur leur texte réel ; au-delà de 5 $US, l'outil demande confirmation avant de lancer. Le bilan de passe donne ensuite le **coût constaté**, d'après les jetons facturés. Avec le modèle par défaut (Claude Opus 5.5), un dossier ordinaire coûte de l'ordre de 0,05 à 0,20 $US. En mode « Règles puis Claude », seules les variables restées vides partent : la passe coûte moins que le haut de la fourchette.
 
@@ -305,10 +309,14 @@ Le rapport contient un **paragraphe « Méthodes » prêt à adapter**, rédigé
 | « Fichier trop volumineux : la limite est de 200 Mo par fichier (MAX_UPLOAD_BYTES) … » | Réduire le fichier, ou demander à l'administrateur de relever `MAX_UPLOAD_BYTES` |
 | « Valeur inhabituelle » | Hors des bornes de la variable : *Corriger*, ou *Enregistrer quand même* si elle est vraie |
 | « valeur seuil « < 5 » : à saisir à la main » | Une valeur au seuil de détection n'est pas un nombre : saisissez ce que votre protocole prescrit |
-| « Extraction par Claude non configurée. » ou « Aucune clé d'API Anthropic… » | Aucune clé n'est enregistrée : seul le mode « Règles seules » est possible. Enregistrez la vôtre (*Extraction › Clé d'API Anthropic*, § 5) |
-| « Anthropic refuse cette clé… » | Clé mal recopiée, supprimée ou désactivée : copiez-la de nouveau depuis la console d'Anthropic, ou créez-en une autre |
+| « Extraction par Claude non configurée. » ou « Claude n'est pas activé… » | Aucune clé n'est enregistrée : seul le mode « Règles seules » est possible. Suivez la page *Activer Claude* (§ 5) |
+| « Anthropic refuse cette clé… » | Clé mal recopiée, expirée, supprimée ou désactivée : copiez-la de nouveau depuis la console d'Anthropic, ou créez-en une autre |
 | « C'est une clé d'administration… » | Une clé `sk-ant-admin…` ne sert pas à interroger un modèle : créez une clé d'API ordinaire |
-| « Crédit épuisé sur votre compte Anthropic… » | Rechargez le crédit (console d'Anthropic, *Billing*) ou relevez votre limite de dépenses, puis relancez : une passe interrompue n'a rien effacé |
+| « Crédit épuisé sur votre compte Anthropic… » | Ajoutez du crédit (console d'Anthropic, *Billing*), puis relancez : une passe interrompue n'a rien effacé |
+| « Vous avez atteint la limite de dépenses fixée sur votre compte Anthropic… » | C'est la limite que vous (ou votre organisation) avez fixée : relevez-la (*Billing › Spend limits*) ou attendez la date de reprise indiquée |
+| « Votre compte Anthropic a atteint son plafond mensuel… » | Plafond du palier du compte : l'usage reprend le 1er du mois suivant, ou plus tôt si Anthropic relève le palier (console, *Limits*) |
+| « Anthropic refuse votre clé d'API : elle a expiré, ou a été désactivée ou supprimée… » | Créez une nouvelle clé dans la console et collez-la sur la page *Activer Claude* : elle remplace l'ancienne |
+| « Cette clé vaut pour plusieurs espaces de travail d'Anthropic, et l'outil n'a pas pu choisir le sien… » | Votre rôle dans l'organisation ne permet pas de lister ses espaces : créez une clé en choisissant un seul espace de travail (« Default Workspace ») |
 | « Anthropic est injoignable depuis ce poste… » | Pas d'accès à Internet, ou un pare-feu bloque `api.anthropic.com` : voyez avec l'administrateur |
 | « Une recherche est déjà en cours » | Une seule passe bibliographique à la fois (elle est facturée) : patientez |
 | Nom d'hôte non autorisé (403) | On accède à l'outil sous un nom que l'administrateur n'a pas déclaré (`ALLOWED_HOSTS`) |

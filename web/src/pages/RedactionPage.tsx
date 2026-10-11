@@ -131,7 +131,8 @@ export function RedactionPage() {
           </div>
         </div>
         <p className="secondary small" style={{ margin: 0 }}>
-          L’assistant de rédaction utilise votre clé d’API Anthropic. Le reste de l’espace de travail fonctionne sans elle.
+          L’assistant de rédaction est Claude : il demande votre clé d’API Anthropic. Le reste de l’espace de travail
+          fonctionne sans elle.
         </p>
         <ApiKeyPanel
           onChange={() => {

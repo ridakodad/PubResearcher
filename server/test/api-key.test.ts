@@ -5,7 +5,10 @@
  *   fait tourner l'outil, hors de la base et hors des sauvegardes.
  * - Elle ne revient jamais vers l'interface : ni dans une réponse, ni dans un message d'erreur.
  * - Elle l'emporte sur la variable d'environnement, qui reprend la main quand on la retire.
- * - C'est bien elle qui part vers Anthropic lors d'une extraction ; un crédit épuisé est expliqué en français.
+ * - C'est bien elle qui part vers Anthropic lors d'une extraction ; un crédit épuisé, une limite de dépenses, un
+ *   plafond mensuel ou une clé expirée sont expliqués en français, avec quoi faire.
+ * - Une clé qui vaut pour plusieurs espaces de travail trouve le sien seule (l'espace par défaut d'abord), qui part
+ *   ensuite avec chaque requête.
  *
  * Aucune requête ne part : `fetch` est remplacé par un faux Anthropic.
  */
@@ -20,6 +23,12 @@ import type { Server } from 'node:http';
 const ENV_KEY = 'sk-ant-api03-ENVIRONNEMENT-cle-de-serveur-0000000000';
 const APP_KEY = 'sk-ant-api03-UTILISATEUR-cle-personnelle-AbCd1234_xyZW';
 const BAD_KEY = 'sk-ant-api03-REFUSEE-par-anthropic-99999999999999999';
+/** Clé personnelle non liée à un espace de travail : chaque requête doit nommer le sien. */
+const MULTI_KEY = 'sk-ant-api03-PLUSIEURS-espaces-de-travail-1234MuLt';
+/** Même chose, mais le rôle de l'utilisateur ne lui permet pas de lister les espaces. */
+const MULTI_LOCKED_KEY = 'sk-ant-api03-PLUSIEURS-espaces-sans-liste-5678LoCk';
+const DEFAULT_WS = 'wrkspc_01ParDefaut0000000000';
+const CODE_WS = 'wrkspc_01ClaudeCode000000000';
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pubresearcher-apikey-'));
 process.env.DATA_DIR = tmpDir;
@@ -31,11 +40,14 @@ delete process.env.LLM_MODEL;
 interface Call {
   url: string;
   key: string | null;
+  workspace: string | null;
   body: string;
 }
 const calls: Call[] = [];
 let anthropicDown = false;
 let creditExhausted = false;
+/** Refus à rejouer sur /v1/messages : limite de dépenses de l'utilisateur, plafond mensuel du palier, clé expirée. */
+let messagesRefusal: 'spend-limit' | 'monthly-cap' | 'expired' | null = null;
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -43,11 +55,54 @@ const json = (status: number, body: unknown) =>
 globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
   const headers = new Headers(init?.headers);
   const key = headers.get('x-api-key');
-  calls.push({ url: String(url), key, body: typeof init?.body === 'string' ? init.body : '' });
+  const workspace = headers.get('anthropic-workspace-id');
+  calls.push({ url: String(url), key, workspace, body: typeof init?.body === 'string' ? init.body : '' });
   if (anthropicDown) throw new TypeError('fetch failed');
   if (key === BAD_KEY) {
     // Une passerelle bavarde : le refus répète la clé reçue.
     return json(401, { type: 'error', error: { type: 'authentication_error', message: `invalid x-api-key ${key}` } });
+  }
+  if (key === MULTI_KEY || key === MULTI_LOCKED_KEY) {
+    const listing = new URL(String(url));
+    if (listing.pathname === '/v1/organizations/workspaces') {
+      if (key === MULTI_LOCKED_KEY) {
+        return json(403, { type: 'error', error: { type: 'permission_error', message: 'Your role does not allow this action.' } });
+      }
+      const named = [{ id: CODE_WS, name: 'Claude Code', archived_at: null }];
+      const all = listing.searchParams.get('include_default') === 'true' ? [{ id: DEFAULT_WS, name: 'Default Workspace', archived_at: null }, ...named] : named;
+      return json(200, { data: all, has_more: false, first_id: all[0]?.id ?? null, last_id: all.at(-1)?.id ?? null });
+    }
+    if (!workspace) {
+      return json(400, {
+        type: 'error',
+        error: {
+          type: 'invalid_request_error',
+          message: 'anthropic-workspace-id is required when authenticating with an identity-linked API key; send the id of the workspace this request acts in.',
+        },
+      });
+    }
+    if (workspace !== DEFAULT_WS && workspace !== CODE_WS) {
+      return json(404, { type: 'error', error: { type: 'not_found_error', message: `Workspace \`${workspace}\` not found.` } });
+    }
+  }
+  if (String(url).includes('/v1/messages') && messagesRefusal === 'spend-limit') {
+    return json(400, {
+      type: 'error',
+      error: { type: 'invalid_request_error', message: 'You have reached your specified API usage limits. You will regain access on 2026-11-01 at 00:00 UTC.' },
+    });
+  }
+  if (String(url).includes('/v1/messages') && messagesRefusal === 'monthly-cap') {
+    return json(429, {
+      type: 'error',
+      error: {
+        type: 'rate_limit_error',
+        message: 'You have reached your API usage limits: your organization has crossed its monthly API usage threshold, set based on your organization\'s API tier. You will regain access on 2026-11-01 at 00:00 UTC.',
+        details: { error_code: 'enforced_spend_limit_reached' },
+      },
+    });
+  }
+  if (String(url).includes('/v1/messages') && messagesRefusal === 'expired') {
+    return json(401, { type: 'error', error: { type: 'authentication_error', message: 'API key expired.' } });
   }
   if (String(url).includes('/v1/models/')) {
     return json(200, { type: 'model', id: 'claude-opus-5-5', display_name: 'Claude Opus 5.5', created_at: '2026-09-01T00:00:00Z' });
@@ -68,7 +123,7 @@ globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
   return json(404, { type: 'error', error: { type: 'not_found_error', message: 'introuvable' } });
 }) as typeof fetch;
 
-const { createKeyStore, checkKeyShape, KeyError } = await import('../src/engine/api-key.js');
+const { createKeyStore, checkKeyShape, KeyError, WORKSPACE_HELP } = await import('../src/engine/api-key.js');
 const { costOf, estimateCost, priceOf } = await import('../src/engine/pricing.js');
 const { DEFAULT_MODEL } = await import('../src/engine/llm.js');
 const { DEFAULT_CHAT_MODEL } = await import('../src/engine/chat.js');
@@ -105,7 +160,12 @@ describe('enregistrement local', () => {
   test('sans fichier : la clé de l’environnement sert ; sans rien : aucune', () => {
     assert.deepEqual(createKeyStore(file, env).active(), { key: ENV_KEY, source: 'env' });
     assert.equal(createKeyStore(file, {}).active(), null);
-    assert.deepEqual(createKeyStore(file, {}).status(), { source: null, hint: null, savedAt: null });
+    assert.deepEqual(createKeyStore(file, {}).status(), { source: null, hint: null, savedAt: null, workspace: null });
+  });
+
+  test('clé d’environnement multi-espaces : ANTHROPIC_WORKSPACE_ID l’accompagne', () => {
+    const store = createKeyStore(file, { ANTHROPIC_API_KEY: ENV_KEY, ANTHROPIC_WORKSPACE_ID: ' wrkspc_01Env ' });
+    assert.deepEqual(store.active(), { key: ENV_KEY, source: 'env', workspaceId: 'wrkspc_01Env' });
   });
 
   test('la clé saisie l’emporte, fichier aux droits restreints, seuls ses quatre derniers caractères affichés', async () => {
@@ -147,6 +207,14 @@ describe('enregistrement local', () => {
     const masked = store.redact(text);
     for (const form of [APP_KEY, encodeURIComponent(ENV_KEY), Buffer.from(APP_KEY).toString('base64')]) assert.ok(!masked.includes(form), form);
     store.remove();
+  });
+
+  test('l’espace de travail trouvé à la vérification est gardé avec la clé, et relu au redémarrage', async () => {
+    const other = path.join(tmpDir, 'espace', 'cle.json');
+    const store = createKeyStore(other, {});
+    const status = await store.save(APP_KEY, 'claude-opus-5-5', async () => ({ workspaceId: DEFAULT_WS, workspaceName: 'Default Workspace' }));
+    assert.equal(status.workspace, 'Default Workspace');
+    assert.deepEqual(createKeyStore(other, {}).active(), { key: APP_KEY, source: 'app', workspaceId: DEFAULT_WS });
   });
 
   test('un fichier abîmé vaut absence de clé (pas de plantage)', () => {
@@ -261,7 +329,7 @@ async function patientWithDocument(code: string, text: string): Promise<number> 
 
 function assertNoSecret(reply: Reply, where: string): void {
   const everything = `${reply.text}\n${JSON.stringify(reply.headers)}`;
-  for (const key of [APP_KEY, BAD_KEY, ENV_KEY]) {
+  for (const key of [APP_KEY, BAD_KEY, ENV_KEY, MULTI_KEY, MULTI_LOCKED_KEY]) {
     for (const form of [key, encodeURIComponent(key), Buffer.from(key).toString('base64')]) {
       assert.ok(!everything.includes(form), `${where} : une clé apparaît dans la réponse`);
     }
@@ -379,6 +447,55 @@ describe('routes /api/llm', () => {
     } finally {
       creditExhausted = false;
     }
+  });
+
+  for (const [refusal, expected] of [
+    ['spend-limit', /limite de dépenses fixée sur votre compte Anthropic.*Spend limits/],
+    ['monthly-cap', /plafond mensuel.*1er du mois/],
+    ['expired', /a expiré, ou a été désactivée ou supprimée.*Activer Claude/],
+  ] as const) {
+    test(`refus d’Anthropic en cours de passe (${refusal}) : expliqué en français, avec quoi faire, sans réessai inutile`, async () => {
+      messagesRefusal = refusal;
+      try {
+        const patientId = await patientWithDocument(`CLE-${refusal}`, 'Compte rendu : bilan normal.');
+        const run = await request('POST', '/api/records/extraction/run', { mode: 'llm', patientIds: [patientId] });
+        assert.equal(run.status, 200, run.text);
+        const result = JSON.parse(run.text) as { errors: { message: string }[] };
+        assert.match(result.errors[0]?.message ?? '', expected);
+        assertNoSecret(run, `passe refusée (${refusal})`);
+      } finally {
+        messagesRefusal = null;
+      }
+    });
+  }
+
+  test('clé valable dans plusieurs espaces de travail : l’espace par défaut est trouvé seul, puis nommé à chaque requête', async () => {
+    const reply = await request('PUT', '/api/llm/key', { key: MULTI_KEY });
+    assert.equal(reply.status, 200, reply.text);
+    const body = JSON.parse(reply.text) as { source: string; workspace: string; hint: string };
+    assert.equal(body.source, 'app');
+    assert.equal(body.workspace, 'Default Workspace');
+    assertNoSecret(reply, 'PUT multi-espaces');
+    const stored = JSON.parse(fs.readFileSync(keyFile, 'utf8')) as { workspaceId: string };
+    assert.equal(stored.workspaceId, DEFAULT_WS);
+
+    const since = calls.length;
+    const patientId = await patientWithDocument('CLE-ESPACE', 'Compte rendu : patient vu en consultation.');
+    const run = await request('POST', '/api/records/extraction/run', { mode: 'llm', patientIds: [patientId] });
+    assert.equal(run.status, 200, run.text);
+    assert.deepEqual((JSON.parse(run.text) as { errors: unknown[] }).errors, []);
+    const sent = calls.slice(since).filter((c) => c.url.includes('/v1/messages'));
+    assert.ok(sent.length >= 1);
+    assert.ok(sent.every((c) => c.key === MULTI_KEY && c.workspace === DEFAULT_WS), 'chaque requête nomme l’espace de travail');
+  });
+
+  test('clé multi-espaces sans droit de lister les espaces : refusée avec la marche à suivre, rien d’écrit', async () => {
+    await request('DELETE', '/api/llm/key');
+    const reply = await request('PUT', '/api/llm/key', { key: MULTI_LOCKED_KEY });
+    assert.equal(reply.status, 400);
+    assert.equal(JSON.parse(reply.text).error, WORKSPACE_HELP);
+    assertNoSecret(reply, 'PUT multi-espaces verrouillé');
+    assert.equal(fs.existsSync(keyFile), false);
   });
 
   test('retirer la clé : la clé du serveur reprend la main ; le fichier disparaît', async () => {

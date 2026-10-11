@@ -227,6 +227,28 @@ export function IconWrite(props: IconProps) {
   );
 }
 
+/** Clé d'API : ce qui active Claude. */
+export function IconKey(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="8" cy="15.5" r="4" />
+      <path d="m10.9 12.6 8.6-8.6" />
+      <path d="m16.5 7 2.5 2.5" />
+      <path d="m14 9.5 2 2" />
+    </Svg>
+  );
+}
+
+/** Lecture d'une vidéo. */
+export function IconPlay(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M10.2 8.8v6.4l5.2-3.2Z" />
+    </Svg>
+  );
+}
+
 /** Information de contexte, sans caractère d'alerte. */
 export function IconInfo(props: IconProps) {
   return (

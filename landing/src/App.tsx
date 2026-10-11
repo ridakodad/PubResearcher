@@ -5,6 +5,7 @@ import { RequireAuth } from './components/RequireAuth';
 import { AuthProvider } from './lib/auth';
 import { AccessPage } from './pages/AccessPage';
 import { AuthPage } from './pages/AuthPage';
+import { ClaudeGuidePage } from './pages/ClaudeGuidePage';
 import { LandingPage } from './pages/LandingPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { OnboardingPage } from './pages/OnboardingPage';
@@ -40,6 +41,7 @@ export function App() {
             <Route path="/mot-de-passe" element={<PasswordPage />} />
             <Route path="/deconnexion" element={<SignOutPage />} />
             <Route path="/confidentialite" element={<PrivacyPage />} />
+            <Route path="/activer-claude" element={<ClaudeGuidePage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </Layout>

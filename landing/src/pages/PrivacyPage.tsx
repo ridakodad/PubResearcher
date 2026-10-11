@@ -81,7 +81,8 @@ export function PrivacyPage() {
         </ul>
         <p>
           Votre navigateur garde localement deux choses : la session ouverte par le service d’authentification (pour ne pas
-          vous redemander le mot de passe à chaque page) et votre choix de thème, clair ou sombre.
+          vous redemander le mot de passe à chaque page) et votre choix de thème, clair ou sombre. S’y ajoute, le temps de la
+          session de navigation seulement, le fait d’avoir vu la vidéo de présentation, pour ne pas vous la remontrer.
         </p>
       </section>
 

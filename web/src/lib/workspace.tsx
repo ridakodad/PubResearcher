@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { api } from './api';
+import { api, onDataWrite } from './api';
 import type { Capabilities } from './types';
 
 /**
@@ -52,6 +52,23 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [tick, setTick] = useState(0);
 
   const refresh = useCallback(() => setTick((n) => n + 1), []);
+
+  // Après une écriture (import, passe, relecture, fiche) : un recomptage, au plus un toutes les 1,2 s — un import de
+  // cent dossiers ne relance pas cent lectures, et la dernière écriture est toujours comptée.
+  useEffect(() => {
+    let timer: number | undefined;
+    const unsubscribe = onDataWrite(() => {
+      if (timer !== undefined) return;
+      timer = window.setTimeout(() => {
+        timer = undefined;
+        refresh();
+      }, 1200);
+    });
+    return () => {
+      unsubscribe();
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [refresh]);
 
   useEffect(() => {
     let cancelled = false;

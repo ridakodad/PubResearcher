@@ -129,10 +129,10 @@ Autre langue : `npm install @tesseract.js-data/eng --workspace server` puis `OCR
 
 **Chaque utilisateur paie l'IA avec sa propre clé d'API Anthropic.** PubResearcher ne facture rien : il n'y a ni abonnement ni crédit à acheter auprès de l'outil, et la consommation est facturée directement sur le compte Anthropic du titulaire de la clé.
 
-**Saisie dans l'application** (cas ordinaire). Écran **Extraction › Clé d'API Anthropic** — le même panneau apparaît dans **Rédaction** tant qu'aucune clé n'est disponible :
+**Saisie dans l'application** (cas ordinaire). Page **Activer Claude** de l'application (colonne de gauche), qui guide l'utilisateur pas à pas jusqu'à sa clé, avec le lien direct vers chaque page de la console d'Anthropic (compte, crédit, clés) ; les pages **Extraction** et **Rédaction** y mènent tant qu'aucune clé n'est disponible, avec un raccourci « J'ai déjà une clé ». À l'enregistrement :
 
 1. la clé est d'abord contrôlée sur sa forme (`sk-ant-…` ; une clé d'administration `sk-ant-admin…` est refusée : elle n'interroge pas de modèle) ;
-2. puis **vérifiée auprès d'Anthropic** par une seule requête gratuite (la fiche du modèle configuré) : une clé erronée, désactivée, sans accès au modèle ou un réseau coupé donnent chacun leur message, et **rien n'est enregistré** ;
+2. puis **vérifiée auprès d'Anthropic** par une seule requête gratuite (la fiche du modèle configuré) : une clé erronée, expirée, désactivée, sans accès au modèle ou un réseau coupé donnent chacun leur message, et **rien n'est enregistré**. Une clé personnelle qui vaut pour **plusieurs espaces de travail** d'Anthropic doit nommer le sien à chaque requête (en-tête `anthropic-workspace-id`) : la vérification liste alors les espaces de l'organisation (deux lectures), essaie l'espace par défaut d'abord, et garde le premier où la clé interroge le modèle ; l'identifiant et le nom de l'espace sont enregistrés avec la clé et accompagnent ensuite chaque requête. Si le rôle de l'utilisateur ne lui permet pas de lister les espaces, la clé est refusée avec la marche à suivre (en créer une liée à un seul espace) ;
 3. elle est alors écrite dans `DATA_DIR/anthropic-key.json`, avec les droits `0600` dès la création (écriture atomique), **hors de la base, des sauvegardes et des exports** ;
 4. l'interface n'en reçoit plus que la provenance et les **quatre derniers caractères** (`…a1B2`) ; « Retirer » efface le fichier.
 
@@ -143,6 +143,7 @@ La clé sert aussitôt, sans redémarrage. Elle est **commune à l'instance** : 
 | Variable | Défaut | Rôle |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | — | Clé de secours, si aucune n'est saisie dans l'application. **Sans clé, seules les règles sont disponibles** et rien ne sort de la machine |
+| `ANTHROPIC_WORKSPACE_ID` | — | Identifiant de l'espace de travail (`wrkspc_…`, colonne *ID* de la page *Workspaces* de la console) à nommer avec `ANTHROPIC_API_KEY` quand celle-ci vaut pour plusieurs espaces. Inutile pour une clé saisie dans l'application, qui le trouve seule |
 | `LLM_MODEL` | `claude-opus-5-5` | Modèle utilisé (extraction et rédaction). La clé est vérifiée contre lui à la saisie. `claude-sonnet-5-5` coûte deux fois moins ; `claude-haiku-5-5` bien moins encore, au prix de la finesse. Un modèle absent du barème de l'outil fonctionne, mais sans montant en dollars (jetons seuls) |
 | `LLM_EFFORT` | `high` | Profondeur de raisonnement (`low`, `medium`, `high`, `xhigh`, `max` ; toute autre valeur arrête le démarrage) ; `medium` ou `low` réduisent le coût sur de grandes séries |
 | `LLM_MAX_CHARS_PER_DOC` | `60000` | Texte transmis par document ; au-delà, tronqué et signalé au modèle |
@@ -151,7 +152,7 @@ La clé sert aussitôt, sans redémarrage. Elle est **commune à l'instance** : 
 
 **Coût.** Avant une passe, l'écran d'extraction affiche une **fourchette en dollars**, calculée sur le texte réel des dossiers (3,2 caractères par jeton, consigne mise en cache), et demande confirmation au-delà de 5 $US ; après la passe, et après chaque réponse de l'assistant de rédaction, le **coût constaté** d'après les jetons facturés. Barème intégré (octobre 2026, dollars par million de jetons, entrée / sortie) : Opus 5.5 4 / 20, Opus 5 5 / 25, Sonnet 5.5 et Sonnet 5 2 / 10, Haiku 5.5 0,10 / 0,50, Fable 5.1 10 / 50. Ces montants sont indicatifs : la facture qui fait foi est celle de la console d'Anthropic.
 
-**Messages d'Anthropic.** Clé refusée, crédit épuisé, limite de débit et modèle introuvable sont traduits en clair (« Crédit épuisé sur votre compte Anthropic : rechargez-le… ») ; la clé n'apparaît dans aucun message, aucune réponse, aucun journal — le journal ne note que ses quatre derniers caractères à l'enregistrement.
+**Messages d'Anthropic.** Clé refusée ou expirée, crédit épuisé, limite de dépenses atteinte (celle que l'utilisateur fixe, `400`), plafond mensuel du palier du compte (`429` sans réessai possible), espace de travail manquant, limite de débit et modèle introuvable sont traduits en clair, avec ce qu'il faut faire (« Crédit épuisé sur votre compte Anthropic : ajoutez du crédit… ») ; aucun de ces refus n'est réessayé en boucle. La clé n'apparaît dans aucun message, aucune réponse, aucun journal — le journal ne note que ses quatre derniers caractères à l'enregistrement.
 
 > **Ce qui part chez Anthropic**, mode « Claude » : le **texte des documents** (présentés au modèle sous les noms « Document 1 », « Document 2 »… : ni le code du dossier ni les noms de fichiers ne partent), les libellés, unités, définitions et options des variables, et le nom de la fiche. **Le texte d'un compte rendu contient souvent le nom du patient** : l'outil ne le retire pas. Pour la rédaction : des agrégats seulement (voir [Sécurité et données](securite-et-donnees.md#2-ce-qui-sort-de-la-machine)).
 >

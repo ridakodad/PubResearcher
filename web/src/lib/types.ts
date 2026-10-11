@@ -369,6 +369,8 @@ export interface ApiKeyStatus {
   source: 'app' | 'env' | null;
   hint: string | null;
   savedAt: string | null;
+  /** Espace de travail d'Anthropic retenu pour une clé qui en couvre plusieurs (choisi par l'outil). */
+  workspace: string | null;
   model: string;
   available: boolean;
 }

@@ -6,6 +6,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { formatUsd, guessLang, modelLabel, parseNumberInput, numberToInput, sameValue } from '../../web/src/lib/format.js';
 import { PRICES } from '../src/engine/pricing.js';
+import { api, onDataWrite } from '../../web/src/lib/api.js';
 import { EXPORTS } from '../../web/src/lib/exports.js';
 import { detectStructure, groupItems, patientCodeOf } from '../../web/src/lib/grouping.js';
 
@@ -143,5 +144,45 @@ describe('coût et modèle affichés', () => {
     assert.equal(modelLabel('claude-opus-5-5'), 'Claude Opus 5.5');
     assert.equal(modelLabel('claude-futur-9'), 'claude-futur-9');
     assert.equal(modelLabel(null), 'Claude');
+  });
+});
+
+describe('compteurs de l’espace de travail après une écriture', () => {
+  test('une écriture réussie prévient l’espace de travail ; une lecture, un essai de règle ou un échec, non', async () => {
+    const real = globalThis.fetch;
+    let status = 200;
+    globalThis.fetch = (async () =>
+      status === 204
+        ? new Response(null, { status: 204 })
+        : new Response(JSON.stringify(status === 200 ? { patients: [] } : { error: 'refus' }), {
+            status,
+            headers: { 'content-type': 'application/json' },
+          })) as typeof fetch;
+    let writes = 0;
+    const unsubscribe = onDataWrite(() => {
+      writes += 1;
+    });
+    try {
+      await api.listPatients();
+      assert.equal(writes, 0, 'une lecture ne recompte rien');
+      await api.testRule({ field: { key: 'x', label: 'X', type: 'text' }, sampleText: 'X : 1' });
+      assert.equal(writes, 0, 'essayer une règle ne change aucune donnée');
+      status = 204;
+      await api.deletePatient(1);
+      assert.equal(writes, 1, 'une suppression (204) recompte');
+      status = 200;
+      await api.createPatient({ code: 'PAT-1' });
+      assert.equal(writes, 2, 'une création recompte');
+      status = 400;
+      await assert.rejects(api.createPatient({ code: '' }));
+      assert.equal(writes, 2, 'une écriture refusée ne recompte pas');
+      unsubscribe();
+      status = 200;
+      await api.createPatient({ code: 'PAT-2' });
+      assert.equal(writes, 2, 'désabonné : plus de signal');
+    } finally {
+      unsubscribe();
+      globalThis.fetch = real;
+    }
   });
 });

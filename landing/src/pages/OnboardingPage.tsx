@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CharterChecklist } from '../components/CharterChecklist';
+import { IntroVideo } from '../components/IntroVideo';
 import { ChoiceField, focusFirstError, SelectField, TextField } from '../components/fields';
 import { IconInfo, IconShield } from '../components/icons';
 import { Stepper } from '../components/Stepper';
@@ -27,6 +28,7 @@ import {
 } from '../lib/onboarding';
 import { recordConsent, saveProfile } from '../lib/profile';
 import type { FieldErrors } from '../lib/forms';
+import { introSeen, markIntroSeen } from '../lib/introVideo';
 import { usePageTitle } from '../lib/usePageTitle';
 import { useOnboardingState } from '../lib/useOnboarding';
 
@@ -34,7 +36,8 @@ const STEP_LABELS = ['Votre profil', 'Votre étude', 'Votre engagement'] as cons
 const STEP_HEADINGS = ['Qui êtes-vous ?', 'Quelle étude préparez-vous ?', 'Votre engagement d’anonymisation'] as const;
 
 /**
- * Parcours d'accueil : le profil, l'étude, puis la charte d'anonymisation. Chaque étape enregistre ce qu'elle a
+ * Parcours d'accueil : à la toute première arrivée, une présentation vidéo de l'outil ; puis le profil, l'étude, et la
+ * charte d'anonymisation. Chaque étape enregistre ce qu'elle a
  * recueilli avant de passer à la suivante — quitter la page n'efface rien, et la reprise se fait là où l'on s'est arrêté.
  *
  * `?modifier` rouvre le parcours depuis le début pour corriger ses réponses ; la charte n'est alors redemandée que si
@@ -49,7 +52,8 @@ export function OnboardingPage() {
   const { state, error: loadError, reload } = useOnboardingState(user);
 
   const [draft, setDraft] = useState<ProfileDraft>(EMPTY_PROFILE);
-  const [step, setStep] = useState<1 | 2 | 3 | null>(null);
+  // 0 : la présentation, montrée une fois, avant la première réponse.
+  const [step, setStep] = useState<0 | 1 | 2 | 3 | null>(null);
   const [errors, setErrors] = useState<FieldErrors<ProfileField>>({});
   const [checked, setChecked] = useState<ReadonlySet<string>>(() => new Set());
   const [busy, setBusy] = useState(false);
@@ -72,6 +76,7 @@ export function OnboardingPage() {
 
     const target = nextStep(state);
     if (editing) setStep(1);
+    else if (target === 'profile' && state.profile === null && !introSeen()) setStep(0);
     else if (target === 'done') navigate('/acces', { replace: true });
     else if (target === 'charter') setStep(3);
     else setStep(state.profile && Object.keys(validateProfileStep(1, profile)).length === 0 ? 2 : 1);
@@ -174,6 +179,43 @@ export function OnboardingPage() {
   }
 
   const advice = draft.ethics ? ethicsAdvice(draft.ethics) : null;
+
+  if (step === 0) {
+    return (
+      <div className="view container narrow-wide onboarding">
+        <p className="eyebrow">
+          Bienvenue{user.name ? ', ' : ''}
+          {user.name && <span className="eyebrow-name">{user.name}</span>}
+        </p>
+        <div className="onboarding-card intro-card">
+          <h1 tabIndex={-1} ref={headingRef}>
+            Bienvenue dans PubResearcher
+          </h1>
+          <p className="lead">
+            En {'1\u00a0min\u00a035'} : de la pile de dossiers patients au tableau prêt à analyser — chaque valeur avec la phrase
+            qui la justifie, sur votre ordinateur.
+          </p>
+          <IntroVideo />
+          <p className="intro-next">
+            Ensuite, trois étapes de quelques minutes : votre profil, votre étude, et votre engagement d’anonymisation.
+          </p>
+          <div className="form-actions">
+            <button
+              type="button"
+              className="btn btn-primary btn-lg"
+              onClick={() => {
+                markIntroSeen();
+                setStep(1);
+              }}
+            >
+              Commencer le parcours
+            </button>
+          </div>
+          <p className="small muted">Vous pourrez revoir la vidéo sur votre page d’accès.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="view container narrow onboarding">

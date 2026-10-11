@@ -56,8 +56,31 @@ interface RequestOptions {
   timeoutMs?: number;
 }
 
+/**
+ * Écritures réussies : l'espace de travail (compteurs du rail, chiffres du plan de travail) se recompte. Sans ce
+ * signal, un import, une passe d'extraction ou une relecture laissait des compteurs périmés jusqu'au rechargement.
+ */
+type WriteListener = () => void;
+const writeListeners = new Set<WriteListener>();
+
+export function onDataWrite(listener: WriteListener): () => void {
+  writeListeners.add(listener);
+  return () => {
+    writeListeners.delete(listener);
+  };
+}
+
+/** Requêtes en écriture qui ne changent ni les dossiers, ni la fiche, ni les valeurs. */
+const NEUTRAL_WRITES = [/^\/templates\/fields\/test/, /^\/biblio\//, /^\/redaction\//];
+
+function notifyWrite(path: string, method: string): void {
+  if (method === 'GET' || NEUTRAL_WRITES.some((pattern) => pattern.test(path))) return;
+  for (const listener of writeListeners) listener();
+}
+
 async function request<T>(path: string, init?: RequestInit, options: RequestOptions = {}): Promise<T> {
   let res: Response;
+  const method = (init?.method ?? 'GET').toUpperCase();
   const upload = init?.body instanceof FormData;
   const timeoutMs = options.timeoutMs ?? (upload ? 0 : DEFAULT_TIMEOUT_MS);
   try {
@@ -74,7 +97,10 @@ async function request<T>(path: string, init?: RequestInit, options: RequestOpti
     throw new ApiError(0, "Serveur injoignable. Vérifiez que l’API est démarrée.");
   }
 
-  if (res.status === 204) return undefined as T;
+  if (res.status === 204) {
+    notifyWrite(path, method);
+    return undefined as T;
+  }
 
   const text = await res.text();
   let data: unknown = null;
@@ -96,6 +122,7 @@ async function request<T>(path: string, init?: RequestInit, options: RequestOpti
       payload?.code,
     );
   }
+  notifyWrite(path, method);
   return data as T;
 }
 

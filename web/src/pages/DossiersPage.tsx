@@ -221,8 +221,8 @@ export function DossiersPage() {
                 <div>
                   <strong>Extraction par Claude non configurée.</strong> Les règles traitent les
                   libellés ; Claude traite en plus le texte rédigé, où aucun libellé n’annonce la
-                  valeur. Pour l’activer, enregistrez votre clé d’API Anthropic sur la page{' '}
-                  <Link to="/extraction">Extraction</Link> : vous payez Anthropic directement, à l’usage.
+                  valeur. Pour l’activer, suivez le guide <Link to="/claude">Activer Claude</Link> (cinq minutes) :
+                  vous payez Anthropic directement, à l’usage.
                 </div>
               </div>
             )}

@@ -684,8 +684,9 @@ describe('code du site : autonome, sans secret, sans surface d’injection', () 
     }
   });
 
+  // Une clé Anthropic, pas la mention de son préfixe (le guide « Activer Claude » dit qu'elle commence par « sk-ant- »).
   test('aucun secret ni jeton dans le code, les exemples de configuration ou la migration', () => {
-    const suspects = [/service_role/i, /sb_secret_/, /-----BEGIN [A-Z ]*PRIVATE KEY/, /\beyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\./, /sk-ant-/, /AIza[0-9A-Za-z_-]{30,}/];
+    const suspects = [/service_role/i, /sb_secret_/, /-----BEGIN [A-Z ]*PRIVATE KEY/, /\beyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\./, /sk-ant-[A-Za-z0-9_-]{20,}/, /AIza[0-9A-Za-z_-]{30,}/];
     for (const file of [...files, 'landing/.env.example', 'landing/.env.production', 'landing/index.html', 'landing/vercel.json', ...fs.readdirSync(path.join(REPO, MIGRATION_DIR)).map((n) => path.join(MIGRATION_DIR, n))]) {
       const text = read(file);
       for (const re of suspects) assert.doesNotMatch(text, re, `${file} : ${re}`);
@@ -755,5 +756,48 @@ describe('code du site : autonome, sans secret, sans surface d’injection', () 
       const hits = [...code.matchAll(/[A-Za-zÀ-ÿ]'[A-Za-zÀ-ÿ]/g)].map((m) => code.slice(Math.max(0, m.index! - 15), m.index! + 15).replace(/\n/g, ' '));
       assert.deepEqual(hits, [], `${file} : apostrophes droites dans du texte`);
     }
+  });
+});
+
+describe('« Activer Claude » et présentation vidéo : le site dit la même chose que l’application', () => {
+  test('le guide de la clé est le même fichier, octet pour octet, dans l’application et sur le site', () => {
+    assert.equal(read('landing/src/lib/claudeGuide.ts'), read('web/src/lib/claudeGuide.ts'));
+  });
+
+  test('chaque étape mène à une page de la console d’Anthropic, en https, et seulement là', async () => {
+    const guide = await import('../../landing/src/lib/claudeGuide.js');
+    const links = guide.GUIDE_STEPS.map((step) => step.link.href);
+    assert.deepEqual(links, ['https://platform.claude.com/', 'https://platform.claude.com/settings/billing', 'https://platform.claude.com/settings/keys']);
+    // Le texte ne promet ni crédit offert ni montant que la page de coût de l'application ne dit pas.
+    assert.match(guide.GUIDE_COST, /0,05 à 0,20 \$US par dossier ordinaire/);
+    assert.match(guide.PASTE_STEP.onSite, /ne la collez jamais ailleurs/);
+  });
+
+  test('la vidéo : MP4 (H.264) et WebM, affiche, durée annoncée = durée réelle du fichier', async () => {
+    const { INTRO_VIDEO, INTRO_TRANSCRIPT } = await import('../../landing/src/lib/introVideo.js');
+    const file = (url: string) => path.join(REPO, 'landing/public', url);
+    const mp4 = fs.readFileSync(file(INTRO_VIDEO.src));
+    for (const url of [INTRO_VIDEO.src, INTRO_VIDEO.webm, INTRO_VIDEO.poster]) {
+      const size = fs.statSync(file(url)).size;
+      assert.ok(size > 10_000 && size < 5_000_000, `${url} : ${size} octets`);
+    }
+    // Durée du film d'après l'en-tête « mvhd » du MP4 (version 0 : échelle de temps puis durée, sur 32 bits).
+    const at = mp4.indexOf('mvhd');
+    assert.ok(at > 0, 'en-tête mvhd');
+    const timescale = mp4.readUInt32BE(at + 4 + 4 + 8);
+    const seconds = mp4.readUInt32BE(at + 4 + 4 + 12) / timescale;
+    const [, minutes, rest] = /^(\d+) min (\d+)$/.exec(INTRO_VIDEO.duration) ?? [];
+    // Comme l'affiche le lecteur : secondes entières, arrondies vers le bas.
+    assert.equal(Number(minutes) * 60 + Number(rest), Math.floor(seconds), `annoncé ${INTRO_VIDEO.duration}, réel ${seconds.toFixed(1)} s`);
+    assert.match(INTRO_VIDEO.size, new RegExp(`^${(mp4.length / 1e6).toFixed(1).replace('.', ',')} Mo$`));
+    assert.equal(INTRO_TRANSCRIPT.length, 11, 'un paragraphe par plan');
+  });
+
+  test('le guide public est ouvert aux moteurs de recherche ; la vidéo est servie par le site lui-même', () => {
+    assert.doesNotMatch(read('landing/public/robots.txt'), /Disallow: \/activer-claude/);
+    const csp = JSON.parse(read('landing/vercel.json')).headers.flatMap((h: { headers: { key: string; value: string }[] }) => h.headers)
+      .find((h: { key: string }) => h.key === 'Content-Security-Policy').value as string;
+    assert.match(csp, /default-src 'self'/, 'la vidéo (media-src) retombe sur default-src : seulement ce site');
+    assert.doesNotMatch(csp, /media-src/);
   });
 });

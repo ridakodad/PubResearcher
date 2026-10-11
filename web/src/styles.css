@@ -1688,3 +1688,84 @@ td strong, td .truncate-wrap { overflow-wrap: anywhere; }
 .charter-reminder > .icon { color: var(--accent); flex: none; }
 .charter-reminder > span { flex: 1 1 260px; min-width: 0; }
 .charter-recall { flex-basis: 100%; margin: 0; padding-left: var(--s5); display: flex; flex-direction: column; gap: var(--s2); color: var(--text-secondary); }
+
+/* ======================================================= activer Claude ==== */
+
+/*
+ * Le guide pas à pas pour obtenir sa clé d'API Anthropic : des étapes numérotées
+ * (l'ordre compte), chacune avec le lien qui mène à la bonne page de la console,
+ * puis le champ où coller la clé. Une étape cochée se replie.
+ */
+
+/* Invitation, là où Claude manque (Extraction, Rédaction). */
+.key-invite { display: flex; gap: var(--s4); align-items: flex-start; padding: var(--s4); }
+.key-invite-icon, .key-active-icon {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px; border-radius: 50%;
+  background: var(--brand-soft); color: var(--brand);
+}
+.key-active-icon { width: 36px; height: 36px; background: var(--surface-2); color: var(--good-text); }
+.key-invite-body { display: flex; flex-direction: column; gap: var(--s2); min-width: 0; flex: 1; }
+.key-invite-body h2 { font-size: 1rem; margin: 0; }
+.key-invite-body p { margin: 0; max-width: 70ch; }
+.key-invite .key-form { margin-top: var(--s2); }
+
+/* Champ de la clé : l'interrupteur « Afficher » reste collé au champ. */
+.key-input { display: flex; gap: var(--s2); align-items: stretch; }
+.key-input input { flex: 1; min-width: 0; font-family: var(--mono); }
+
+.hero-chip-link { text-decoration: none; transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease); }
+.hero-chip-link:hover { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.7); }
+
+.guide-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s3); }
+.guide-step {
+  display: flex; flex-direction: column; gap: var(--s3);
+  padding: var(--s4) var(--s5);
+  background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow-1);
+}
+.guide-step.done { background: var(--surface-2); box-shadow: none; padding-block: var(--s3); }
+.guide-step-head { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
+.guide-step-head h2 { font-size: 1.02rem; margin: 0; flex: 1 1 220px; min-width: 0; text-wrap: balance; }
+.guide-num {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: 50%;
+  background: var(--brand-soft); color: var(--brand-strong);
+  font-weight: 700; font-size: 0.9rem; font-variant-numeric: tabular-nums;
+}
+.guide-step.done .guide-num { background: var(--surface-1); color: var(--good-text); border: 1px solid var(--border-strong); }
+.guide-time { font-size: 0.78rem; color: var(--text-muted); white-space: nowrap; }
+.guide-actions { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: var(--s2); color: var(--text-primary); line-height: 1.55; max-width: 72ch; }
+.guide-text { margin: 0; color: var(--text-secondary); max-width: 72ch; }
+.guide-tip {
+  margin: 0; display: flex; gap: var(--s2); align-items: flex-start;
+  font-size: 0.82rem; color: var(--text-secondary); max-width: 72ch;
+}
+.guide-tip > .icon { flex: none; margin-top: 3px; color: var(--brand); }
+.guide-done {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: var(--s2);
+  font-size: 0.82rem; font-weight: 500; color: var(--text-secondary); cursor: pointer;
+  min-height: 32px;
+}
+.guide-done input { margin: 0; width: 18px; height: 18px; accent-color: var(--brand); }
+.guide-step-paste { border-color: var(--brand); }
+
+.guide-help { display: flex; flex-direction: column; gap: var(--s2); }
+.guide-help h2 { font-size: 1.02rem; margin: var(--s2) 0 var(--s1); }
+.guide-help details {
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface-1);
+}
+.guide-help summary {
+  cursor: pointer; padding: var(--s3) var(--s4); font-weight: 500; font-size: 0.9rem;
+  list-style-position: inside;
+}
+.guide-help summary:hover { background: var(--surface-2); border-radius: var(--radius-sm); }
+.guide-help details p { margin: 0; padding: 0 var(--s4) var(--s3); color: var(--text-secondary); font-size: 0.88rem; max-width: 72ch; }
+
+@media (max-width: 640px) {
+  .key-invite { flex-direction: column; }
+  .guide-step { padding: var(--s3) var(--s4); }
+  .key-input { flex-wrap: wrap; }
+}

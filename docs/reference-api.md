@@ -70,10 +70,10 @@ Sans HTTPS, le mot de passe circule en clair : placez l'outil derrière un proxy
 Interroge réellement la base : un serveur qui répond mais ne peut plus lire ses données n'est pas « en bonne santé ». Aucune donnée de patient ni chemin dans la réponse.
 
 ```json
-{ "status": "ok", "version": "1.4.0", "schemaVersion": 1, "uptimeSeconds": 80, "time": "2026-10-09T02:28:49.188Z" }
+{ "status": "ok", "version": "1.5.0", "schemaVersion": 1, "uptimeSeconds": 80, "time": "2026-10-09T02:28:49.188Z" }
 ```
 
-`503 { "status": "degraded", "version": "1.4.0", "error": "Base de données inaccessible." }` si la base ne répond pas. Accessible sans mot de passe.
+`503 { "status": "degraded", "version": "1.5.0", "error": "Base de données inaccessible." }` si la base ne répond pas. Accessible sans mot de passe.
 
 ---
 
@@ -343,7 +343,7 @@ Les passes d'extraction, de la plus récente à la plus ancienne (50 par défaut
   "runs": [
     { "id": 4, "templateId": 1, "templateName": "Fiche d'exploitation générale",
       "templateFingerprint": "7fc4005260e60df63fe46dd30cbc7beef70b33c53efaaccea499fe3e87bab521",
-      "mode": "rules", "model": null, "overwriteManual": false, "appVersion": "1.4.0",
+      "mode": "rules", "model": null, "overwriteManual": false, "appVersion": "1.5.0",
       "startedAt": "2026-10-09T02:31:22.806Z", "finishedAt": "2026-10-09T02:31:22.844Z", "status": "done",
       "patients": 1, "documents": 1, "extracted": 1, "notFound": 20, "keptManual": 1, "rejected": 0 }
   ]
@@ -483,7 +483,7 @@ Noms de fichier des exports : `references-toutes-AAAA-MM-JJ.ris`, `references-re
 
 ## Clé d'API Anthropic et coût
 
-Chaque utilisateur paie l'IA avec sa propre clé : elle se saisit dans l'interface (*Extraction › Clé d'API Anthropic*) ou par ces routes. **Aucune réponse ne contient la clé** : seulement sa provenance et ses quatre derniers caractères.
+Chaque utilisateur paie l'IA avec sa propre clé : elle se saisit dans l'interface (page *Activer Claude*) ou par ces routes. **Aucune réponse ne contient la clé** : seulement sa provenance et ses quatre derniers caractères.
 
 | Méthode | Chemin | Corps | Réponse |
 |---|---|---|---|
@@ -493,11 +493,12 @@ Chaque utilisateur paie l'IA avec sa propre clé : elle se saisit dans l'interfa
 | `GET` | `/api/llm/estimate[?templateId=:id]` | — | `200 { "estimate": { "model", "patients", "low", "high", "inputTokens" } }` : fourchette en dollars d'une passe par Claude sur tous les dossiers, pour la fiche donnée (ou active) ; `estimate` vaut `null` pour un modèle absent du barème. `404` sans fiche |
 
 ```json
-{ "source": "app", "hint": "…AbCd", "savedAt": "2026-10-11T09:12:30.000Z", "model": "claude-opus-5-5", "available": true }
+{ "source": "app", "hint": "…AbCd", "savedAt": "2026-10-11T09:12:30.000Z", "workspace": null, "model": "claude-opus-5-5", "available": true }
 ```
 
 - `source` : `"app"` (clé saisie, dans `DATA_DIR/anthropic-key.json`), `"env"` (`ANTHROPIC_API_KEY`) ou `null` (aucune : seules les règles sont possibles). La clé saisie l'emporte sur celle de l'environnement.
-- `PUT` contrôle d'abord la forme (`sk-ant-…`, sans espace ; une clé d'administration `sk-ant-admin…` est refusée), puis interroge Anthropic une fois (la fiche du modèle configuré). **Rien n'est écrit si la clé est refusée.** Erreurs, toutes avec `code: "api-key-refused"` et un message en français, sans la clé : `400` clé mal formée, refusée par Anthropic, sans accès à l'API ou au modèle ; `429` limite de débit d'Anthropic ; `502` Anthropic injoignable ou réponse inattendue.
+- `workspace` : pour une clé saisie qui vaut pour plusieurs espaces de travail d'Anthropic, le nom de l'espace que la vérification a retenu (l'espace par défaut d'abord) et que chaque requête nomme ensuite ; `null` pour une clé liée à un seul espace.
+- `PUT` contrôle d'abord la forme (`sk-ant-…`, sans espace ; une clé d'administration `sk-ant-admin…` est refusée), puis interroge Anthropic une fois (la fiche du modèle configuré). **Rien n'est écrit si la clé est refusée.** Erreurs, toutes avec `code: "api-key-refused"` et un message en français, sans la clé : `400` clé mal formée, refusée par Anthropic, sans accès à l'API ou au modèle ; `429` limite de débit d'Anthropic ; `502` Anthropic injoignable ou réponse inattendue. Une clé multi-espaces dont le rôle ne permet pas de lister les espaces de l'organisation est refusée (`400`) avec la marche à suivre : en créer une liée à un seul espace de travail.
 - Ce sont des routes **modifiantes** : une `Origin` étrangère est refusée (`403`), comme partout.
 - `low` / `high` : la longueur du raisonnement ne se prévoit pas, d'où une fourchette. En mode `hybrid`, les règles trouvent une partie des variables d'abord : la passe coûte moins que `high`. Le calcul est décrit dans l'[architecture](architecture.md#45-modèle-de-langage-enginellmts-llm-schemats-llm-verifyts).
 

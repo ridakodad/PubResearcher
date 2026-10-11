@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CodeBlock } from '../components/CodeBlock';
-import { IconArrow, IconExternal, IconInfo, IconLaptop, IconShield } from '../components/icons';
+import { IntroVideo } from '../components/IntroVideo';
+import { IconArrow, IconExternal, IconInfo, IconKey, IconLaptop, IconPlay, IconShield } from '../components/icons';
 import { useAuth } from '../lib/auth';
 import { ANONYMISATION_VERSION, CHARTER_ITEMS } from '../lib/charter';
 import { config } from '../lib/config';
@@ -139,6 +140,22 @@ export function AccessPage() {
           </details>
         </section>
 
+        <section className="panel-card" aria-labelledby="claude-title">
+          <h2 id="claude-title">
+            <IconKey size={20} /> Activer Claude (facultatif)
+          </h2>
+          <p>
+            Les règles suffisent pour les valeurs qu’annonce un libellé. Pour le texte rédigé, Claude lit les comptes rendus avec
+            votre propre clé d’API Anthropic : vous payez Anthropic à l’usage, PubResearcher ne prélève rien.
+          </p>
+          <p>
+            <Link className="btn btn-primary" to="/activer-claude">
+              Obtenir ma clé, pas à pas <IconArrow size={16} />
+            </Link>
+          </p>
+          <p className="small muted">Cinq minutes, une seule fois. La clé se colle ensuite dans l’application, jamais sur ce site.</p>
+        </section>
+
         <section className="panel-card" aria-labelledby="study-title">
           <h2 id="study-title">Votre étude</h2>
           <dl className="recap">
@@ -181,6 +198,13 @@ export function AccessPage() {
           </div>
         </section>
       </div>
+
+      <section className="panel-card access-video" aria-labelledby="video-title">
+        <h2 id="video-title">
+          <IconPlay size={20} /> Revoir la présentation
+        </h2>
+        <IntroVideo preload="none" />
+      </section>
 
       <p className="access-foot">
         <Link to="/">

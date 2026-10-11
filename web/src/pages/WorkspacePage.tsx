@@ -108,19 +108,17 @@ export function WorkspacePage() {
   return (
     <div className="stack" style={{ gap: 24 }}>
       <section className="hero">
-        {/* L'état de l'extraction en un mot : « règles seules » tant qu'aucune clé Claude n'est configurée. */}
-        {!loading && capabilities && (
-          <span
-            className="hero-chip"
-            title={
-              llm?.available
-                ? 'Les règles et Claude sont disponibles pour l’extraction.'
-                : 'Seules les règles sont disponibles : aucune clé Claude n’est configurée côté serveur.'
-            }
-          >
-            {llm?.available ? 'Règles + Claude' : 'Règles seules'}
-          </span>
-        )}
+        {/* L'état de l'extraction en un mot : « règles seules » tant que Claude n'est pas activé — et alors, le chemin. */}
+        {!loading && capabilities &&
+          (llm?.available ? (
+            <span className="hero-chip" title="Les règles et Claude sont disponibles pour l’extraction.">
+              Règles + Claude
+            </span>
+          ) : (
+            <Link className="hero-chip hero-chip-link" to="/claude">
+              Règles seules · Activer Claude
+            </Link>
+          ))}
         <div className="eyebrow">Espace de recherche</div>
         <h1>Plan de travail</h1>
         <p className="sub">

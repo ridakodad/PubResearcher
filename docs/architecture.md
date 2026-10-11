@@ -60,7 +60,8 @@ server/
     domain/             types.ts (fiches, règles, valeurs), labels.ts
     extract/            Un extracteur par format, plafonds, OCR, isolation en fils
     engine/             fold, règles, typage, regex surveillées, passe d'extraction, Claude,
-                        clé d'API de l'utilisateur (api-key.ts), barème et estimation du coût (pricing.ts)
+                        clé d'API de l'utilisateur (api-key.ts), refus d'Anthropic traduits (anthropic-errors.ts),
+                        barème et estimation du coût (pricing.ts)
     repo/               Accès aux données (patients, documents, templates, records, runs, events, quality, methods, biblio)
     routes/             Une route par ressource
     biblio/             Client Apify, adaptateurs par acteur, normalisation, exports RIS/BibTeX/CSV
@@ -75,13 +76,16 @@ web/
     assets/             hero-dust.svg : illustration de la carte d'en-tête (générée)
     pages/              Une page par outil
     components/         Marque, éditeurs (variable, règle, valeur), visionneuse de document, graphiques, biblio,
-                        AnonymisationGate (la charte devant tout import), ApiKeyPanel (la clé d'API Anthropic)
+                        AnonymisationGate (la charte devant tout import), ApiKeyPanel et KeyForm (la clé d'API Anthropic)
     lib/                Client d'API, types (dupliqués du serveur), formats, regroupement des dossiers déposés,
-                        anonymisation.ts (texte et version de la charte, mémorisation de l'engagement)
+                        anonymisation.ts (texte et version de la charte, mémorisation de l'engagement),
+                        claudeGuide.ts (le guide « Activer Claude », copié tel quel sur le site)
   public/               Icône (favicon.svg), theme-init.js (thème avant le premier rendu)
 landing/                Site public, déployé à part (Vercel) — voir page-d-accueil.md
   src/lib/              Logique pure (charte, formulaires, parcours, adresses), session Supabase, profil
-  src/pages/            Accueil, inscription, connexion, parcours d'accueil, accès, mot de passe, confidentialité
+  src/pages/            Accueil, inscription, connexion, parcours d'accueil (présentation vidéo d'abord), accès,
+                        mot de passe, confidentialité, « Activer Claude »
+  public/video/         La présentation (MP4 H.264 et WebM VP9, 1 min 35, sous-titres incrustés) et son affiche
   supabase/migrations/  Tables profiles et consents, règles d'accès par ligne
   e2e/                  Parcours dans un navigateur, contre un faux Supabase
 scripts/                ensure-build.mjs (démarrage), make-hero-art.mjs (illustration d'en-tête)
@@ -153,7 +157,9 @@ Un appel par dossier ; consigne et dictionnaire de variables mis en cache. Deux 
 
 L'extrait affiché en relecture est celui **du document**, pas celui recopié par le modèle. Confiance : 0,90 si la citation est retrouvée, 0,75 si seule la valeur l'est. Une valeur retrouvée seule ne prouve pas qu'elle a été lue à cet endroit : c'est la raison de la confiance plus basse. Le modèle ne voit ni le code du dossier ni les noms de fichiers : les documents lui sont présentés sous les noms « Document 1 », « Document 2 »…, et sa réponse est retraduite avant la vérification. L'échec du modèle sur un dossier ne détruit ni les valeurs des règles ni les dossiers suivants.
 
-**La clé** (`engine/api-key.ts`, routes `/api/llm/key`). Chaque utilisateur paie l'IA avec sa propre clé ; l'outil ne revend rien. La clé saisie dans l'interface est contrôlée sur sa forme, puis **vérifiée auprès d'Anthropic** par une seule requête gratuite (`models.retrieve` sur le modèle configuré : elle prouve à la fois la validité de la clé et l'accès au modèle) ; refusée, rien n'est écrit. Acceptée, elle est écrite dans `DATA_DIR/anthropic-key.json` — fichier temporaire créé en `0600`, puis renommé : la clé n'existe jamais dans un fichier lisible par d'autres —, **hors de `uploads/` et de la base**, donc hors des sauvegardes et des exports. Priorité : clé de l'application, puis `ANTHROPIC_API_KEY`. Le client du SDK est recréé quand la clé change : pas de redémarrage. Aucune réponse ne contient la clé (provenance et quatre derniers caractères seulement), et tout message d'erreur passe par un masquage des deux clés connues.
+**La clé** (`engine/api-key.ts`, routes `/api/llm/key`). Chaque utilisateur paie l'IA avec sa propre clé ; l'outil ne revend rien. La page *Activer Claude* de l'interface (`pages/ClaudePage.tsx`) l'y mène pas à pas : trois étapes chez Anthropic, chacune avec le lien direct vers la page de la console, puis le champ de la clé (`components/KeyForm.tsx`). La clé saisie est contrôlée sur sa forme, puis **vérifiée auprès d'Anthropic** par une seule requête gratuite (`models.retrieve` sur le modèle configuré : elle prouve à la fois la validité de la clé et l'accès au modèle) ; refusée, rien n'est écrit. Une clé personnelle qui vaut pour plusieurs espaces de travail reçoit d'Anthropic un refus qui réclame l'en-tête `anthropic-workspace-id` : la vérification liste alors les espaces (`GET /v1/organizations/workspaces`, avec puis sans l'espace par défaut — celui que la seconde liste omet est l'espace par défaut, essayé en premier), retient le premier où la clé lit la fiche du modèle, et l'enregistre avec la clé ; le client du SDK l'envoie ensuite en en-tête par défaut. Acceptée, la clé est écrite dans `DATA_DIR/anthropic-key.json` — fichier temporaire créé en `0600`, puis renommé : la clé n'existe jamais dans un fichier lisible par d'autres —, **hors de `uploads/` et de la base**, donc hors des sauvegardes et des exports. Priorité : clé de l'application, puis `ANTHROPIC_API_KEY` (et `ANTHROPIC_WORKSPACE_ID`). Le client du SDK est recréé quand la clé ou l'espace changent : pas de redémarrage. Aucune réponse ne contient la clé (provenance et quatre derniers caractères seulement), et tout message d'erreur passe par un masquage des deux clés connues.
+
+**Les refus d'Anthropic** (`engine/anthropic-errors.ts`) que l'utilisateur peut lever lui-même — crédit épuisé, limite de dépenses fixée (`400`), plafond mensuel du palier (`429` portant `enforced_spend_limit_reached`, qu'aucun réessai ne lève), espace de travail manquant — sont reconnus avant les erreurs génériques et traduits en une phrase qui dit quoi faire ; ils ne sont pas réessayés.
 
 **Le coût** (`engine/pricing.ts`). Barème par modèle (dollars par million de jetons : entrée, sortie, lecture et écriture du cache). *Avant* la passe, `GET /api/llm/estimate` donne une fourchette : le texte réel de chaque dossier, plafonné comme il le sera à l'envoi, à 3,2 caractères par jeton (estimation prudente pour du français médical) ; la consigne écrite une fois au cache puis relue ; en sortie, de 40 jetons par variable + 300 (bas) à 90 par variable + 4 000 de raisonnement (haut), sans dépasser `LLM_MAX_TOKENS`. *Après*, la réponse de la passe et la fin du flux de la rédaction portent le **coût constaté**, calculé sur les jetons que l'API a facturés. Un modèle absent du barème n'a pas de montant (`null`) : l'interface n'affiche alors que les jetons.
 
@@ -222,7 +228,7 @@ Détail et modèle de menaces : [Sécurité et données](securite-et-donnees.md)
 ## 9. Le front
 
 - **React 18, react-router 7, Vite 6**, TypeScript strict, **CSS écrit à la main** (pas de framework), jetons de couleur dans `styles.css` (charte décrite dans [identite-visuelle.md](identite-visuelle.md)) ; **Poppins** embarquée (aucune police chargée à l'exécution : la politique de sécurité n'admet que `'self'`).
-- **Pas de gestionnaire d'état global** : un contexte léger (`lib/workspace.tsx`) porte les compteurs du plan de travail ; chaque page charge ce dont elle a besoin. La vue courante des résultats vit **dans l'URL** (`?vue=…`) : un lien reste partageable.
+- **Pas de gestionnaire d'état global** : un contexte léger (`lib/workspace.tsx`) porte les compteurs du plan de travail ; chaque page charge ce dont elle a besoin. Toute écriture réussie de l'API (import, passe, relecture, fiche, clé) le fait recompter (`onDataWrite` dans `lib/api.ts`), au plus une fois toutes les 1,2 s : le rail et le plan de travail ne restent pas périmés après un import ou une passe. La vue courante des résultats vit **dans l'URL** (`?vue=…`) : un lien reste partageable.
 - **Types dupliqués** du serveur (`web/src/lib/types.ts`) : toute modification de `server/src/domain/types.ts` doit y être répercutée.
 - **Accessibilité** (cible WCAG 2.2 AA, vérifiée par axe-core sur toutes les pages) : lien d'évitement, un `h1` par vue, onglets au clavier (rôles ARIA, flèches, Début/Fin), noms accessibles contextuels (« Supprimer le dossier PAT-004 »), zones de défilement focalisables et nommées, cibles ≥ 24 px, annonces vocales des actions, titre de page par route, langue des résumés anglais, `prefers-reduced-motion`, aucun reflux horizontal jusqu'à 320 px.
 - **Thèmes** clair/sombre/système, appliqué par un script avant le premier rendu (pas d'éclair), préférence mémorisée dans `localStorage` avec repli si le stockage est bloqué.

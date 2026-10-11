@@ -36,6 +36,9 @@ export function Footer() {
               <Link to="/connexion">Se connecter</Link>
             </li>
             <li>
+              <Link to="/activer-claude">Activer Claude</Link>
+            </li>
+            <li>
               <Link to="/confidentialite">Confidentialité</Link>
             </li>
           </ul>
