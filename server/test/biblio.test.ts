@@ -1,13 +1,15 @@
 /**
  * Revue bibliographique : bibliothèque (dédoublonnage), routes, exports.
  *
- * Les routes parlent à un FAUX serveur Apify local qui rejoue les sorties
- * réelles de `apify-fixtures/` : aucun appel au vrai Apify, aucun crédit
- * dépensé. Le faux serveur vérifie l'en-tête d'autorisation, et chaque test
- * peut lui faire simuler un crédit épuisé, une panne ou une lenteur.
+ * Les routes parlent à un FAUX serveur local qui joue deux rôles : les
+ * E-utilities du NCBI (PubMed, notices réelles de `eutils-fixtures/`) et Apify
+ * (Google Scholar, sorties réelles de `apify-fixtures/`). Aucun appel au vrai
+ * NCBI ni au vrai Apify, aucun crédit dépensé. Chaque test peut lui faire
+ * simuler un crédit épuisé, une panne ou une lenteur.
  *
- * Un test vérifie en dernier que le jeton n'a figuré dans AUCUNE réponse de
- * l'API : c'est la propriété qui compte, plus que n'importe quel cas isolé.
+ * Un test vérifie en dernier que ni le jeton Apify ni la clé NCBI n'ont figuré
+ * dans AUCUNE réponse de l'API : c'est la propriété qui compte, plus que
+ * n'importe quel cas isolé.
  */
 import { test, describe, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -16,6 +18,7 @@ import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import type { Server } from 'node:http';
+import { createFakeEutils, fixtureText, splitRecords } from './eutils-fake.js';
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pubresearcher-biblio-'));
 process.env.DATA_DIR = tmpDir;
@@ -23,12 +26,14 @@ process.env.DB_PATH = path.join(tmpDir, 'test.db');
 process.env.OCR_ENABLED = '0';
 
 const TOKEN = 'apify_api_SECRET_do_not_leak_123';
+const NCBI_KEY = 'ncbi_key_SECRET_do_not_leak_789';
 
 const fixture = (name: string): Record<string, unknown>[] =>
   JSON.parse(fs.readFileSync(new URL(`./apify-fixtures/${name}`, import.meta.url), 'utf8'));
-const PUBMED = fixture('pubmed-labrat011.json');
 const GEORGE = fixture('scholar-george.json');
 const JOHNVC = fixture('scholar-johnvc.json');
+const HOLEP = splitRecords(fixtureText('efetch-holep.xml'));
+const LOOKUP_XML = fixtureText('efetch-holep-lookup.xml');
 
 /* ─────────────────────────────── Faux serveur Apify ──────────────────────── */
 
@@ -43,10 +48,17 @@ const behaviour = {
   scholarStatus: 200,
   scholarBody: null as unknown,
   delayMs: 0,
+  /** Statut forcé pour toutes les réponses du faux NCBI (panne). */
+  eutilsStatus: 200,
 };
 
+/** Le faux NCBI : les cinq notices réelles de la recherche HoLEP, quelle que soit l'équation. */
+const eutils = createFakeEutils(HOLEP, {
+  intercept: () => (behaviour.eutilsStatus !== 200 ? { status: behaviour.eutilsStatus, body: 'Service Unavailable' } : null),
+  queryTranslation: (term) => `"${term}"[All Fields]`,
+});
+
 const ACTOR_OUTPUT: Record<string, Record<string, unknown>[]> = {
-  'labrat011~pubmed-scraper': PUBMED,
   'george.the.developer~google-scholar-scraper': GEORGE,
   'johnvc~google-scholar-api': JOHNVC,
 };
@@ -60,6 +72,18 @@ function startFake(): Promise<void> {
     req.on('data', (c: Buffer) => chunks.push(c));
     req.on('end', () => {
       const url = new URL(req.url ?? '/', 'http://fake');
+      const ncbi = /^\/entrez\/eutils\/(\w+)\.fcgi$/.exec(url.pathname);
+      if (ncbi) {
+        const params = new URLSearchParams(Buffer.concat(chunks).toString('utf8') || url.search);
+        const reply = () => {
+          const out = eutils.handle(ncbi[1] ?? '', params);
+          res.writeHead(out.status, { 'Content-Type': ncbi[1] === 'esearch' ? 'application/json' : 'text/xml' });
+          res.end(out.body);
+        };
+        if (behaviour.delayMs > 0) setTimeout(reply, behaviour.delayMs);
+        else reply();
+        return;
+      }
       const match = /^\/v2\/acts\/([^/]+)\/run-sync-get-dataset-items$/.exec(url.pathname);
       const actor = match ? decodeURIComponent(match[1] ?? '') : '';
       let input: Record<string, unknown> = {};
@@ -135,18 +159,23 @@ async function api<T = any>(
 let db: typeof import('../src/db/index.js').db;
 let repo: typeof import('../src/repo/biblio.js');
 let apify: typeof import('../src/biblio/apify.js');
+let ncbi: typeof import('../src/biblio/eutils.js');
 
 before(async () => {
   await startFake();
   process.env.APIFY_TOKEN = TOKEN;
   process.env.APIFY_API_BASE = fakeBase;
-  delete process.env.APIFY_PUBMED_ACTOR;
+  process.env.NCBI_EUTILS_BASE = `${fakeBase}/entrez/eutils`;
+  // Avec une clé, le débit permis est de 10 requêtes par seconde : les tests vont plus vite, et vérifient qu'elle ne fuit pas.
+  process.env.NCBI_API_KEY = NCBI_KEY;
+  process.env.NCBI_EMAIL = 'revue@chu.example';
   delete process.env.APIFY_SCHOLAR_ACTOR;
 
   const { createApp } = await import('../src/app.js');
   ({ db } = await import('../src/db/index.js'));
   repo = await import('../src/repo/biblio.js');
   apify = await import('../src/biblio/apify.js');
+  ncbi = await import('../src/biblio/eutils.js');
 
   await new Promise<void>((resolve) => {
     server = createApp().listen(0, () => {
@@ -167,11 +196,12 @@ after(async () => {
 beforeEach(() => {
   db.exec('DELETE FROM biblio_hits; DELETE FROM biblio_refs; DELETE FROM biblio_searches;');
   calls.length = 0;
+  eutils.calls.length = 0;
   behaviour.scholarStatus = 200;
   behaviour.scholarBody = null;
   behaviour.delayMs = 0;
+  behaviour.eutilsStatus = 200;
   process.env.APIFY_TOKEN = TOKEN;
-  delete process.env.APIFY_PUBMED_ACTOR;
   delete process.env.APIFY_SCHOLAR_ACTOR;
 });
 
@@ -180,7 +210,7 @@ const SEARCH = { query: 'HoLEP versus TURP', sources: ['pubmed', 'scholar'], max
 /* ───────────────────────── Dédoublonnage de la bibliothèque ──────────────── */
 
 describe('bibliothèque — rapprochement des notices', () => {
-  const pubmed = () => apify.adapterFor('pubmed', 'labrat011/pubmed-scraper');
+  const pubmedRefs = () => ncbi.parsePubmedXml(HOLEP.join('')).refs;
   const george = () => apify.adapterFor('scholar', 'george.the.developer/google-scholar-scraper');
 
   function newSearch(source: 'pubmed' | 'scholar'): number {
@@ -188,7 +218,7 @@ describe('bibliothèque — rapprochement des notices', () => {
   }
 
   test('un article rendu par les deux sources devient une seule référence, enrichie', () => {
-    const pm = repo.addRefsFromSearch(newSearch('pubmed'), PUBMED.map((i) => pubmed().map(i)!));
+    const pm = repo.addRefsFromSearch(newSearch('pubmed'), pubmedRefs());
     assert.deepEqual(pm, { added: 5, duplicates: 0 });
 
     // La notice Scholar de l'essai Habib 2022 : DOI lu dans l'adresse de l'éditeur, 41 citations.
@@ -216,7 +246,6 @@ describe('bibliothèque — rapprochement des notices', () => {
   });
 
   describe('notices réelles : PubMed et Scholar se recoupent sans titre ni DOI identiques', () => {
-    const lookup = fixture('pubmed-labrat011-lookup.json');
 
     // Trois articles des cinq résultats Scholar sont aussi dans les cinq notices PubMed. L'un d'eux
     // n'a aucun DOI côté PubMed et ne se rapproche que par l'identifiant PMC lu dans l'adresse Scholar,
@@ -225,7 +254,7 @@ describe('bibliothèque — rapprochement des notices', () => {
       test(`${order[0]} puis ${order[1]} : trois fusions, sept références`, () => {
         const feed = {
           scholar: () => GEORGE.map((i) => george().map(i)!),
-          pubmed: () => lookup.map((i) => pubmed().map(i)!),
+          pubmed: () => ncbi.parsePubmedXml(LOOKUP_XML).refs,
         };
         const first = repo.addRefsFromSearch(newSearch(order[0]), feed[order[0]]());
         const second = repo.addRefsFromSearch(newSearch(order[1]), feed[order[1]]());
@@ -252,7 +281,7 @@ describe('bibliothèque — rapprochement des notices', () => {
   });
 
   test('un titre tronqué par Google Scholar se rapproche de la notice complète, sans DOI', () => {
-    repo.addRefsFromSearch(newSearch('pubmed'), PUBMED.map((i) => pubmed().map(i)!));
+    repo.addRefsFromSearch(newSearch('pubmed'), pubmedRefs());
     const truncated = george().map({
       title: 'Holmium laser enucleation versus bipolar resection in the management of large-volume benign prostatic …',
       url: 'https://exemple.org/article-sans-doi',
@@ -277,7 +306,7 @@ describe('bibliothèque — rapprochement des notices', () => {
     repo.addRefsFromSearch(newSearch('scholar'), [scholar]);
     assert.equal(repo.listRefs().refs[0]!.titleTruncated, true);
 
-    repo.addRefsFromSearch(newSearch('pubmed'), PUBMED.map((i) => pubmed().map(i)!));
+    repo.addRefsFromSearch(newSearch('pubmed'), pubmedRefs());
     const all = repo.listRefs().refs;
     assert.equal(all.length, 5, 'aucune notice en double');
     const habib = all.find((r) => r.pmid === '34788900')!;
@@ -293,7 +322,7 @@ describe('bibliothèque — rapprochement des notices', () => {
   });
 
   test('rejouer la même recherche ne crée rien et ne double pas les rattachements', () => {
-    const refs = PUBMED.map((i) => pubmed().map(i)!);
+    const refs = pubmedRefs();
     repo.addRefsFromSearch(newSearch('pubmed'), refs);
     const again = repo.addRefsFromSearch(newSearch('pubmed'), refs);
     assert.deepEqual(again, { added: 0, duplicates: 5 });
@@ -302,9 +331,43 @@ describe('bibliothèque — rapprochement des notices', () => {
     assert.equal(hits.n, 10, '5 références × 2 recherches');
   });
 
-  test('le même article deux fois dans une même liste compte comme doublon', () => {
-    const one = pubmed().map(PUBMED[0])!;
-    assert.deepEqual(repo.addRefsFromSearch(newSearch('pubmed'), [one, one]), { added: 1, duplicates: 1 });
+  test('le même article deux fois dans une même liste compte comme doublon — et deux fois comme notice identifiée', () => {
+    const one = pubmedRefs()[0]!;
+    const id = newSearch('pubmed');
+    assert.deepEqual(repo.addRefsFromSearch(id, [one, one]), { added: 1, duplicates: 1 });
+    repo.finishSearch(id, { status: 'ok', returned: 2, skipped: 0, added: 1, duplicates: 1, durationMs: 1 });
+    const hit = db.prepare('SELECT copies FROM biblio_hits').get() as { copies: number };
+    assert.equal(hit.copies, 2);
+    const flow = repo.prisma();
+    assert.equal(flow.identified, 2);
+    assert.equal(flow.duplicatesRemoved, 1);
+    assert.equal(flow.screened, 1);
+  });
+
+  test('des identifiants différents l’emportent sur un titre ou un DOI communs (cas réels de PubMed)', () => {
+    const base = pubmedRefs()[0]!;
+    const letter = (pmid: string, doi: string | null) => ({
+      ...base,
+      title: 'Duration of antibiotics in complicated appendicitis',
+      year: 2023,
+      pmid,
+      pmcid: null,
+      doi,
+    });
+    // Quatre lettres au Lancet : même titre, PMID et DOI différents.
+    const lancet = [
+      letter('37838436', '10.1016/s0140-6736(23)01567-2'),
+      letter('37838434', '10.1016/s0140-6736(23)01565-9'),
+      letter('37838433', '10.1016/s0140-6736(23)01566-0'),
+    ];
+    assert.deepEqual(repo.addRefsFromSearch(newSearch('pubmed'), lancet), { added: 3, duplicates: 0 });
+    // Correspondance du NEJM : cinq PMID publiés sous un même DOI.
+    const nejm = ['33657306', '33657305'].map((pmid) => ({ ...letter(pmid, '10.1056/nejmc2035865'), title: `NEJM letter ${pmid}` }));
+    assert.deepEqual(repo.addRefsFromSearch(newSearch('pubmed'), nejm), { added: 2, duplicates: 0 });
+    // Une notice Embase sans PMID, au même DOI qu'une lettre : c'est bien la même.
+    const embase = { ...letter('', '10.1016/s0140-6736(23)01565-9'), pmid: null, source: 'embase' as const };
+    assert.deepEqual(repo.addRefsFromSearch(newSearch('pubmed'), [embase]), { added: 0, duplicates: 1 });
+    assert.equal(repo.counts().total, 5);
   });
 
   test('les recherches interrompues par un arrêt du serveur sont closes en erreur', () => {
@@ -318,29 +381,53 @@ describe('bibliothèque — rapprochement des notices', () => {
 
 /* ───────────────────────────────── Routes ───────────────────────────────── */
 
+/** Envoie un fichier à importer, comme le fait le formulaire de la page. */
+async function importFile(content: string | Buffer, name: string, fields: Record<string, string>) {
+  const form = new FormData();
+  for (const [key, value] of Object.entries(fields)) form.set(key, value);
+  form.set('file', new Blob([content]), name);
+  const res = await fetch(`${baseUrl}/api/biblio/imports`, { method: 'POST', body: form });
+  const text = await res.text();
+  everyResponse.push(text);
+  return { status: res.status, data: JSON.parse(text) as any };
+}
+
 describe('routes — état et recherche', () => {
-  test('l’état dit si Apify est configuré, sans jamais rendre le jeton', async () => {
+  test('l’état dit ce qui marche : PubMed sans rien, Scholar avec Apify — sans jamais rendre le jeton ni la clé', async () => {
     const ok = await api('GET', '/api/biblio/status');
     assert.equal(ok.data.configured, true);
-    assert.equal(ok.data.sources.pubmed.actor, 'labrat011/pubmed-scraper');
-    assert.equal(ok.data.sources.scholar.supported, true);
-    assert.ok(!ok.text.includes(TOKEN));
+    assert.equal(ok.data.sources.pubmed.actor, 'NCBI E-utilities');
+    assert.equal(ok.data.sources.pubmed.available, true);
+    assert.equal(ok.data.pubmed.apiKey, true);
+    assert.equal(ok.data.pubmed.maxRecords, 10_000);
+    assert.equal(ok.data.sources.scholar.available, true);
+    assert.ok(ok.data.importSources.some((s: any) => s.id === 'embase' && s.category === 'database'));
+    assert.ok(ok.data.importSources.some((s: any) => s.id === 'scholar' && s.category === 'other'));
+    assert.ok(!ok.text.includes(TOKEN) && !ok.text.includes(NCBI_KEY));
 
     delete process.env.APIFY_TOKEN;
-    assert.equal((await api('GET', '/api/biblio/status')).data.configured, false);
+    const off = (await api('GET', '/api/biblio/status')).data;
+    assert.equal(off.configured, false);
+    assert.equal(off.sources.scholar.available, false);
+    assert.equal(off.sources.pubmed.available, true, 'PubMed ne dépend pas d’Apify');
   });
 
-  test('sans jeton, la recherche est refusée avec la marche à suivre — et rien n’est facturé', async () => {
+  test('sans jeton Apify, PubMed fonctionne ; Google Scholar est refusé avec la marche à suivre, sans rien facturer', async () => {
     delete process.env.APIFY_TOKEN;
-    const res = await api('POST', '/api/biblio/searches', SEARCH);
-    assert.equal(res.status, 409);
-    assert.match(res.data.error, /APIFY_TOKEN/);
+    const pubmed = await api('POST', '/api/biblio/searches', { ...SEARCH, sources: ['pubmed'] });
+    assert.equal(pubmed.status, 201);
+    assert.equal(pubmed.data.searches[0].status, 'ok');
+
+    const scholar = await api('POST', '/api/biblio/searches', SEARCH);
+    assert.equal(scholar.status, 409);
+    assert.match(scholar.data.error, /APIFY_TOKEN/);
+    assert.match(scholar.data.error, /PubMed, lui, fonctionne sans jeton/);
     assert.equal(calls.length, 0);
-    assert.equal(repo.listSearches().length, 0, 'aucune recherche fantôme dans l’historique');
+    assert.equal(repo.listSearches().length, 1, 'aucune recherche fantôme dans l’historique');
   });
 
-  test('interroge PubMed et Google Scholar, avec le jeton en en-tête et les bons paramètres', async () => {
-    const res = await api('POST', '/api/biblio/searches', { ...SEARCH, yearFrom: 2000, yearTo: 2025 });
+  test('interroge PubMed (E-utilities) et Google Scholar, avec les bons paramètres', async () => {
+    const res = await api('POST', '/api/biblio/searches', { ...SEARCH, yearFrom: 2000, yearTo: 2026 });
     assert.equal(res.status, 201);
     assert.equal(res.data.searches.length, 2);
     for (const s of res.data.searches) {
@@ -351,29 +438,58 @@ describe('routes — état et recherche', () => {
       assert.equal(s.query, 'HoLEP versus TURP');
     }
     assert.equal(res.data.counts.total, 10);
-    assert.deepEqual(res.data.counts.bySource, { pubmed: 5, scholar: 5, both: 0 });
+    assert.deepEqual(res.data.counts.bySource, { pubmed: 5, scholar: 5 });
 
-    const pm = calls.find((c) => c.actor === 'labrat011~pubmed-scraper')!;
-    assert.equal(pm.auth, `Bearer ${TOKEN}`, 'le jeton voyage en en-tête, pas dans l’adresse');
-    assert.equal(pm.limit, '5');
-    assert.deepEqual(pm.input, {
-      mode: 'search_articles',
-      query: 'HoLEP versus TURP',
-      maxResults: 5,
-      sort: 'relevance',
-      dateFrom: '2000',
-      dateTo: '2025',
-    });
+    const pm = res.data.searches.find((s: any) => s.source === 'pubmed');
+    assert.equal(pm.actor, 'NCBI E-utilities');
+    assert.equal(pm.totalCount, 5, 'le nombre total annoncé par PubMed est consigné');
+    assert.equal(pm.queryTranslation, '"HoLEP versus TURP"[All Fields]');
+    assert.equal(pm.maxResults, 0, '0 : tout récupérer');
+
+    const search = eutils.calls.find((c) => c.endpoint === 'esearch')!;
+    assert.equal(search.params.get('term'), 'HoLEP versus TURP');
+    assert.equal(search.params.get('tool'), 'PubResearcher');
+    assert.equal(search.params.get('email'), 'revue@chu.example');
+    assert.equal(search.params.get('mindate'), '2000');
+    assert.equal(search.params.get('maxdate'), '2026');
+    assert.equal(search.params.get('datetype'), 'pdat');
+    const fetches = eutils.calls.filter((c) => c.endpoint === 'efetch');
+    assert.equal(fetches.length, 1);
+    assert.equal(fetches[0]!.params.get('retmax'), '5');
+
     const sc = calls.find((c) => c.actor.startsWith('george'))!;
+    assert.equal(sc.auth, `Bearer ${TOKEN}`, 'le jeton voyage en en-tête, pas dans l’adresse');
     assert.equal(sc.input.yearFrom, 2000);
     assert.equal(sc.input.maxResults, 5);
   });
 
-  test('une source en échec n’annule pas l’autre : son erreur est enregistrée et expliquée', async () => {
+  test('PubMed en exploration : les N premiers seulement', async () => {
+    const res = await api('POST', '/api/biblio/searches', { ...SEARCH, sources: ['pubmed'], pubmedMax: 2 });
+    const [pm] = res.data.searches;
+    assert.equal(pm.returned, 2);
+    assert.equal(pm.totalCount, 5);
+    assert.equal(pm.maxResults, 2);
+    assert.match(pm.warnings.join(' '), /Exploration : 2 premiers résultats sur 5/);
+  });
+
+  test('les balises PubMed ne partent pas chez Scholar : retirées, et consignées', async () => {
+    const res = await api('POST', '/api/biblio/searches', { ...SEARCH, query: 'holep[tiab] AND turp[MeSH Terms]' });
+    const sc = res.data.searches.find((s: any) => s.source === 'scholar');
+    assert.equal(sc.query, 'holep[tiab] AND turp[MeSH Terms]', 'l’équation saisie reste celle de l’historique');
+    assert.equal(sc.sentQuery, 'holep AND turp');
+    assert.match(sc.warnings[0], /Balises de champ PubMed retirées pour Google Scholar, qui ne les comprend pas \(\[tiab\], \[MeSH Terms\]\)/);
+    assert.equal(calls.find((c) => c.actor.startsWith('george'))!.input.query, 'holep AND turp');
+    const pm = res.data.searches.find((s: any) => s.source === 'pubmed');
+    assert.equal(pm.sentQuery, null, 'PubMed reçoit l’équation telle quelle');
+    assert.equal(eutils.calls[0]!.params.get('term'), 'holep[tiab] AND turp[MeSH Terms]');
+  });
+
+  test('une source en échec n’annule pas l’autre : son erreur est enregistrée et expliquée (201)', async () => {
     behaviour.scholarStatus = 402;
     const res = await api('POST', '/api/biblio/searches', SEARCH);
     assert.equal(res.status, 201);
-    const [pm, sc] = res.data.searches;
+    const pm = res.data.searches.find((s: any) => s.source === 'pubmed');
+    const sc = res.data.searches.find((s: any) => s.source === 'scholar');
     assert.equal(pm.status, 'ok');
     assert.equal(sc.status, 'error');
     assert.match(sc.error, /Crédit Apify insuffisant/);
@@ -384,19 +500,48 @@ describe('routes — état et recherche', () => {
     assert.equal(history.find((s: any) => s.source === 'scholar').status, 'error');
   });
 
+  test('toutes les sources en échec : réponse en erreur (502), passes consignées quand même', async () => {
+    behaviour.scholarStatus = 402;
+    behaviour.eutilsStatus = 503;
+    const res = await api('POST', '/api/biblio/searches', SEARCH);
+    assert.equal(res.status, 502);
+    assert.equal(res.data.code, 'all_sources_failed');
+    assert.match(res.data.error, /^La recherche a échoué\. PubMed : Le service E-utilities de PubMed est indisponible \(erreur 503\)/);
+    assert.match(res.data.error, /Google Scholar : Crédit Apify insuffisant/);
+    assert.equal(res.data.details.searches.length, 2);
+    assert.equal(repo.listSearches().filter((s) => s.status === 'error').length, 2);
+    assert.equal(eutils.calls.length, 4, 'PubMed a été retenté avant d’abandonner');
+  });
+
+  test('PubMed au-delà du plafond : échec consigné avec le nombre total, rien d’importé', async () => {
+    process.env.BIBLIO_PUBMED_MAX = '3';
+    try {
+      const res = await api('POST', '/api/biblio/searches', { ...SEARCH, sources: ['pubmed'] });
+      assert.equal(res.status, 502);
+      assert.match(res.data.error, /5 résultats dans PubMed, au-delà du plafond de 3 notices/);
+      const [search] = repo.listSearches();
+      assert.equal(search!.status, 'error');
+      assert.equal(search!.totalCount, 5);
+      assert.equal(repo.counts().total, 0);
+    } finally {
+      delete process.env.BIBLIO_PUBMED_MAX;
+    }
+  });
+
   test('un mauvais jeton est dit sans que le jeton soit cité', async () => {
     process.env.APIFY_TOKEN = 'mauvais-jeton-xyz';
-    const res = await api('POST', '/api/biblio/searches', { ...SEARCH, sources: ['pubmed'] });
-    assert.equal(res.data.searches[0].status, 'error');
-    assert.match(res.data.searches[0].error, /Jeton Apify refusé/);
+    const res = await api('POST', '/api/biblio/searches', { ...SEARCH, sources: ['scholar'] });
+    assert.equal(res.status, 502);
+    assert.equal(res.data.details.searches[0].status, 'error');
+    assert.match(res.data.details.searches[0].error, /Jeton Apify refusé/);
     assert.ok(!res.text.includes('mauvais-jeton-xyz'));
   });
 
   test('l’acteur qui ne rend que des notices est signalé', async () => {
     behaviour.scholarBody = [{ message: 'Quota mensuel atteint.', free_tier_notice: true }];
     const res = await api('POST', '/api/biblio/searches', { ...SEARCH, sources: ['scholar'] });
-    assert.equal(res.data.searches[0].status, 'error');
-    assert.match(res.data.searches[0].error, /Quota mensuel atteint/);
+    assert.equal(res.data.details.searches[0].status, 'error');
+    assert.match(res.data.error, /Quota mensuel atteint/);
   });
 
   test('un acteur non pris en charge est enregistré en erreur, avec les acteurs possibles', async () => {
@@ -404,7 +549,7 @@ describe('routes — état et recherche', () => {
     const status = (await api('GET', '/api/biblio/status')).data;
     assert.equal(status.sources.scholar.supported, false);
     const res = await api('POST', '/api/biblio/searches', { ...SEARCH, sources: ['scholar'] });
-    assert.match(res.data.searches[0].error, /pas pris en charge/);
+    assert.match(res.data.details.searches[0].error, /pas pris en charge/);
     assert.equal(calls.length, 0, 'aucun appel facturé pour un acteur inconnu');
   });
 
@@ -416,7 +561,7 @@ describe('routes — état et recherche', () => {
     assert.equal(calls[0]!.input.mode, 'search');
   });
 
-  test('une seule passe à la fois : un double clic ne facture pas deux fois', async () => {
+  test('une seule passe à la fois : un double clic ne lance pas deux récupérations', async () => {
     behaviour.delayMs = 300;
     const [a, b] = await Promise.all([
       api('POST', '/api/biblio/searches', { ...SEARCH, sources: ['pubmed'] }),
@@ -424,27 +569,151 @@ describe('routes — état et recherche', () => {
     ]);
     const statuses = [a.status, b.status].sort();
     assert.deepEqual(statuses, [201, 409]);
-    assert.equal(calls.length, 1);
+    assert.equal(eutils.calls.filter((c) => c.endpoint === 'esearch').length, 1);
     // Et le verrou se relâche après la passe.
     behaviour.delayMs = 0;
     assert.equal((await api('POST', '/api/biblio/searches', { ...SEARCH, sources: ['pubmed'] })).status, 201);
   });
 
-  test('valide la demande : plafond, source, années, équation', async () => {
+  test('valide la demande : plafond Scholar, source, années, équation, exploration PubMed', async () => {
     const tooMany = await api('POST', '/api/biblio/searches', { ...SEARCH, maxResults: 101 });
     assert.equal(tooMany.status, 400);
-    assert.match(tooMany.data.error, /Au plus 100 résultats/);
+    assert.match(tooMany.data.error, /Au plus 100 résultats Google Scholar/);
 
     const noSource = await api('POST', '/api/biblio/searches', { ...SEARCH, sources: [] });
     assert.equal(noSource.status, 400);
     assert.match(JSON.stringify(noSource.data.details), /au moins une source/);
 
+    const imported = await api('POST', '/api/biblio/searches', { ...SEARCH, sources: ['embase'] });
+    assert.equal(imported.status, 400, 'Embase s’importe, il ne s’interroge pas d’ici');
+
     const years = await api('POST', '/api/biblio/searches', { ...SEARCH, yearFrom: 2025, yearTo: 2000 });
     assert.equal(years.status, 400);
     assert.match(JSON.stringify(years.data.details), /année de début/);
 
+    const window = await api('POST', '/api/biblio/searches', { ...SEARCH, sources: ['pubmed'], pubmedMax: 10_000 });
+    assert.equal(window.status, 400);
+
     assert.equal((await api('POST', '/api/biblio/searches', { ...SEARCH, query: ' ' })).status, 400);
-    assert.equal(calls.length, 0);
+    assert.equal(calls.length + eutils.calls.length, 0);
+  });
+});
+
+describe('routes — import de fichiers', () => {
+  const RIS = [
+    'TY  - JOUR',
+    // Même article que la notice PubMed 34788900 (DOI identique) : un doublon entre bases.
+    'TI  - Holmium laser enucleation versus bipolar resection in the management of large-volume benign prostatic hyperplasia: A randomized controlled trial.',
+    'AU  - Habib, Emad',
+    'PY  - 2022',
+    'T2  - International Journal of Urology',
+    'DO  - 10.1111/iju.14737',
+    'ER  - ',
+    'TY  - CONF',
+    'TI  - Aquablation in large prostates: early results',
+    'AU  - Martin, P.',
+    'PY  - 2024',
+    'T2  - Congrès de l’AFU',
+    'ER  - ',
+    'TY  - JOUR',
+    'TI  - Aquablation in large prostates: early results',
+    'AU  - Martin, P.',
+    'PY  - 2024',
+    'ER  - ',
+  ].join('\r\n');
+
+  test('un export Embase : consigné comme une recherche, dédoublonné, compté sous sa base', async () => {
+    await api('POST', '/api/biblio/searches', { ...SEARCH, sources: ['pubmed'] });
+    const res = await importFile(RIS, 'embase-2026-10-11.ris', { source: 'embase' });
+    assert.equal(res.status, 201);
+    const s = res.data.search;
+    assert.equal(s.kind, 'import');
+    assert.equal(s.source, 'embase');
+    assert.equal(s.fileName, 'embase-2026-10-11.ris');
+    assert.equal(s.actor, 'RIS');
+    assert.equal(s.returned, 3);
+    assert.equal(s.added, 1, 'la communication, une fois');
+    assert.equal(s.duplicates, 2, 'l’article déjà trouvé par PubMed, et le doublon interne du fichier');
+
+    const flow = res.data.prisma;
+    assert.equal(flow.identified, 8, '5 PubMed + 3 notices du fichier');
+    assert.equal(flow.identifiedDatabases, 8);
+    assert.deepEqual(
+      flow.bySource.map((r: any) => [r.source, r.category, r.count]),
+      [['pubmed', 'database', 5], ['embase', 'database', 3]],
+    );
+    assert.equal(flow.duplicatesRemoved, 2);
+    assert.equal(flow.screened, 6);
+    assert.equal(flow.identified - flow.duplicatesRemoved, flow.screened);
+
+    const merged = (await api('GET', '/api/biblio/refs?q=iju.14737')).data.refs[0];
+    assert.deepEqual(merged.sources, ['pubmed', 'embase']);
+    assert.equal(merged.authors[0], 'Habib E', 'les auteurs PubMed font foi');
+    const conf = (await api('GET', '/api/biblio/refs?q=aquablation%20early')).data.refs[0];
+    assert.equal(conf.refType, 'CONF');
+  });
+
+  test('un export .nbib de PubMed, puis la même recherche lancée d’ici : aucune notice comptée deux fois pour PubMed', async () => {
+    const nbib = [
+      'PMID- 34788900',
+      'TI  - Holmium laser enucleation versus bipolar resection in the management of',
+      '      large-volume benign prostatic hyperplasia: A randomized controlled trial.',
+      'AU  - Habib E',
+      'DP  - 2022 Feb',
+      'LID - 10.1111/iju.14737 [doi]',
+      '',
+    ].join('\n');
+    const res = await importFile(nbib, 'pubmed-2026.nbib', { source: 'pubmed' });
+    assert.equal(res.status, 201);
+    assert.equal(res.data.search.actor, 'MEDLINE (.nbib)');
+    await api('POST', '/api/biblio/searches', { ...SEARCH, sources: ['pubmed'] });
+    const flow = (await api('GET', '/api/biblio/overview')).data.prisma;
+    assert.equal(flow.identified, 5, 'PubMed : 5 notices distinctes, import et recherche confondus');
+    assert.equal(flow.duplicatesRemoved, 0);
+    assert.equal(flow.screened, 5);
+  });
+
+  test('« Autre » avec un nom libre : rangé sous « autres méthodes », le nom repris dans le diagramme', async () => {
+    const bib = '@article{a, title={Recherche manuelle de citations}, author={Durand, Marie}, year={2023}}';
+    const res = await importFile(bib, 'citations.bib', { source: 'other', sourceLabel: 'Recherche de citations' });
+    assert.equal(res.status, 201);
+    assert.equal(res.data.search.sourceLabel, 'Recherche de citations');
+    assert.deepEqual(res.data.prisma.bySource[0], {
+      source: 'other',
+      label: 'Autre (citations, sites, experts…) : Recherche de citations',
+      category: 'other',
+      count: 1,
+    });
+    assert.equal(res.data.prisma.identifiedOther, 1);
+  });
+
+  test('fichiers refusés : illisible (422, rien de consigné), sans fichier, base inconnue, trop gros', async () => {
+    const unreadable = await importFile('Bonjour : ceci n’est pas un export.', 'lettre.txt', { source: 'embase' });
+    assert.equal(unreadable.status, 422);
+    assert.match(unreadable.data.error, /^lettre\.txt : Format non reconnu/);
+
+    const empty = await importFile('TY  - JOUR\r\nAU  - Sans, Titre\r\nER  - \r\n', 'vide.ris', { source: 'embase' });
+    assert.equal(empty.status, 422);
+    assert.match(empty.data.error, /aucune référence lisible/);
+    assert.equal(repo.listSearches().length, 0, 'un fichier illisible n’a rien identifié');
+
+    const form = new FormData();
+    form.set('source', 'embase');
+    const noFile = await fetch(`${baseUrl}/api/biblio/imports`, { method: 'POST', body: form });
+    assert.equal(noFile.status, 400);
+
+    const badSource = await importFile('TY  - JOUR\r\nTI  - x\r\nER  - ', 'a.ris', { source: 'medline-pirate' });
+    assert.equal(badSource.status, 400);
+    assert.match(JSON.stringify(badSource.data), /Choisissez la base/);
+
+    process.env.BIBLIO_IMPORT_MAX_MB = '1';
+    try {
+      const big = await importFile(Buffer.alloc(1024 * 1024 + 10, 0x41), 'gros.ris', { source: 'embase' });
+      assert.equal(big.status, 413);
+      assert.match(big.data.error, /au plus 1 Mo par import \(BIBLIO_IMPORT_MAX_MB\)/);
+    } finally {
+      delete process.env.BIBLIO_IMPORT_MAX_MB;
+    }
   });
 });
 
@@ -458,6 +727,7 @@ describe('routes — tri, filtres et dénombrement', () => {
     assert.equal(all.data.total, 10);
     assert.equal((await api('GET', '/api/biblio/refs?source=pubmed')).data.total, 5);
     assert.equal((await api('GET', '/api/biblio/refs?source=scholar')).data.total, 5);
+    assert.equal((await api('GET', '/api/biblio/refs?source=both')).data.total, 0);
     assert.equal((await api('GET', '/api/biblio/refs?q=aquablation')).data.total, 1);
     assert.equal((await api('GET', '/api/biblio/refs?q=41638951')).data.total, 1, 'recherche par PMID');
     assert.equal((await api('GET', '/api/biblio/refs?q=100%25')).data.total, 0, 'un « % » saisi n’est pas un joker');
@@ -473,12 +743,13 @@ describe('routes — tri, filtres et dénombrement', () => {
     assert.equal(cited.at(-1).citedBy, null, 'les références sans citations sont en fin de liste');
   });
 
-  test('une exclusion exige son motif ; une inclusion l’efface', async () => {
+  test('au tri sur titre et résumé, le motif d’exclusion est facultatif ; une inclusion l’efface', async () => {
     const id = (await api('GET', '/api/biblio/refs')).data.refs[0].id;
 
     const noReason = await api('PATCH', `/api/biblio/refs/${id}`, { decision: 'exclude' });
-    assert.equal(noReason.status, 400);
-    assert.match(noReason.data.error, /motif/);
+    assert.equal(noReason.status, 200, 'PRISMA 2020 n’exige pas de motif à ce stade');
+    assert.equal(noReason.data.ref.exclusionReason, null);
+    assert.deepEqual(noReason.data.prisma.excludedByReason, [{ reason: 'unspecified', count: 1 }]);
 
     const bad = await api('PATCH', `/api/biblio/refs/${id}`, { decision: 'exclude', exclusionReason: 'inventé' });
     assert.equal(bad.status, 400);
@@ -490,6 +761,10 @@ describe('routes — tri, filtres et dénombrement', () => {
     assert.equal(ok.data.ref.note, 'Série de cas');
     assert.equal(ok.data.counts.exclude, 1);
 
+    const cleared = await api('PATCH', `/api/biblio/refs/${id}`, { exclusionReason: null });
+    assert.equal(cleared.data.ref.exclusionReason, null, 'le motif se retire');
+    assert.equal(cleared.data.ref.decision, 'exclude');
+
     const back = await api('PATCH', `/api/biblio/refs/${id}`, { decision: 'include' });
     assert.equal(back.data.ref.exclusionReason, null);
     assert.equal(back.data.ref.note, 'Série de cas', 'la note survit au changement de décision');
@@ -499,7 +774,7 @@ describe('routes — tri, filtres et dénombrement', () => {
     assert.equal((await api('PATCH', `/api/biblio/refs/${id}`, { decision: 'peut-être' })).status, 400);
   });
 
-  test('le diagramme de flux se calcule des recherches et des décisions', async () => {
+  test('le diagramme de flux se calcule des recherches et des décisions ; Scholar compte sous « autres méthodes »', async () => {
     const refs = (await api('GET', '/api/biblio/refs')).data.refs;
     await api('PATCH', `/api/biblio/refs/${refs[0].id}`, { decision: 'include' });
     await api('PATCH', `/api/biblio/refs/${refs[1].id}`, { decision: 'maybe' });
@@ -509,7 +784,13 @@ describe('routes — tri, filtres et dénombrement', () => {
 
     const { prisma, counts } = (await api('GET', '/api/biblio/overview')).data;
     assert.equal(prisma.identified, 10);
-    assert.deepEqual(prisma.bySource, { pubmed: 5, scholar: 5 });
+    assert.equal(prisma.identifiedDatabases, 5);
+    assert.equal(prisma.identifiedRegisters, 0);
+    assert.equal(prisma.identifiedOther, 5, 'Google Scholar est un moteur de recherche : « autres méthodes »');
+    assert.deepEqual(
+      prisma.bySource.map((r: any) => [r.source, r.category, r.count]).sort(),
+      [['pubmed', 'database', 5], ['scholar', 'other', 5]],
+    );
     assert.equal(prisma.duplicatesRemoved, 0);
     assert.equal(prisma.screened, 10);
     assert.equal(prisma.included, 1);
@@ -523,12 +804,19 @@ describe('routes — tri, filtres et dénombrement', () => {
     assert.equal(prisma.included + prisma.maybe + prisma.pending + prisma.excluded, prisma.screened);
     assert.equal(counts.total, 10);
 
-    // Une seconde passe identique ne change que les doublons : identifiées − doublons = à trier.
+    // Relancer la même passe, deux fois, ne gonfle ni les notices identifiées ni les doublons.
     await api('POST', '/api/biblio/searches', SEARCH);
-    const after = (await api('GET', '/api/biblio/overview')).data.prisma;
-    assert.equal(after.identified, 20);
-    assert.equal(after.duplicatesRemoved, 10);
-    assert.equal(after.identified - after.duplicatesRemoved, after.screened);
+    await api('POST', '/api/biblio/searches', SEARCH);
+    const after = (await api('GET', '/api/biblio/overview')).data;
+    assert.equal(after.prisma.identified, 10);
+    assert.equal(after.prisma.duplicatesRemoved, 0);
+    assert.equal(after.prisma.screened, 10);
+    assert.equal(after.searches.length, 6, 'chaque passe reste dans l’historique');
+    assert.deepEqual(
+      after.searches.slice(0, 2).map((s: any) => [s.added, s.duplicates]),
+      [[0, 5], [0, 5]],
+      'l’historique dit que la passe relancée n’a rien apporté',
+    );
   });
 });
 
@@ -539,7 +827,7 @@ describe('routes — exports', () => {
     await api('PATCH', `/api/biblio/refs/${refs[0].id}`, { decision: 'include', note: 'Essai pivot' });
   });
 
-  test('RIS : lisible par un gestionnaire de références', async () => {
+  test('RIS : lisible par un gestionnaire de références, type et PMCID compris', async () => {
     const res = await api('GET', '/api/biblio/export?format=ris');
     assert.equal(res.status, 200);
     assert.match(res.headers.get('content-disposition') ?? '', /^attachment; filename="references-toutes-\d{4}-\d{2}-\d{2}\.ris"$/);
@@ -548,6 +836,7 @@ describe('routes — exports', () => {
     assert.match(res.text, /DO {2}- 10\.1016\/j\.euf\.2026\.01\.006\r\n/);
     assert.match(res.text, /SP {2}- 266\r\nEP {2}- 274\r\n/);
     assert.match(res.text, /AN {2}- 41638951\r\n/);
+    assert.match(res.text, /AN {2}- 30985725\r\nC2 {2}- PMC6485898\r\n/, 'le PMCID part dans C2');
     assert.match(res.text, /N1 {2}- Tri : Retenue ; Note : Essai pivot ; Sources : PubMed\r\n/);
     assert.equal((res.text.match(/^ER {2}- $/gm) ?? []).length, 10);
   });
@@ -559,7 +848,8 @@ describe('routes — exports', () => {
     assert.match(res.text, /author = \{Ritter, M and Stein, J and Barber, N/);
     assert.match(res.text, /title = \{\{WATER III/);
     assert.match(res.text, /pages = \{266--274\}/);
-    const keys = [...res.text.matchAll(/@article\{([^,]+),/g)].map((m) => m[1]);
+    assert.match(res.text, /pmcid = \{PMC6485898\}/);
+    const keys = [...res.text.matchAll(/@\w+\{([^,]+),/g)].map((m) => m[1]);
     assert.equal(new Set(keys).size, keys.length, 'chaque clé BibTeX est unique');
     assert.equal(keys.length, 10);
   });
@@ -575,12 +865,12 @@ describe('routes — exports', () => {
     assert.match(kept.text, /Essai pivot/);
   });
 
-  test('stratégies de recherche : la chaîne exacte, la date et les effectifs', async () => {
+  test('journal de recherche (PRISMA-S) : chaîne exacte, traduction PubMed, total annoncé, notices récupérées', async () => {
     const res = await api('GET', '/api/biblio/export?format=searches');
     assert.match(res.headers.get('content-disposition') ?? '', /strategies-de-recherche-/);
-    assert.match(res.text, /Date de la recherche;Source;Acteur Apify;Équation de recherche/);
-    assert.match(res.text, /PubMed;labrat011\/pubmed-scraper;HoLEP versus TURP;;;5;5;5;0;réussie/);
-    assert.match(res.text, /Google Scholar;george\.the\.developer\/google-scholar-scraper/);
+    assert.match(res.text, /Date;Type;Source;Service ou format;Équation de recherche;Équation envoyée;Traduction par PubMed;Fichier importé/);
+    assert.match(res.text, /;recherche;PubMed;NCBI E-utilities;HoLEP versus TURP;;"""HoLEP versus TURP""\[All Fields\]";;;;5;5;5;0;réussie;;/);
+    assert.match(res.text, /;recherche;Google Scholar;george\.the\.developer\/google-scholar-scraper;HoLEP versus TURP;/);
   });
 
   test('refuse un format inconnu', async () => {
@@ -588,17 +878,17 @@ describe('routes — exports', () => {
   });
 });
 
-describe('confidentialité du jeton', () => {
-  test('le jeton n’a figuré dans aucune réponse de l’API', () => {
+describe('confidentialité du jeton et de la clé', () => {
+  test('ni le jeton Apify ni la clé NCBI n’ont figuré dans une réponse de l’API', () => {
     assert.ok(everyResponse.length > 40, `${everyResponse.length} réponses examinées`);
-    const leaked = everyResponse.filter((body) => body.includes(TOKEN));
+    const leaked = everyResponse.filter((body) => body.includes(TOKEN) || body.includes(NCBI_KEY));
     assert.equal(leaked.length, 0);
   });
 
   test('ni dans le message d’une erreur du client Apify', async () => {
     const cfg = { ...apify.apifyConfig(), token: TOKEN, baseUrl: 'http://127.0.0.1:1' };
     await assert.rejects(
-      apify.runActor(cfg, 'labrat011/pubmed-scraper', {}, 5),
+      apify.runActor(cfg, 'george.the.developer/google-scholar-scraper', {}, 5),
       (e: unknown) => e instanceof apify.ApifyError && e.kind === 'network' && !e.message.includes(TOKEN),
     );
   });

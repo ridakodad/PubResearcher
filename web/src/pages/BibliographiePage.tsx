@@ -8,8 +8,8 @@ import { IconAlert } from '../components/icons';
 import { PrismaFlow } from '../components/biblio/PrismaFlow';
 import { RefCard, type DecidePatch } from '../components/biblio/RefCard';
 import { SearchHistory } from '../components/biblio/SearchHistory';
+import { ImportForm } from '../components/biblio/ImportForm';
 import {
-  SOURCES,
   SearchForm,
   restoreForm,
   saveDraft,
@@ -17,7 +17,7 @@ import {
   validateForm,
   type SearchFormState,
 } from '../components/biblio/SearchForm';
-import { DECISION_LABELS, SOURCE_LABELS } from '../components/biblio/shared';
+import { DECISION_LABELS, SOURCE_LABELS, countOf, fmtCount, shortSource } from '../components/biblio/shared';
 import type {
   BiblioDecision,
   BiblioOverview,
@@ -28,16 +28,25 @@ import type {
 } from '../lib/types';
 
 /**
- * Revue bibliographique : chercher dans PubMed et Google Scholar, trier, exporter.
+ * Revue bibliographique : chercher dans PubMed (et, en option, Google Scholar),
+ * importer les exports des autres bases, trier, exporter.
  *
- * Les interrogations passent par des acteurs Apify, facturés au résultat. Le
- * jeton reste côté serveur ; cette page ne le voit jamais. Ce qu'elle garde, en
- * revanche, c'est de quoi rendre la revue reproductible : chaque passe consigne
- * sa chaîne exacte, sa date, l'acteur interrogé et ses effectifs.
+ * PubMed passe par l'API officielle du NCBI, gratuite ; Google Scholar par un
+ * acteur Apify facturé, dont le jeton reste côté serveur. Ce que la page garde,
+ * c'est de quoi rendre la revue reproductible : chaque passe et chaque import
+ * consignent leur équation ou leur fichier, leur date, le nombre total annoncé
+ * par la source et ce qui a été récupéré.
  */
 
 type DecisionFilter = BiblioDecision | 'all';
 type SourceFilter = BiblioSource | 'both' | 'all';
+
+/** Passes consignées par le serveur quand toutes les sources ont échoué (réponse 502). */
+function failedSearches(err: unknown): BiblioSearch[] | null {
+  if (!(err instanceof ApiError) || err.code !== 'all_sources_failed') return null;
+  const details = err.details as { searches?: unknown } | undefined;
+  return Array.isArray(details?.searches) ? (details.searches as BiblioSearch[]) : null;
+}
 type RefSort = 'added' | 'recent' | 'cited';
 
 /** Suit le temps écoulé d'une passe, pour que l'attente ne ressemble pas à un blocage. */
@@ -66,6 +75,7 @@ export function BibliographiePage() {
 
   const [form, setForm] = useState<SearchFormState | null>(null);
   const [running, setRunning] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [report, setReport] = useState<BiblioSearch[] | null>(null);
   const reportRef = useRef<HTMLDivElement | null>(null);
   const elapsed = useElapsed(running);
@@ -165,13 +175,35 @@ export function BibliographiePage() {
         );
       } else {
         toast.success(
-          `${plural(added, 'nouvelle référence', 'nouvelles références')} ${added > 1 ? 'ajoutées' : 'ajoutée'}.`,
+          `${countOf(added, 'nouvelle référence', 'nouvelles références')} ${added > 1 ? 'ajoutées' : 'ajoutée'}.`,
         );
       }
     } catch (err) {
+      // Toutes les sources ont échoué : le bilan détaille chacune, les passes restent dans l'historique.
+      const failed = failedSearches(err);
+      if (failed) setReport(failed);
       toast.error(messageOf(err));
     } finally {
       setRunning(false);
+      await Promise.all([loadMeta(), loadRefs()]);
+    }
+  }
+
+  async function importFile(file: File, source: BiblioSource, label: string): Promise<boolean> {
+    setImporting(true);
+    try {
+      const result = await api.biblioImport(file, source, label || undefined);
+      setReport([result.search]);
+      const s = result.search;
+      toast.success(
+        `${file.name} : ${countOf(s.returned, 'notice')} lue${s.returned > 1 ? 's' : ''}, ${countOf(s.added, 'nouvelle référence', 'nouvelles références')}, ${countOf(s.duplicates, 'doublon')}.`,
+      );
+      return true;
+    } catch (err) {
+      toast.error(messageOf(err));
+      return false;
+    } finally {
+      setImporting(false);
       await Promise.all([loadMeta(), loadRefs()]);
     }
   }
@@ -208,11 +240,14 @@ export function BibliographiePage() {
         // Reprendre une passe réussie garde les sources cochées ; relancer une passe en
         // échec ne vise que sa source, sans repayer l'autre.
         sources:
-          search.status === 'error' && status.sources[search.source].supported
+          search.status === 'error' && (search.source === 'pubmed' || search.source === 'scholar') && status.sources[search.source].available
             ? [search.source]
             : current.sources,
         sort: search.sort,
-        maxResults: Math.min(search.maxResults, status.maxResults),
+        ...(search.source === 'scholar' ? { maxResults: Math.min(Math.max(search.maxResults, 1), status.maxResults) } : {}),
+        ...(search.source === 'pubmed'
+          ? { pubmedAll: search.maxResults === 0, ...(search.maxResults > 0 ? { pubmedMax: search.maxResults } : {}) }
+          : {}),
       },
     );
     const target = document.getElementById('biblio-form');
@@ -227,6 +262,10 @@ export function BibliographiePage() {
   const { counts, prisma, searches } = overview;
   const filtered = decisionFilter !== 'all' || sourceFilter !== 'all' || query !== '';
   const inProgress = running || serverRunning;
+  /** Sources présentes dans la bibliothèque, de la plus fournie à la moins fournie. */
+  const presentSources = (Object.entries(counts.bySource) as [BiblioSource, number][])
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => b[1] - a[1]);
 
   const decisionChips: [DecisionFilter, string][] = [
     ['all', `Toutes (${counts.total})`],
@@ -243,26 +282,14 @@ export function BibliographiePage() {
           <div className="eyebrow">Littérature</div>
           <h1>Revue bibliographique</h1>
           <p className="sub">
-            Interrogez PubMed et Google Scholar par des acteurs Apify, regroupez les doublons, puis
-            triez chaque référence : retenue, à voir, ou exclue avec son motif. Chaque recherche garde
-            sa chaîne exacte et sa date — c’est ce qui rend la revue reproductible.
+            Interrogez PubMed — gratuitement, par l’API officielle du NCBI —, importez les exports
+            d’Embase, de CENTRAL, de Scopus ou de toute autre base, regroupez les doublons, puis triez
+            chaque référence : retenue, à voir, ou exclue. Chaque recherche et chaque import gardent leur
+            équation ou leur fichier, leur date et leurs effectifs — c’est ce qui rend la revue
+            reproductible.
           </p>
         </div>
       </div>
-
-      {!status.configured && (
-        <div className="notice notice-warn">
-          <IconAlert size={18} />
-          <div>
-            <strong>Apify n’est pas configuré.</strong> Les recherches passent par des acteurs Apify,
-            facturés à l’usage. Créez un jeton dans la console Apify (Settings → API &amp;
-            integrations), renseignez-le dans <span className="mono">APIFY_TOKEN</span> dans
-            l’environnement du serveur, puis redémarrez. Le jeton reste côté serveur : il n’apparaît
-            jamais dans cette interface. En attendant, la bibliothèque, le tri et les exports restent
-            utilisables.
-          </div>
-        </div>
-      )}
 
       {serverRunning && !running && (
         <div className="notice notice-info">
@@ -280,15 +307,16 @@ export function BibliographiePage() {
           hint={
             counts.total === 0
               ? 'aucune recherche encore'
-              : `PubMed ${counts.bySource.pubmed} · Scholar ${counts.bySource.scholar}${
-                  counts.bySource.both > 0 ? ` · ${counts.bySource.both} dans les deux` : ''
-                }`
+              : `${presentSources
+                  .slice(0, 3)
+                  .map(([source, n]) => `${shortSource(source)} ${fmtCount(n)}`)
+                  .join(' · ')}${counts.multiSource > 0 ? ` · ${fmtCount(counts.multiSource)} dans plusieurs` : ''}`
           }
         />
         <StatTile label="À trier" value={counts.pending} accent={counts.pending > 0} hint="pas encore lues" />
         <StatTile label="Retenues" value={counts.include} hint="à lire en texte intégral" />
         <StatTile label="À voir" value={counts.maybe} hint="mises de côté" />
-        <StatTile label="Exclues" value={counts.exclude} hint="avec leur motif" />
+        <StatTile label="Exclues" value={counts.exclude} hint="motif facultatif à ce stade" />
       </div>
 
       <section className="card" id="biblio-form">
@@ -312,6 +340,15 @@ export function BibliographiePage() {
         </div>
       </section>
 
+      <Panel
+        id="biblio.import"
+        title="Importer des références (RIS, nbib, BibTeX, CSV)"
+        summary="Embase, CENTRAL, Scopus, Web of Science, LiSSa, Zotero…"
+        defaultOpen={false}
+      >
+        <ImportForm status={status} busy={importing} onImport={importFile} />
+      </Panel>
+
       {report && (
         <div ref={reportRef}>
           <RunReport searches={report} />
@@ -329,8 +366,8 @@ export function BibliographiePage() {
       >
         {counts.total === 0 ? (
           <EmptyState title="Aucune référence pour l’instant">
-            Lancez une première recherche ci-dessus : les références de PubMed et de Google Scholar
-            s’ajoutent à la bibliothèque, sans doublon.
+            Lancez une première recherche ci-dessus, ou importez l’export d’une autre base : les
+            références s’ajoutent à la bibliothèque, sans doublon.
           </EmptyState>
         ) : (
           <div className="stack" style={{ gap: 14 }}>
@@ -364,12 +401,12 @@ export function BibliographiePage() {
                 onChange={(event) => setSourceFilter(event.target.value as SourceFilter)}
               >
                 <option value="all">Toutes les sources</option>
-                {SOURCES.map((s) => (
+                {presentSources.map(([s, n]) => (
                   <option key={s} value={s}>
-                    {SOURCE_LABELS[s]}
+                    {SOURCE_LABELS[s]} ({fmtCount(n)})
                   </option>
                 ))}
-                <option value="both">Trouvées par les deux</option>
+                <option value="both">Trouvées par plusieurs sources ({fmtCount(counts.multiSource)})</option>
               </select>
               <select
                 value={sort}
@@ -421,13 +458,13 @@ export function BibliographiePage() {
         key={counts.total > 0 ? 'flux-rempli' : 'flux-vide'}
         id="biblio.prisma"
         title="Diagramme de flux"
-        summary={`${prisma.identified} identifiées → ${prisma.included} retenues`}
+        summary={`${fmtCount(prisma.identified)} identifiées → ${fmtCount(prisma.included)} retenues`}
         defaultOpen={counts.total > 0}
       >
         {counts.total === 0 && searches.length === 0 ? (
           <div className="small muted">
-            Le diagramme se calcule des recherches et des décisions de tri : il apparaît dès la
-            première passe.
+            Le diagramme se calcule des recherches, des imports et des décisions de tri : il apparaît
+            dès la première passe.
           </div>
         ) : (
           <PrismaFlow prisma={prisma} reasons={status.exclusionReasons} />
@@ -437,15 +474,15 @@ export function BibliographiePage() {
       <Panel
         key={searches.length > 0 ? 'strategies-remplies' : 'strategies-vides'}
         id="biblio.history"
-        title="Stratégies de recherche"
-        summary={searches.length === 0 ? 'aucune passe' : plural(searches.length, 'passe')}
+        title="Journal de recherche"
+        summary={searches.length === 0 ? 'aucune passe' : `${plural(searches.length, 'passe')} et imports`}
         defaultOpen={searches.length > 0}
         padded={false}
       >
         {searches.length === 0 ? (
           <div className="panel-body small muted">
-            Chaque passe, réussie ou non, sera consignée ici avec sa date, l’acteur Apify interrogé et
-            ses effectifs.
+            Chaque passe, réussie ou non, et chaque import seront consignés ici : date, source, équation
+            et sa traduction par PubMed, ou fichier importé, nombre total annoncé et notices récupérées.
           </div>
         ) : (
           <SearchHistory searches={searches} onReuse={reuse} />
@@ -463,44 +500,45 @@ export function BibliographiePage() {
   );
 }
 
-/** Bilan de la passe qui vient de se terminer, source par source. */
+/** Bilan de la passe (ou de l'import) qui vient de se terminer, source par source. */
 function RunReport({ searches }: { searches: BiblioSearch[] }) {
   return (
     <div className="stack" style={{ gap: 8 }} aria-live="polite">
       {searches.map((search) => {
         const failed = search.status === 'error';
-        // Le plan gratuit d'Apify limite l'acteur PubMed à 10 résultats par passe :
-        // un compte rond de 10 pour une demande plus large a presque toujours cette cause.
-        const freePlanCap =
-          !failed && search.source === 'pubmed' && search.returned === 10 && search.maxResults > 10;
+        const imported = search.kind === 'import';
+        const name = `${SOURCE_LABELS[search.source]}${search.sourceLabel ? ` (${search.sourceLabel})` : ''}`;
         return (
           <div key={search.id} className={failed ? 'notice notice-error' : 'notice notice-info'}>
             {failed && <IconAlert size={18} />}
             <div style={{ flex: 1 }}>
-              <strong>{SOURCE_LABELS[search.source]}</strong>
+              <strong>{imported ? `Import ${name}` : name}</strong>
               {failed ? (
                 <> — {search.error}</>
               ) : (
                 <>
                   {' '}
-                  — {plural(search.returned, 'référence')} {search.returned > 1 ? 'rendues' : 'rendue'} ·{' '}
-                  {plural(search.added, 'nouvelle')} ·{' '}
-                  {plural(search.duplicates, 'déjà connue')}
-                  {search.skipped > 0 && ` · ${plural(search.skipped, 'ligne inexploitable', 'lignes inexploitables')} écartée${search.skipped > 1 ? 's' : ''}`}
+                  —{' '}
+                  {search.totalCount !== null
+                    ? `${fmtCount(search.totalCount)} résultat${search.totalCount > 1 ? 's' : ''} annoncé${search.totalCount > 1 ? 's' : ''}, ${fmtCount(search.returned)} récupéré${search.returned > 1 ? 's' : ''}`
+                    : imported
+                      ? `${countOf(search.returned, 'notice')} lue${search.returned > 1 ? 's' : ''} dans ${search.fileName ?? 'le fichier'}`
+                      : `${countOf(search.returned, 'référence')} ${search.returned > 1 ? 'rendues' : 'rendue'}`}{' '}
+                  · {countOf(search.added, 'nouvelle')} · {countOf(search.duplicates, 'déjà connue')}
+                  {search.skipped > 0 &&
+                    ` · ${countOf(search.skipped, 'notice inexploitable', 'notices inexploitables')} écartée${search.skipped > 1 ? 's' : ''}`}
                 </>
               )}
-              {freePlanCap && (
+              {failed && search.totalCount !== null && (
                 <div className="small secondary" style={{ marginTop: 4 }}>
-                  Dix résultats sur {search.maxResults} demandés : avec un plan Apify gratuit, l’acteur
-                  PubMed plafonne à 10 résultats par passe.
+                  Nombre total annoncé par PubMed : {fmtCount(search.totalCount)} — consigné dans le journal de recherche.
                 </div>
               )}
-              {!failed && !freePlanCap && search.returned < search.maxResults && (
-                <div className="small secondary" style={{ marginTop: 4 }}>
-                  Moins que les {search.maxResults} demandés : la requête n’a peut-être pas davantage de
-                  résultats.
+              {search.warnings.map((warning) => (
+                <div key={warning} className="small secondary" style={{ marginTop: 4 }}>
+                  {warning}
                 </div>
-              )}
+              ))}
             </div>
           </div>
         );
@@ -559,21 +597,22 @@ function ExportPanel({
       <div className="row" style={{ gap: 8 }}>
         {hasSearches ? (
           <a className="btn export-link" href={api.biblioExportUrl('searches')} download>
-            <span>Stratégies de recherche</span>
-            <span className="small muted">CSV : équations, dates, acteurs, effectifs</span>
+            <span>Journal de recherche (PRISMA-S)</span>
+            <span className="small muted">CSV : équations, traductions, dates, totaux, imports</span>
           </a>
         ) : (
           <button type="button" className="export-link" disabled>
-            <span>Stratégies de recherche</span>
+            <span>Journal de recherche (PRISMA-S)</span>
             <span className="small muted">aucune passe consignée</span>
           </button>
         )}
       </div>
 
       <div className="field-hint">
-        Le fichier d’une référence fusionnée reprend le résumé de PubMed et le nombre de citations de
-        Scholar. La décision de tri, le motif d’exclusion et la note sont consignés dans le champ de
-        note du RIS et dans les colonnes du CSV.
+        Le fichier d’une référence fusionnée reprend le résumé et les auteurs de PubMed, et le nombre
+        de citations de Scholar. Le RIS porte le type de chaque référence (article, communication,
+        livre, chapitre…) et son PMCID ; la décision de tri, le motif d’exclusion et la note sont
+        consignés dans le champ de note du RIS et dans les colonnes du CSV.
       </div>
     </div>
   );

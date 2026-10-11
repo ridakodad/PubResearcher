@@ -2,7 +2,8 @@
  * Adaptateurs d'acteurs Apify : lecture de VRAIES sorties.
  *
  * Les jeux d'essai de `apify-fixtures/` sont des exécutions réelles des acteurs
- * (octobre 2026). Les tests vérifient qu'on lit ce que les acteurs rendent
+ * (octobre 2026). Seul Google Scholar passe encore par Apify : PubMed est lu
+ * par son API officielle (voir `biblio-eutils.test.ts`). Les tests vérifient qu'on lit ce que les acteurs rendent
  * vraiment — y compris leurs défauts — plutôt que ce que leur documentation
  * laisse espérer. Aucune base, aucun réseau.
  */
@@ -10,7 +11,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-import { ApifyError, adapterFor, apifyConfig, searchSource } from '../src/biblio/apify.js';
+import { ApifyError, adapterFor, apifyConfig, scholarQuery, searchSource } from '../src/biblio/apify.js';
 import {
   authorForBibtex,
   doiFromUrl,
@@ -25,81 +26,11 @@ import {
 const fixture = (name: string): Record<string, unknown>[] =>
   JSON.parse(fs.readFileSync(new URL(`./apify-fixtures/${name}`, import.meta.url), 'utf8'));
 
-const PUBMED = fixture('pubmed-labrat011.json');
 const GEORGE = fixture('scholar-george.json');
 const JOHNVC = fixture('scholar-johnvc.json');
 
-const pubmed = adapterFor('pubmed', 'labrat011/pubmed-scraper');
 const george = adapterFor('scholar', 'george.the.developer/google-scholar-scraper');
 const johnvc = adapterFor('scholar', 'johnvc/google-scholar-api');
-
-describe('PubMed — labrat011/pubmed-scraper', () => {
-  test('lit un article complet', () => {
-    const ref = pubmed.map(PUBMED[0])!;
-    assert.equal(
-      ref.title,
-      'WATER III: A Prospective, Partially Randomized Trial of Aquablation Therapy Versus Transurethral Laser Enucleation of the Prostate for Treatment of Lower Urinary Tract Symptoms',
-      'le point final que PubMed ajoute aux titres est retiré',
-    );
-    assert.equal(ref.source, 'pubmed');
-    assert.equal(ref.authors.length, 12);
-    assert.equal(ref.authors[0], 'Ritter M');
-    assert.equal(ref.year, 2026);
-    assert.equal(ref.journal, 'European urology focus');
-    assert.equal(ref.volume, '12');
-    assert.equal(ref.issue, '2');
-    assert.equal(ref.pages, '266-274');
-    assert.equal(ref.doi, '10.1016/j.euf.2026.01.006');
-    assert.equal(ref.pmid, '41638951');
-    assert.equal(ref.url, 'https://pubmed.ncbi.nlm.nih.gov/41638951/');
-    assert.ok(ref.abstract?.startsWith('BACKGROUND AND OBJECTIVE:'));
-    assert.equal(ref.keywords.length, 5);
-    assert.ok(ref.meshTerms.includes('Prostatic Hyperplasia'));
-    assert.ok(ref.publicationTypes.includes('Randomized Controlled Trial'));
-    assert.equal(ref.citedBy, null, "PubMed ne donne pas de nombre de citations");
-    assert.equal(ref.snippet, null);
-  });
-
-  test('lit un identifiant PMC et une revue sans mots-clés', () => {
-    const withPmc = pubmed.map(PUBMED[4])!;
-    assert.equal(withPmc.pmcid, 'PMC6485898');
-    const meta = pubmed.map(PUBMED[1])!;
-    assert.deepEqual(meta.keywords, []);
-    assert.equal(meta.pages, '1201-8');
-  });
-
-  test('toutes les lignes du jeu d’essai sont exploitables', () => {
-    const refs = PUBMED.map((item) => pubmed.map(item));
-    assert.ok(refs.every(Boolean));
-    assert.equal(new Set(refs.map((r) => r!.pmid)).size, PUBMED.length);
-  });
-
-  test('construit l’entrée de l’acteur', () => {
-    assert.deepEqual(pubmed.buildInput({ query: 'holep', maxResults: 20, sort: 'relevance' }), {
-      mode: 'search_articles',
-      query: 'holep',
-      maxResults: 20,
-      sort: 'relevance',
-    });
-    assert.deepEqual(
-      pubmed.buildInput({ query: 'holep', maxResults: 5, sort: 'date', yearFrom: 2015, yearTo: 2024 }),
-      {
-        mode: 'search_articles',
-        query: 'holep',
-        maxResults: 5,
-        sort: 'pub_date',
-        dateFrom: '2015',
-        dateTo: '2024',
-      },
-    );
-  });
-
-  test('écarte une ligne sans titre', () => {
-    assert.equal(pubmed.map({ pmid: '1', title: '  ' }), null);
-    assert.equal(pubmed.map(null), null);
-    assert.equal(pubmed.map('texte'), null);
-  });
-});
 
 describe('Google Scholar — george.the.developer/google-scholar-scraper', () => {
   test('lit un résultat : année et revue déjà séparées', () => {
@@ -200,7 +131,7 @@ describe('recherche d’une source', () => {
     const cfg = { ...apifyConfig({}), token: '' };
     let called = false;
     await assert.rejects(
-      searchSource(cfg, 'pubmed', { query: 'x', maxResults: 5, sort: 'relevance' }, (async () => {
+      searchSource(cfg, 'scholar', { query: 'x', maxResults: 5, sort: 'relevance' }, (async () => {
         called = true;
         return new Response('[]');
       }) as typeof fetch),
@@ -222,9 +153,9 @@ describe('recherche d’une source', () => {
     const cfg = { ...apifyConfig({}), token: 't' };
     const result = await searchSource(
       cfg,
-      'pubmed',
+      'scholar',
       { query: 'x', maxResults: 2, sort: 'relevance' },
-      (async () => new Response(JSON.stringify(PUBMED))) as typeof fetch,
+      (async () => new Response(JSON.stringify(GEORGE))) as typeof fetch,
     );
     assert.equal(result.refs.length, 2);
   });
@@ -233,12 +164,30 @@ describe('recherche d’une source', () => {
     const cfg = { ...apifyConfig({}), token: 't' };
     const result = await searchSource(
       cfg,
-      'pubmed',
+      'scholar',
       { query: 'x', maxResults: 10, sort: 'relevance' },
-      (async () => new Response(JSON.stringify([PUBMED[0], { pmid: '9' }, 12]))) as typeof fetch,
+      (async () => new Response(JSON.stringify([GEORGE[0], { pmid: '9' }, 12]))) as typeof fetch,
     );
     assert.equal(result.refs.length, 1);
     assert.equal(result.skipped, 2);
+  });
+});
+
+describe('équation transmise à Google Scholar', () => {
+  test('les balises de champ PubMed sont retirées, et dites', () => {
+    assert.deepEqual(
+      scholarQuery('(appendicitis[MeSH Terms] OR appendicitis[tiab]) AND (antibiotic*[tiab]) AND appendectomy[Title/Abstract]'),
+      { query: '(appendicitis OR appendicitis) AND (antibiotic*) AND appendectomy', removed: ['[MeSH Terms]', '[tiab]', '[Title/Abstract]'] },
+    );
+  });
+
+  test('les bornes de dates en syntaxe PubMed partent avec leurs opérateurs', () => {
+    assert.deepEqual(scholarQuery('holep AND 2015:2025[dp]'), { query: 'holep', removed: ['2015:2025[dp]'] });
+    assert.equal(scholarQuery('"Appendicitis"[Mesh:NoExp] AND ("2015/01/01"[pdat] : "2025/12/31"[pdat])').query, '"Appendicitis"');
+  });
+
+  test('une équation sans balise passe telle quelle', () => {
+    assert.deepEqual(scholarQuery('  HoLEP versus TURP '), { query: 'HoLEP versus TURP', removed: [] });
   });
 });
 

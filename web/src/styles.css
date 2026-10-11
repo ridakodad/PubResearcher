@@ -1570,6 +1570,7 @@ a.ref-id:hover { color: var(--brand-strong); border-color: var(--brand); backgro
 .prisma-figure-strong .prisma-value { font-size: 1.9rem; color: var(--series-1); }
 .prisma-caption { font-size: 0.78rem; color: var(--text-muted); }
 .prisma-line { margin: 0; max-width: 64ch; font-size: 0.85rem; }
+.prisma-group { display: flex; flex-direction: column; gap: 4px; padding-bottom: var(--s2); border-bottom: 1px dashed var(--border); }
 .prisma-connector { display: grid; place-items: center; height: 30px; color: var(--text-muted); }
 .prisma-connector .icon { transform: rotate(90deg); }
 
@@ -1601,8 +1602,12 @@ a.ref-id:hover { color: var(--brand-strong); border-color: var(--brand); backgro
 .history-query { min-width: 220px; max-width: 420px; overflow-wrap: anywhere; }
 .history-actor { overflow-wrap: anywhere; max-width: 24ch; }
 .history-error { margin-top: 4px; color: var(--critical); }
+.history-warn { margin-top: 4px; color: var(--text-secondary); }
+.history-translation { margin-top: 4px; }
+.history-translation summary { cursor: pointer; color: var(--text-secondary); }
+.history-translation code { display: block; margin-top: 4px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .history-status { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
-.export-link { flex-direction: column; align-items: flex-start; gap: 1px; padding: 9px 14px; }
+.export-link { flex-direction: column; align-items: flex-start; gap: 1px; padding: 9px 14px; max-width: 100%; white-space: normal; text-align: left; }
 .btn-primary[aria-busy='true'] { cursor: progress; }
 .badge-type { background: transparent; border-style: dashed; border-color: var(--border-strong); color: var(--text-secondary); }
 

@@ -129,6 +129,42 @@ export const MIGRATIONS: Migration[] = [
       connection.exec('CREATE INDEX IF NOT EXISTS idx_value_events_import ON value_events(import_id)');
     },
   },
+  {
+    version: 3,
+    name: 'Revue bibliographique : PubMed officiel, imports et journal PRISMA-S',
+    up(connection) {
+      /*
+       * Une recherche garde désormais ce que PRISMA-S demande : le nombre total
+       * de résultats annoncé par la source, la traduction de l'équation par
+       * PubMed, la chaîne réellement envoyée quand elle diffère (Scholar), et
+       * ses avertissements. Un import de fichier s'y consigne comme une
+       * recherche (`kind = 'import'`), avec le nom du fichier.
+       */
+      const searchColumns: [string, string][] = [
+        ['kind', "TEXT NOT NULL DEFAULT 'search'"],
+        ['sent_query', 'TEXT'],
+        ['query_translation', 'TEXT'],
+        ['file_name', 'TEXT'],
+        ['source_label', 'TEXT'],
+        ['warnings', "TEXT NOT NULL DEFAULT '[]'"],
+        ['total_count', 'INTEGER'],
+      ];
+      for (const [name, type] of searchColumns) {
+        if (!hasColumn(connection, 'biblio_searches', name)) {
+          connection.exec(`ALTER TABLE biblio_searches ADD COLUMN ${name} ${type}`);
+        }
+      }
+      // Type RIS d'une référence (JOUR, CONF, BOOK, CHAP…), quand la source le donne.
+      if (!hasColumn(connection, 'biblio_refs', 'ref_type')) {
+        connection.exec('ALTER TABLE biblio_refs ADD COLUMN ref_type TEXT');
+      }
+      // Combien de notices d'une même recherche désignent la même référence (doublons internes à un export).
+      if (!hasColumn(connection, 'biblio_hits', 'copies')) {
+        connection.exec('ALTER TABLE biblio_hits ADD COLUMN copies INTEGER NOT NULL DEFAULT 1');
+      }
+      connection.exec('CREATE INDEX IF NOT EXISTS idx_biblio_hits_ref ON biblio_hits(ref_id)');
+    },
+  },
 ];
 
 /** Version la plus récente que ce code sait produire. */

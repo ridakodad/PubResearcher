@@ -7,6 +7,7 @@ import {
   DECISION_LABELS,
   SOURCE_LABELS,
   doiHref,
+  shortSource,
   formatAuthors,
   formatCitation,
   pmcHref,
@@ -23,9 +24,10 @@ export interface DecidePatch {
 /**
  * Une référence, et de quoi la trier.
  *
- * Trier se fait en trois gestes : retenir, mettre de côté, exclure. L'exclusion
- * demande son motif avant de partir — c'est lui que le diagramme de flux
- * dénombre, et le serveur refuse une exclusion sans lui.
+ * Trier se fait en trois gestes : retenir, mettre de côté, exclure. Au tri sur
+ * titre et résumé, PRISMA 2020 n'exige pas de motif d'exclusion : il est
+ * proposé, facultatif, et le diagramme de flux compte les exclusions sans motif
+ * à part (« motif non précisé »).
  */
 export function RefCard({
   item,
@@ -42,6 +44,7 @@ export function RefCard({
   const [note, setNote] = useState(item.note ?? '');
   const [busy, setBusy] = useState(false);
   const reasonId = useId();
+  const reasonHintId = useId();
   const noteId = useId();
 
   const href = safeHref(item.url);
@@ -55,7 +58,10 @@ export function RefCard({
   async function decide(decision: BiblioDecision, exclusionReason?: ExclusionReason) {
     setBusy(true);
     try {
-      const saved = await onDecide(item.id, { decision, ...(exclusionReason ? { exclusionReason } : {}) });
+      const saved = await onDecide(item.id, {
+        decision,
+        ...(decision === 'exclude' ? { exclusionReason: exclusionReason ?? null } : {}),
+      });
       if (saved) setPicking(false);
     } finally {
       setBusy(false);
@@ -91,8 +97,8 @@ export function RefCard({
           </h3>
           <div className="ref-badges">
             {item.sources.map((source) => (
-              <span key={source} className="badge">
-                {SOURCE_LABELS[source]}
+              <span key={source} className="badge" title={SOURCE_LABELS[source]}>
+                {shortSource(source)}
               </span>
             ))}
             <span className={DECISION_BADGE[item.decision]}>
@@ -152,7 +158,7 @@ export function RefCard({
             .filter((type) => type !== 'Journal Article')
             .slice(0, 3)
             .map((type) => (
-              <span key={type} className="badge badge-type" title="Type de publication selon PubMed">
+              <span key={type} className="badge badge-type" title="Type de publication selon la source">
                 {type}
               </span>
             ))}
@@ -220,13 +226,14 @@ export function RefCard({
 
         {picking && (
           <div className="exclude-box">
-            <label htmlFor={reasonId}>Motif d’exclusion</label>
+            <label htmlFor={reasonId}>Motif d’exclusion (facultatif)</label>
             <select
               id={reasonId}
               value={reason}
+              aria-describedby={reasonHintId}
               onChange={(event) => setReason(event.target.value as ExclusionReason | '')}
             >
-              <option value="">Choisir un motif…</option>
+              <option value="">Sans motif précisé</option>
               {(Object.entries(reasons) as [ExclusionReason, string][]).map(([key, label]) => (
                 <option key={key} value={key}>
                   {label}
@@ -236,14 +243,18 @@ export function RefCard({
             <button
               type="button"
               className="btn-sm btn-primary"
-              disabled={reason === '' || busy}
-              onClick={() => reason !== '' && void decide('exclude', reason)}
+              disabled={busy}
+              onClick={() => void decide('exclude', reason === '' ? undefined : reason)}
             >
               Confirmer l’exclusion
             </button>
             <button type="button" className="btn-sm btn-quiet" onClick={() => setPicking(false)}>
               Annuler
             </button>
+            <div id={reasonHintId} className="field-hint" style={{ flexBasis: '100%', marginTop: 0 }}>
+              Au tri sur titre et résumé, PRISMA 2020 n’exige pas de motif ; le diagramme de flux compte à part les
+              exclusions sans motif. Le motif devient nécessaire à l’évaluation du texte intégral.
+            </div>
           </div>
         )}
 

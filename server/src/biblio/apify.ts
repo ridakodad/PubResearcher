@@ -1,5 +1,10 @@
 /**
- * Client Apify et adaptateurs d'acteurs pour la revue bibliographique.
+ * Client Apify et adaptateurs d'acteurs pour Google Scholar.
+ *
+ * Google Scholar n'a pas d'API : la seule source qui passe encore par Apify,
+ * en option, quand `APIFY_TOKEN` est renseigné. PubMed n'y passe plus — son API
+ * officielle, gratuite (voir `eutils.ts`), rend les mêmes notices sans le
+ * plafond de 10 résultats du plan gratuit d'Apify ni coût au résultat.
  *
  * Apify n'est qu'un transporteur : chaque source est servie par un acteur du
  * Store, dont la sortie a sa propre forme. Un ADAPTATEUR par acteur sait deux
@@ -7,7 +12,7 @@
  * rendue comme une référence. Changer d'acteur, c'est changer d'adaptateur ;
  * le reste de l'application ne voit que des `BiblioRefInput`.
  *
- * Ces trois adaptateurs ont été écrits d'après des exécutions réelles des
+ * Ces adaptateurs ont été écrits d'après des exécutions réelles des
  * acteurs (jeux d'essai dans `server/test/apify-fixtures/`), pas d'après leur
  * documentation seule : les noms de champs y sont ceux que les acteurs rendent
  * vraiment, y compris leurs défauts (lien PDF valant `javascript:void(0)`,
@@ -33,14 +38,16 @@ import {
   strOrNull,
   strings,
 } from './normalize.js';
-import { SOURCE_LABELS, type BiblioRefInput, type BiblioSource, type SearchSort } from './types.js';
+import type { BiblioRefInput, SearchSort } from './types.js';
+
+/** Seule source servie par Apify. */
+export type ApifySource = 'scholar';
 
 /* ───────────────────────────── Configuration ───────────────────────────── */
 
 export interface ApifyConfig {
   token: string;
   baseUrl: string;
-  pubmedActor: string;
   scholarActor: string;
   timeoutMs: number;
   /** Plafond de résultats par source et par passe — chaque résultat est facturé. */
@@ -56,7 +63,6 @@ export function apifyConfig(env: NodeJS.ProcessEnv = process.env): ApifyConfig {
   return {
     token: (env.APIFY_TOKEN ?? '').trim(),
     baseUrl: (env.APIFY_API_BASE ?? 'https://api.apify.com').trim().replace(/\/+$/, ''),
-    pubmedActor: (env.APIFY_PUBMED_ACTOR ?? 'labrat011/pubmed-scraper').trim(),
     scholarActor: (env.APIFY_SCHOLAR_ACTOR ?? 'george.the.developer/google-scholar-scraper').trim(),
     timeoutMs: number(env.APIFY_TIMEOUT_MS, 290_000),
     maxResultsCap: Math.floor(number(env.BIBLIO_MAX_RESULTS, 100)),
@@ -64,8 +70,8 @@ export function apifyConfig(env: NodeJS.ProcessEnv = process.env): ApifyConfig {
 }
 
 export const NO_TOKEN_MESSAGE =
-  "Apify n'est pas configuré. Renseignez APIFY_TOKEN dans l'environnement du serveur " +
-  '(console Apify › Settings › API & Integrations), puis redémarrez l\'application.';
+  "Google Scholar passe par Apify, qui n'est pas configuré. Renseignez APIFY_TOKEN dans l'environnement du serveur " +
+  '(console Apify › Settings › API & Integrations), puis redémarrez l\'application. PubMed, lui, fonctionne sans jeton.';
 
 /* ───────────────────────────────── Erreurs ──────────────────────────────── */
 
@@ -228,13 +234,13 @@ export interface SearchParams {
 
 export interface ActorAdapter {
   actor: string;
-  source: BiblioSource;
+  source: ApifySource;
   buildInput(params: SearchParams): Record<string, unknown>;
   /** `null` pour une ligne sans référence exploitable (message, ligne vide). */
   map(raw: unknown): BiblioRefInput | null;
 }
 
-function blank(source: BiblioSource, title: string): BiblioRefInput {
+function blank(source: ApifySource, title: string): BiblioRefInput {
   return {
     source,
     title,
@@ -258,54 +264,6 @@ function blank(source: BiblioSource, title: string): BiblioRefInput {
     citedByUrl: null,
   };
 }
-
-/** PubMed — `labrat011/pubmed-scraper` (API E-utilities du NCBI, sans clé). */
-const pubmedLabrat: ActorAdapter = {
-  actor: 'labrat011/pubmed-scraper',
-  source: 'pubmed',
-
-  buildInput: (p) =>
-    dropUndefined({
-      mode: 'search_articles',
-      query: p.query,
-      maxResults: p.maxResults,
-      sort: p.sort === 'date' ? 'pub_date' : 'relevance',
-      dateFrom: p.yearFrom?.toString(),
-      dateTo: p.yearTo?.toString(),
-    }),
-
-  map(raw) {
-    const item = asRecord(raw);
-    if (!item) return null;
-    // PubMed termine ses titres par un point ; une ellipse, elle, est conservée.
-    const title = clean(item.title).replace(/(?<!\.)\.$/, '');
-    if (!title) return null;
-
-    const ref = blank('pubmed', title);
-    ref.authors = asArray(item.authors)
-      .map((a) => {
-        const author = asRecord(a);
-        if (!author) return clean(a);
-        const name = clean(`${clean(author.last_name)} ${clean(author.initials)}`);
-        return name || clean(author.collective_name);
-      })
-      .filter(Boolean);
-    ref.year = intOrNull(item.pub_year);
-    ref.journal = strOrNull(item.journal);
-    ref.volume = strOrNull(item.volume);
-    ref.issue = strOrNull(item.issue);
-    ref.pages = strOrNull(item.pages);
-    ref.pmid = strOrNull(item.pmid);
-    ref.doi = normDoi(item.doi) ?? normDoi(item.doi_url);
-    ref.pmcid = strOrNull(item.pmc_id) ?? pmcFromUrl(safeUrl(item.pmc_url));
-    ref.url = safeUrl(item.pubmed_url) ?? (ref.pmid ? `https://pubmed.ncbi.nlm.nih.gov/${ref.pmid}/` : null);
-    ref.abstract = strOrNull(item.abstract);
-    ref.keywords = strings(item.keywords);
-    ref.meshTerms = strings(item.mesh_terms);
-    ref.publicationTypes = strings(item.publication_types);
-    return ref;
-  },
-};
 
 /** Google Scholar — `george.the.developer/google-scholar-scraper` : année et lieu déjà séparés. */
 const scholarGeorge: ActorAdapter = {
@@ -406,28 +364,68 @@ const scholarJohnvc: ActorAdapter = {
   },
 };
 
-export const ADAPTERS: ActorAdapter[] = [pubmedLabrat, scholarGeorge, scholarJohnvc];
+export const ADAPTERS: ActorAdapter[] = [scholarGeorge, scholarJohnvc];
 
-export function supportedActors(source: BiblioSource): string[] {
+export function supportedActors(source: ApifySource): string[] {
   return ADAPTERS.filter((a) => a.source === source).map((a) => a.actor);
 }
 
-export function adapterFor(source: BiblioSource, actor: string): ActorAdapter {
+export function adapterFor(source: ApifySource, actor: string): ActorAdapter {
   const found = ADAPTERS.find(
     (a) => a.source === source && a.actor.toLowerCase() === actor.toLowerCase(),
   );
   if (!found) {
     throw new ApifyError(
       'config',
-      `L'acteur « ${actor} » n'est pas pris en charge pour ${SOURCE_LABELS[source]}. ` +
+      `L'acteur « ${actor} » n'est pas pris en charge pour Google Scholar. ` +
         `Acteurs pris en charge : ${supportedActors(source).join(', ')}.`,
     );
   }
   return found;
 }
 
-export const actorFor = (cfg: ApifyConfig, source: BiblioSource): string =>
-  source === 'pubmed' ? cfg.pubmedActor : cfg.scholarActor;
+export const actorFor = (cfg: ApifyConfig, _source: ApifySource): string => cfg.scholarActor;
+
+/* ─────────────────────── Équation transmise à Scholar ───────────────────── */
+
+/**
+ * Équation lisible par Google Scholar.
+ *
+ * Scholar ne comprend pas les balises de champ de PubMed (`[tiab]`, `[MeSH
+ * Terms]`, `[pt]`…) : il les cherche comme des mots, et la passe rend autre
+ * chose que ce qu'on croit avoir demandé. Elles sont retirées, avec les bornes
+ * de dates écrites en syntaxe PubMed (`2015:2025[dp]`) — la période passe par
+ * les champs dédiés — et les opérateurs restés orphelins. Ce qui a été retiré
+ * est rendu, pour que la passe le consigne.
+ */
+export function scholarQuery(query: string): { query: string; removed: string[] } {
+  const removed = new Set<string>();
+  let text = query;
+  // Bornes de dates PubMed : « 2015:2025[dp] », « "2015/01/01"[pdat] : "2025"[pdat] ».
+  text = text.replace(
+    /"?[\d/]{4,10}"?\s*\[(?:dp|pdat|edat|crdt|da|mhda|lr|publication date)\]\s*(?::\s*"?[\d/]{4,10}"?\s*\[(?:dp|pdat|edat|crdt|da|mhda|lr|publication date)\])?|"?[\d/]{4,10}"?\s*:\s*"?[\d/]{4,10}"?\s*\[(?:dp|pdat|edat|crdt|da|mhda|lr|publication date)\]/gi,
+    (m) => {
+      removed.add(m.trim());
+      return ' ';
+    },
+  );
+  text = text.replace(/\[([A-Za-z][A-Za-z /:_-]{0,40})\]/g, (m) => {
+    removed.add(m);
+    return '';
+  });
+  if (removed.size === 0) return { query: query.trim(), removed: [] };
+  // Opérateurs orphelins laissés par un retrait : « AND )», « ( OR », en tête ou en fin.
+  for (let pass = 0; pass < 4; pass++) {
+    text = text
+      .replace(/\(\s*\)/g, ' ')
+      .replace(/\b(AND|OR|NOT)\s*(?=\))/g, '')
+      .replace(/\(\s*(AND|OR)\b/g, '(')
+      .replace(/\b(AND|OR|NOT)\s+(AND|OR|NOT)\b/g, '$1')
+      .replace(/^\s*(AND|OR|NOT)\b/, '')
+      .replace(/\b(AND|OR|NOT)\s*$/, '');
+  }
+  return { query: text.replace(/\s+/g, ' ').replace(/\(\s+/g, '(').replace(/\s+\)/g, ')').trim(), removed: [...removed] };
+}
 
 /* ──────────────────────────────── Recherche ─────────────────────────────── */
 
@@ -440,7 +438,7 @@ export interface SourceResult {
 /** Interroge une source et rend ses références, déjà lues par l'adaptateur de l'acteur. */
 export async function searchSource(
   cfg: ApifyConfig,
-  source: BiblioSource,
+  source: ApifySource,
   params: SearchParams,
   fetchImpl: typeof fetch = fetch,
 ): Promise<SourceResult> {

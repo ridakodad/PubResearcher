@@ -1,15 +1,24 @@
 import type { ReactNode } from 'react';
-import type { BiblioPrisma, ExclusionReason } from '../../lib/types';
+import type { BiblioPrisma, ExclusionReason, PrismaCategory } from '../../lib/types';
 import { IconArrow } from '../icons';
 
 /**
  * Diagramme de flux, inspiré de PRISMA 2020.
  *
- * Aucun chiffre n'est saisi : les références identifiées et les doublons
- * viennent des recherches réussies, le reste de l'état de tri. Le diagramme
- * suit les *références* de titre et de résumé ; l'évaluation sur texte intégral
- * n'est pas suivie ici, et le dit.
+ * Aucun chiffre n'est saisi : les notices identifiées et les doublons viennent
+ * des recherches et des imports réussis, le reste de l'état de tri. Chaque
+ * source se range dans sa colonne PRISMA — bases de données, registres, autres
+ * méthodes (Google Scholar, recherche de citations, sites) — et une notice
+ * rendue plusieurs fois par la même source (équation relancée) n'y compte
+ * qu'une fois. Le diagramme suit les *références* de titre et de résumé ;
+ * l'évaluation sur texte intégral n'est pas suivie ici, et le dit.
  */
+
+const CATEGORIES: { key: PrismaCategory; label: string }[] = [
+  { key: 'database', label: 'Bases de données' },
+  { key: 'register', label: 'Registres' },
+  { key: 'other', label: 'Autres méthodes' },
+];
 
 function Stage({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -53,14 +62,33 @@ export function PrismaFlow({
   return (
     <div className="prisma">
       <Stage label="Identification">
+        {CATEGORIES.map(({ key, label }) => {
+          const rows = prisma.bySource.filter((r) => r.category === key);
+          if (rows.length === 0) return null;
+          const total = rows.reduce((sum, r) => sum + r.count, 0);
+          return (
+            <div key={key} className="prisma-group">
+              <div className="small secondary">
+                {label} : <strong>{total.toLocaleString('fr-FR')}</strong>
+              </div>
+              <div className="prisma-figures">
+                {rows.map((row) => (
+                  <Figure key={row.source} value={row.count} label={row.label} />
+                ))}
+              </div>
+            </div>
+          );
+        })}
         <div className="prisma-figures">
-          <Figure value={prisma.bySource.pubmed} label="PubMed" />
-          <Figure value={prisma.bySource.scholar} label="Google Scholar" />
-          <Figure value={prisma.identified} label="références identifiées" strong />
+          <Figure value={prisma.identified} label="notices identifiées" strong />
         </div>
         <p className="prisma-line">
           Doublons retirés : <strong>{prisma.duplicatesRemoved.toLocaleString('fr-FR')}</strong>
-          <span className="muted"> — repérés par DOI, PMID ou titre ; la fusion garde le résumé de PubMed et le nombre de citations de Scholar.</span>
+          <span className="muted">
+            {' '}
+            — repérés par DOI, PMID, PMCID ou titre, entre sources et à l’intérieur d’un même fichier. Une
+            recherche relancée ne compte pas deux fois ses notices.
+          </span>
         </p>
       </Stage>
 
