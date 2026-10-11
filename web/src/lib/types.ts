@@ -424,7 +424,25 @@ export interface ExtractionOverview {
 /* ------------------------------------------------- revue bibliographique */
 
 /** Miroir de `server/src/biblio/types.ts`. */
-export type BiblioSource = 'pubmed' | 'scholar';
+/** Sources interrogées d'ici : PubMed (E-utilities du NCBI) et, en option, Google Scholar (Apify). */
+export type BiblioSearchableSource = 'pubmed' | 'scholar';
+/** Toutes les sources d'une référence, bases importées comprises. */
+export type BiblioSource =
+  | BiblioSearchableSource
+  | 'embase'
+  | 'central'
+  | 'scopus'
+  | 'wos'
+  | 'lissa'
+  | 'cinahl'
+  | 'psycinfo'
+  | 'clinicaltrials'
+  | 'ictrp'
+  | 'other_db'
+  | 'other';
+/** Colonne du diagramme PRISMA 2020 : bases de données, registres, autres méthodes. */
+export type PrismaCategory = 'database' | 'register' | 'other';
+export type BiblioRefType = 'JOUR' | 'CONF' | 'BOOK' | 'CHAP' | 'THES' | 'RPRT' | 'GEN' | 'UNPB' | 'ELEC' | 'DATA';
 export type BiblioDecision = 'pending' | 'include' | 'maybe' | 'exclude';
 export type ExclusionReason =
   | 'population'
@@ -462,6 +480,7 @@ export interface BiblioRef {
   publicationTypes: string[];
   citedBy: number | null;
   citedByUrl: string | null;
+  refType: BiblioRefType | null;
   decision: BiblioDecision;
   exclusionReason: ExclusionReason | null;
   note: string | null;
@@ -472,15 +491,28 @@ export interface BiblioRef {
 
 export interface BiblioSearch {
   id: number;
+  /** Une interrogation lancée d'ici, ou l'import d'un fichier. */
+  kind: 'search' | 'import';
   source: BiblioSource;
+  /** Service interrogé (« NCBI E-utilities », acteur Apify) ou format du fichier importé. */
   actor: string;
   query: string;
+  /** Équation réellement transmise, quand elle diffère (balises PubMed retirées pour Scholar). */
+  sentQuery: string | null;
+  /** Traduction de l'équation par PubMed. */
+  queryTranslation: string | null;
+  fileName: string | null;
+  sourceLabel: string | null;
   yearFrom: number | null;
   yearTo: number | null;
+  /** Résultats demandés ; 0 : tout récupérer (PubMed) ou sans objet (import). */
   maxResults: number;
   sort: 'relevance' | 'date';
   status: 'running' | 'ok' | 'error';
   error: string | null;
+  warnings: string[];
+  /** Nombre total de résultats annoncé par la source ; `null` quand elle ne le dit pas. */
+  totalCount: number | null;
   returned: number;
   skipped: number;
   added: number;
@@ -495,12 +527,24 @@ export interface BiblioCounts {
   include: number;
   maybe: number;
   exclude: number;
-  bySource: { pubmed: number; scholar: number; both: number };
+  bySource: Partial<Record<BiblioSource, number>>;
+  /** Références trouvées par au moins deux sources. */
+  multiSource: number;
+}
+
+export interface BiblioPrismaSource {
+  source: BiblioSource;
+  label: string;
+  category: PrismaCategory;
+  count: number;
 }
 
 export interface BiblioPrisma {
   identified: number;
-  bySource: { pubmed: number; scholar: number };
+  bySource: BiblioPrismaSource[];
+  identifiedDatabases: number;
+  identifiedRegisters: number;
+  identifiedOther: number;
   duplicatesRemoved: number;
   screened: number;
   excluded: number;
@@ -512,20 +556,35 @@ export interface BiblioPrisma {
 
 export interface BiblioSourceStatus {
   label: string;
-  /** Identifiant de l'acteur Apify interrogé pour cette source. */
+  /** Service interrogé : « NCBI E-utilities », ou l'acteur Apify. */
   actor: string;
-  /** Faux si l'acteur configuré n'a pas d'adaptateur : la source est alors inutilisable. */
+  /** Faux si l'acteur configuré n'a pas d'adaptateur. */
   supported: boolean;
+  /** Vrai si la source peut être interrogée maintenant (Scholar : jeton Apify présent et acteur pris en charge). */
+  available: boolean;
   alternatives: string[];
 }
 
 export interface BiblioStatus {
-  /** Vrai si `APIFY_TOKEN` est renseigné côté serveur. Le jeton lui-même ne sort jamais. */
+  /** Vrai si `APIFY_TOKEN` est renseigné côté serveur (Google Scholar). Le jeton lui-même ne sort jamais. */
   configured: boolean;
-  /** Plafond de résultats par source et par passe. */
+  /** Plafond de résultats Google Scholar par passe. */
   maxResults: number;
   running: boolean;
-  sources: Record<BiblioSource, BiblioSourceStatus>;
+  pubmed: {
+    service: string;
+    /** Une clé NCBI_API_KEY est posée (10 requêtes/s au lieu de 3). */
+    apiKey: boolean;
+    email: boolean;
+    /** Plafond de notices d'une passe « tout récupérer ». */
+    maxRecords: number;
+    /** Au plus ce nombre de premiers résultats en exploration (9 999). */
+    window: number;
+  };
+  sources: Record<BiblioSearchableSource, BiblioSourceStatus>;
+  importSources: { id: BiblioSource; label: string; category: PrismaCategory }[];
+  importFormats: { id: 'ris' | 'nbib' | 'bibtex' | 'csv'; label: string }[];
+  importMaxBytes: number;
   exclusionReasons: Record<ExclusionReason, string>;
 }
 
@@ -537,8 +596,11 @@ export interface BiblioOverview {
 
 export interface BiblioSearchParams {
   query: string;
-  sources: BiblioSource[];
+  sources: BiblioSearchableSource[];
+  /** Résultats Google Scholar (facturés par Apify). */
   maxResults: number;
+  /** PubMed : `null` = tout récupérer, sinon les N premiers. */
+  pubmedMax: number | null;
   yearFrom?: number;
   yearTo?: number;
   sort: 'relevance' | 'date';
@@ -546,6 +608,7 @@ export interface BiblioSearchParams {
 
 export interface BiblioRefFilter {
   decision?: BiblioDecision;
+  /** `both` : trouvées par plusieurs sources. */
   source?: BiblioSource | 'both';
   q?: string;
   sort?: 'added' | 'recent' | 'cited';

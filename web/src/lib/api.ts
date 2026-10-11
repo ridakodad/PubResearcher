@@ -9,6 +9,7 @@ import type {
   BiblioRefFilter,
   BiblioSearch,
   BiblioSearchParams,
+  BiblioSource,
   BiblioStatus,
   BiblioDecision,
   Capabilities,
@@ -319,13 +320,28 @@ export const api = {
   // ------------------------------------------------- revue bibliographique
   biblioStatus: () => get<BiblioStatus>('/biblio/status'),
   biblioOverview: () => get<BiblioOverview>('/biblio/overview'),
-  /** Lance une passe sur PubMed et/ou Google Scholar. Longue : l'acteur Apify tourne côté serveur. */
+  /**
+   * Lance une passe sur PubMed et/ou Google Scholar. Longue : jusqu'à 10 000 notices PubMed, ou un acteur Apify.
+   * Quand toutes les sources échouent, le serveur répond 502 (`all_sources_failed`) et le détail de l'erreur porte
+   * les passes consignées (`details.searches`).
+   */
   biblioSearch: (body: BiblioSearchParams) =>
     post<{ searches: BiblioSearch[]; counts: BiblioCounts; prisma: BiblioPrisma }>(
       '/biblio/searches',
       body,
       { timeoutMs: 0 },
     ),
+  /** Importe un export d'une autre base (RIS, MEDLINE/.nbib, BibTeX, CSV), déclaré comme venant de `source`. */
+  biblioImport: (file: File, source: BiblioSource, sourceLabel?: string) => {
+    const form = new FormData();
+    form.append('source', source);
+    if (sourceLabel) form.append('sourceLabel', sourceLabel);
+    form.append('file', file, file.name);
+    return request<{ search: BiblioSearch; counts: BiblioCounts; prisma: BiblioPrisma }>('/biblio/imports', {
+      method: 'POST',
+      body: form,
+    });
+  },
   biblioRefs: (filter: BiblioRefFilter = {}) => {
     const params = new URLSearchParams();
     if (filter.decision) params.set('decision', filter.decision);

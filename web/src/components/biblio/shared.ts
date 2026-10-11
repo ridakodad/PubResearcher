@@ -3,7 +3,35 @@ import type { BiblioDecision, BiblioRef, BiblioSource } from '../../lib/types';
 export const SOURCE_LABELS: Record<BiblioSource, string> = {
   pubmed: 'PubMed',
   scholar: 'Google Scholar',
+  embase: 'Embase',
+  central: 'Cochrane CENTRAL',
+  scopus: 'Scopus',
+  wos: 'Web of Science',
+  lissa: 'LiSSa',
+  cinahl: 'CINAHL',
+  psycinfo: 'PsycINFO',
+  clinicaltrials: 'ClinicalTrials.gov',
+  ictrp: 'OMS ICTRP',
+  other_db: 'Autre base de données',
+  other: 'Autre (citations, sites, experts…)',
 };
+
+/** Libellé court d'une source, pour une puce : « Autre (citations, sites, experts…) » n'y tient pas. */
+export const SOURCE_SHORT: Partial<Record<BiblioSource, string>> = {
+  scholar: 'Scholar',
+  central: 'CENTRAL',
+  clinicaltrials: 'ClinicalTrials',
+  other_db: 'Autre base',
+  other: 'Autre',
+};
+export const shortSource = (source: BiblioSource): string => SOURCE_SHORT[source] ?? SOURCE_LABELS[source];
+
+/** « 1 234 » : les effectifs se lisent mieux groupés par milliers. */
+export const fmtCount = (n: number): string => n.toLocaleString('fr-FR');
+
+/** « 1 052 déjà connues » : `plural`, avec les milliers groupés. */
+export const countOf = (n: number, singular: string, pluralForm?: string): string =>
+  `${fmtCount(n)} ${n > 1 ? (pluralForm ?? `${singular}s`) : singular}`;
 
 export const DECISION_LABELS: Record<BiblioDecision, string> = {
   pending: 'À trier',
