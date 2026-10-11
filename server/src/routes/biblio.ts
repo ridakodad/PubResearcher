@@ -2,7 +2,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import multer from 'multer';
 import { z } from 'zod';
 import { HttpError, asyncHandler, badRequest, conflict, intParam, notFound, unprocessable } from '../lib/http.js';
-import { readNumericEnv } from '../lib/env-check.js';
+import { NUMERIC_SETTINGS, readNumericEnv } from '../lib/env-check.js';
 import {
   ApifyError,
   NO_TOKEN_MESSAGE,
@@ -59,7 +59,7 @@ const optionalYear = z.number().int().min(1800).max(2200).optional();
 /** Taille maximale d'un fichier importé (50 Mo par défaut, `BIBLIO_IMPORT_MAX_MB`) : 50 000 notices avec résumés y tiennent. */
 function importMaxBytes(): number {
   try {
-    return readNumericEnv('BIBLIO_IMPORT_MAX_MB', process.env.BIBLIO_IMPORT_MAX_MB, 50, { min: 1, max: 500 }) * 1024 * 1024;
+    return readNumericEnv('BIBLIO_IMPORT_MAX_MB', process.env.BIBLIO_IMPORT_MAX_MB, 50, NUMERIC_SETTINGS.BIBLIO_IMPORT_MAX_MB) * 1024 * 1024;
   } catch {
     return 50 * 1024 * 1024;
   }
