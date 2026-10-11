@@ -4,7 +4,8 @@ import { idNumber } from '../lib/schemas.js';
 import { asyncHandler, notFound } from '../lib/http.js';
 import { getActiveTemplate, getTemplate } from '../repo/templates.js';
 import { buildDataset, buildFieldStats } from './analytics.js';
-import { ChatError, chatAvailable, streamReply, type CohortContext } from '../engine/chat.js';
+import { ChatError, chatAvailable, chatModel, streamReply, type CohortContext } from '../engine/chat.js';
+import { costOf } from '../engine/pricing.js';
 
 export const redactionRouter = Router();
 
@@ -97,7 +98,7 @@ redactionRouter.post(
       const usage = await streamReply(context, messages, (text) => {
         if (!closed) send('delta', { text });
       });
-      if (!closed) send('done', { usage });
+      if (!closed) send('done', { usage, costUsd: costOf(chatModel(), usage) });
     } catch (error) {
       const message =
         error instanceof ChatError

@@ -4,7 +4,8 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { guessLang, parseNumberInput, numberToInput, sameValue } from '../../web/src/lib/format.js';
+import { formatUsd, guessLang, modelLabel, parseNumberInput, numberToInput, sameValue } from '../../web/src/lib/format.js';
+import { PRICES } from '../src/engine/pricing.js';
 import { EXPORTS } from '../../web/src/lib/exports.js';
 import { detectStructure, groupItems, patientCodeOf } from '../../web/src/lib/grouping.js';
 
@@ -117,5 +118,30 @@ describe('écran d’export', () => {
   test('la liste des exports est la source du compteur du plan de travail', () => {
     assert.equal(EXPORTS.length, 7);
     assert.equal(new Set(EXPORTS).size, EXPORTS.length);
+  });
+});
+
+describe('coût et modèle affichés', () => {
+  // Les espaces insécables de la typographie française (avant « $US », entre les milliers) comptent pour un espace.
+  const usd = (n: number) => formatUsd(n).replace(/\s/gu, ' ');
+
+  test('montants en dollars à la française, au centime', () => {
+    assert.equal(usd(0.14), '0,14 $US');
+    assert.equal(usd(2.91), '2,91 $US');
+    assert.equal(usd(1234.5), '1 234,50 $US');
+    assert.equal(usd(0), '0,00 $US');
+  });
+
+  test('sous le demi-centime, « moins de 0,01 $US » plutôt qu’un zéro trompeur', () => {
+    assert.equal(usd(0.0049), 'moins de 0,01 $US');
+    assert.equal(usd(0.0001), 'moins de 0,01 $US');
+    assert.equal(usd(0.005), '0,01 $US');
+  });
+
+  test('chaque modèle du barème du serveur a un nom lisible ; un inconnu reste tel quel', () => {
+    for (const id of Object.keys(PRICES)) assert.notEqual(modelLabel(id), id, `${id} sans nom lisible`);
+    assert.equal(modelLabel('claude-opus-5-5'), 'Claude Opus 5.5');
+    assert.equal(modelLabel('claude-futur-9'), 'claude-futur-9');
+    assert.equal(modelLabel(null), 'Claude');
   });
 });

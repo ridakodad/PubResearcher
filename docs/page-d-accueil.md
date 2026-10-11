@@ -8,7 +8,7 @@ Le site public de PubResearcher : il présente l'outil, propose de créer un acc
 
 | Adresse | Page | Accès |
 |---|---|---|
-| `/` | Accueil : l'outil en une phrase, un exemple fictif de valeur et de source, les outils, un aperçu de l'application, le parcours en quatre étapes, la section « PubResearcher n'anonymise rien », l'installation, les questions | public |
+| `/` | Accueil : l'outil en une phrase, un exemple fictif de valeur et de source, les outils, un aperçu de l'application, le parcours en quatre étapes, la section « PubResearcher n'anonymise rien », l'installation, les questions (dont le coût : l'application ne coûte rien, l'IA se paie avec sa propre clé) | public |
 | `/inscription` | « Créer mon accès » : Google en premier, puis nom, e-mail, mot de passe | public |
 | `/connexion` | « Se connecter » : mêmes moyens ; « Mot de passe oublié ? » | public |
 | `/bienvenue` | Parcours d'accueil en trois étapes : **profil**, **étude**, **engagement** (la charte d'anonymisation) | connecté |

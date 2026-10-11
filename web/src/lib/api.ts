@@ -1,4 +1,6 @@
 import type {
+  ApiKeyStatus,
+  CostEstimate,
   BiblioCounts,
   BiblioExportFormat,
   BiblioOverview,
@@ -145,6 +147,13 @@ export const api = {
   deleteDocument: (id: number) => del(`/documents/${id}`),
   capabilities: () => get<Capabilities>('/documents-capabilities'),
 
+  // ------------------------------------------------- clé d'API de l'utilisateur
+  apiKey: () => get<ApiKeyStatus>('/llm/key'),
+  saveApiKey: (key: string) => put<ApiKeyStatus>('/llm/key', { key }),
+  removeApiKey: () => request<ApiKeyStatus>('/llm/key', { method: 'DELETE' }),
+  estimateExtraction: (templateId?: number) =>
+    get<{ estimate: CostEstimate | null }>(`/llm/estimate${templateId ? `?templateId=${templateId}` : ''}`),
+
   // ------------------------------------------------------------------ fiches
   listTemplates: () =>
     get<{ templates: Template[]; active: TemplateWithFields | null }>('/templates'),
@@ -214,7 +223,7 @@ export const api = {
     signal: AbortSignal,
     handlers: {
       onDelta: (text: string) => void;
-      onDone: (usage: { inputTokens: number; outputTokens: number; cacheReadTokens: number }) => void;
+      onDone: (usage: { inputTokens: number; outputTokens: number; cacheReadTokens: number }, costUsd: number | null) => void;
       onError: (message: string) => void;
     },
   ): Promise<void> => {
@@ -250,7 +259,7 @@ export const api = {
         if (type && brut) {
           const payload = JSON.parse(brut) as Record<string, never>;
           if (type === 'delta') handlers.onDelta(String(payload.text ?? ''));
-          else if (type === 'done') handlers.onDone(payload.usage as never);
+          else if (type === 'done') handlers.onDone(payload.usage as never, (payload.costUsd as number | null | undefined) ?? null);
           else if (type === 'error') handlers.onError(String(payload.message ?? 'Erreur inconnue.'));
         }
         coupure = buffer.indexOf('\n\n');

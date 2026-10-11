@@ -152,7 +152,16 @@ Avant d'extraire, deux minutes évitent des heures de doute :
 | **Règles puis Claude** | Les règles d'abord ; le modèle ne reçoit que les variables restées vides | Meilleur rapport coût/rendement |
 | **Claude seul** | Soumet toute la fiche au modèle | Comparer, ou démarrer sans règles |
 
-> **Données de santé.** Les modes « Règles puis Claude » et « Claude seul » **envoient le texte des documents** à l'API d'Anthropic (sous les noms « Document 1 », « Document 2 »… : ni les noms de fichier ni le code du dossier ne partent, mais le texte, lui, part tel quel). Cette sortie de données relève des mêmes autorisations que tout traitement externalisé de données de santé, et se décide avant l'usage. Le mode « Règles seules » n'en envoie aucune. Sans clé API configurée, les deux autres modes sont indisponibles. Voir [Sécurité et données](securite-et-donnees.md).
+> **Données de santé.** Les modes « Règles puis Claude » et « Claude seul » **envoient le texte des documents** à l'API d'Anthropic (sous les noms « Document 1 », « Document 2 »… : ni les noms de fichier ni le code du dossier ne partent, mais le texte, lui, part tel quel). Cette sortie de données relève des mêmes autorisations que tout traitement externalisé de données de santé, et se décide avant l'usage. Le mode « Règles seules » n'en envoie aucune. Sans clé d'API, les deux autres modes sont indisponibles. Voir [Sécurité et données](securite-et-donnees.md).
+
+**Votre clé d'API Anthropic.** Les modes « Claude » et la rédaction assistée utilisent **votre** clé : vous payez Anthropic directement, à l'usage, et PubResearcher ne facture rien. Une seule fois :
+
+1. créez une clé dans la [console d'Anthropic](https://console.anthropic.com/settings/keys) (compte gratuit, puis crédit prépayé) et **fixez-y une limite de dépenses mensuelle** : c'est votre garde-fou ;
+2. sur la page *Extraction*, panneau **Clé d'API Anthropic**, collez-la (elle commence par « sk-ant- ») puis *Vérifier et enregistrer*. L'outil la fait vérifier par Anthropic avant de l'enregistrer : une clé erronée, désactivée ou sans crédit est refusée avec la raison, et rien n'est gardé.
+
+Elle reste sur l'ordinateur qui fait tourner l'outil, hors de la base, des sauvegardes et des exports ; l'écran n'en montre plus que les quatre derniers caractères. *Changer de clé* la remplace, *Retirer* l'efface. Si votre administrateur a fourni une clé pour le serveur, le panneau l'indique (« Clé fournie par le serveur ») et *Utiliser ma propre clé* la remplace par la vôtre.
+
+**Ce que coûte une passe.** Dès qu'un mode « Claude » est choisi, la page affiche une **fourchette en dollars** pour tous les dossiers, calculée sur leur texte réel ; au-delà de 5 $US, l'outil demande confirmation avant de lancer. Le bilan de passe donne ensuite le **coût constaté**, d'après les jetons facturés. Avec le modèle par défaut (Claude Opus 5.5), un dossier ordinaire coûte de l'ordre de 0,05 à 0,20 $US. En mode « Règles puis Claude », seules les variables restées vides partent : la passe coûte moins que le haut de la fourchette.
 
 Le **bilan de passe** s'affiche à la fin de la passe (pages *Extraction* et *Dossiers patients*) avec les totaux : variables extraites, non trouvées, gardées (déjà relues par un humain), **écartées** (valeur trouvée mais inutilisable : seuil, hors bornes, unité, type) et, pour le modèle, valeurs non vérifiées ou invalides. Sur la page *Extraction*, la liste des valeurs écartées (dossier, variable, extrait, raison) se déplie sous les totaux ; elle ne vaut que pour la dernière passe, tant que la page reste ouverte. Le détail par dossier et par variable est dans la réponse de l'API (`reports`). Ces chiffres renseignent la qualité des documents autant que celle des règles.
 
@@ -296,6 +305,10 @@ Le rapport contient un **paragraphe « Méthodes » prêt à adapter**, rédigé
 | « Fichier trop volumineux : la limite est de 200 Mo par fichier (MAX_UPLOAD_BYTES) … » | Réduire le fichier, ou demander à l'administrateur de relever `MAX_UPLOAD_BYTES` |
 | « Valeur inhabituelle » | Hors des bornes de la variable : *Corriger*, ou *Enregistrer quand même* si elle est vraie |
 | « valeur seuil « < 5 » : à saisir à la main » | Une valeur au seuil de détection n'est pas un nombre : saisissez ce que votre protocole prescrit |
-| « Extraction par Claude non configurée. » | Aucune clé API n'est configurée : seul le mode « Règles seules » est possible |
+| « Extraction par Claude non configurée. » ou « Aucune clé d'API Anthropic… » | Aucune clé n'est enregistrée : seul le mode « Règles seules » est possible. Enregistrez la vôtre (*Extraction › Clé d'API Anthropic*, § 5) |
+| « Anthropic refuse cette clé… » | Clé mal recopiée, supprimée ou désactivée : copiez-la de nouveau depuis la console d'Anthropic, ou créez-en une autre |
+| « C'est une clé d'administration… » | Une clé `sk-ant-admin…` ne sert pas à interroger un modèle : créez une clé d'API ordinaire |
+| « Crédit épuisé sur votre compte Anthropic… » | Rechargez le crédit (console d'Anthropic, *Billing*) ou relevez votre limite de dépenses, puis relancez : une passe interrompue n'a rien effacé |
+| « Anthropic est injoignable depuis ce poste… » | Pas d'accès à Internet, ou un pare-feu bloque `api.anthropic.com` : voyez avec l'administrateur |
 | « Une recherche est déjà en cours » | Une seule passe bibliographique à la fois (elle est facturée) : patientez |
 | Nom d'hôte non autorisé (403) | On accède à l'outil sous un nom que l'administrateur n'a pas déclaré (`ALLOWED_HOSTS`) |

@@ -131,6 +131,10 @@ const FAQ = [
     a: 'Non. L’application tourne sur votre ordinateur et ne demande aucun compte. Ce site est sa porte d’entrée : il présente l’outil, enregistre l’engagement d’anonymisation que vous prenez et vous mène à l’application, qui le redemande avant le premier import.',
   },
   {
+    q: 'Combien cela coûte-t-il ?',
+    a: 'L’application ne coûte rien. Seules les fonctions de Claude, facultatives — l’extraction et la rédaction assistée —, ont un coût : vous enregistrez dans l’application votre propre clé d’API Anthropic et payez Anthropic directement, à l’usage, de l’ordre de 0,05 à 0,20 $US par dossier ordinaire avec le modèle par défaut. Chaque passe est chiffrée avant d’être lancée, et PubResearcher ne prélève rien au passage. La revue bibliographique passe, de même, par votre propre compte Apify.',
+  },
+  {
     q: 'Mes dossiers patients sont-ils envoyés quelque part ?',
     a: 'Pas par défaut : l’application n’écoute que sur votre ordinateur et n’envoie rien hors de la machine. Trois fonctions facultatives font sortir des données si vous les configurez : l’extraction par Claude (texte des documents), la rédaction assistée (agrégats de la cohorte) et la revue bibliographique (équation de recherche). Le mode « Règles seules » reste entièrement local.',
   },

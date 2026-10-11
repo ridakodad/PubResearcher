@@ -50,8 +50,11 @@ DATA_DIR/
       <uuid>.<extension>      les fichiers d'origine, sous un nom généré
     .incoming/                dépôt provisoire des envois en cours (vidé à chaque démarrage)
   sauvegardes/                destination par défaut de `npm run backup`
+  anthropic-key.json          clé d'API Anthropic saisie dans l'application (droits 0600), si elle existe
   .research-tool.lock         verrou : une seule instance par dossier de données
 ```
+
+`anthropic-key.json` n'est **ni sauvegardé ni restauré** : sur une nouvelle machine, l'utilisateur saisit à nouveau sa clé (§ 4.5).
 
 Les noms `research-tool.db`, `.research-tool.lock` et `research-tool-sauvegarde-…` sont ceux d'avant le changement de nom en PubResearcher (1.2.0) : ils sont **conservés** pour qu'une base ou une sauvegarde créée par une version antérieure s'ouvre telle quelle.
 
@@ -124,18 +127,35 @@ Autre langue : `npm install @tesseract.js-data/eng --workspace server` puis `OCR
 
 ### 4.5 Extraction par Claude et rédaction
 
+**Chaque utilisateur paie l'IA avec sa propre clé d'API Anthropic.** PubResearcher ne facture rien : il n'y a ni abonnement ni crédit à acheter auprès de l'outil, et la consommation est facturée directement sur le compte Anthropic du titulaire de la clé.
+
+**Saisie dans l'application** (cas ordinaire). Écran **Extraction › Clé d'API Anthropic** — le même panneau apparaît dans **Rédaction** tant qu'aucune clé n'est disponible :
+
+1. la clé est d'abord contrôlée sur sa forme (`sk-ant-…` ; une clé d'administration `sk-ant-admin…` est refusée : elle n'interroge pas de modèle) ;
+2. puis **vérifiée auprès d'Anthropic** par une seule requête gratuite (la fiche du modèle configuré) : une clé erronée, désactivée, sans accès au modèle ou un réseau coupé donnent chacun leur message, et **rien n'est enregistré** ;
+3. elle est alors écrite dans `DATA_DIR/anthropic-key.json`, avec les droits `0600` dès la création (écriture atomique), **hors de la base, des sauvegardes et des exports** ;
+4. l'interface n'en reçoit plus que la provenance et les **quatre derniers caractères** (`…a1B2`) ; « Retirer » efface le fichier.
+
+La clé sert aussitôt, sans redémarrage. Elle est **commune à l'instance** : sur une instance partagée (§ 5), toute personne qui a le mot de passe lance des passes facturées sur ce compte — une instance par étude, et une limite de dépenses fixée dans la [console d'Anthropic](https://console.anthropic.com/settings/limits).
+
+**Clé d'environnement** (serveur administré). `ANTHROPIC_API_KEY` sert à défaut ; une clé saisie dans l'application l'emporte, et la retirer rend la main à celle de l'environnement. Sur une instance où aucune donnée ne doit sortir, ne renseignez ni l'une ni l'autre.
+
 | Variable | Défaut | Rôle |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | — | Clé API. **Sans elle, seules les règles sont disponibles** et rien ne sort de la machine |
-| `LLM_MODEL` | `claude-opus-5` | Modèle utilisé (extraction et rédaction). **À vérifier contre les modèles de votre compte** : l'identifiant par défaut n'a pas été éprouvé, et l'outil ne teste pas l'existence du modèle avant le premier appel. La famille Claude 5 compte des identifiants plus récents (par exemple `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5`) ; un modèle plus petit réduit le coût |
+| `ANTHROPIC_API_KEY` | — | Clé de secours, si aucune n'est saisie dans l'application. **Sans clé, seules les règles sont disponibles** et rien ne sort de la machine |
+| `LLM_MODEL` | `claude-opus-5-5` | Modèle utilisé (extraction et rédaction). La clé est vérifiée contre lui à la saisie. `claude-sonnet-5-5` coûte deux fois moins ; `claude-haiku-5-5` bien moins encore, au prix de la finesse. Un modèle absent du barème de l'outil fonctionne, mais sans montant en dollars (jetons seuls) |
 | `LLM_EFFORT` | `high` | Profondeur de raisonnement (`low`, `medium`, `high`, `xhigh`, `max` ; toute autre valeur arrête le démarrage) ; `medium` ou `low` réduisent le coût sur de grandes séries |
 | `LLM_MAX_CHARS_PER_DOC` | `60000` | Texte transmis par document ; au-delà, tronqué et signalé au modèle |
 | `LLM_MAX_TOKENS` | `16000` | Plafond de génération de l'extraction |
 | `CHAT_MAX_TOKENS` | `8000` | Plafond de génération de la rédaction |
 
+**Coût.** Avant une passe, l'écran d'extraction affiche une **fourchette en dollars**, calculée sur le texte réel des dossiers (3,2 caractères par jeton, consigne mise en cache), et demande confirmation au-delà de 5 $US ; après la passe, et après chaque réponse de l'assistant de rédaction, le **coût constaté** d'après les jetons facturés. Barème intégré (octobre 2026, dollars par million de jetons, entrée / sortie) : Opus 5.5 4 / 20, Opus 5 5 / 25, Sonnet 5.5 et Sonnet 5 2 / 10, Haiku 5.5 0,10 / 0,50, Fable 5.1 10 / 50. Ces montants sont indicatifs : la facture qui fait foi est celle de la console d'Anthropic.
+
+**Messages d'Anthropic.** Clé refusée, crédit épuisé, limite de débit et modèle introuvable sont traduits en clair (« Crédit épuisé sur votre compte Anthropic : rechargez-le… ») ; la clé n'apparaît dans aucun message, aucune réponse, aucun journal — le journal ne note que ses quatre derniers caractères à l'enregistrement.
+
 > **Ce qui part chez Anthropic**, mode « Claude » : le **texte des documents** (présentés au modèle sous les noms « Document 1 », « Document 2 »… : ni le code du dossier ni les noms de fichiers ne partent), les libellés, unités, définitions et options des variables, et le nom de la fiche. **Le texte d'un compte rendu contient souvent le nom du patient** : l'outil ne le retire pas. Pour la rédaction : des agrégats seulement (voir [Sécurité et données](securite-et-donnees.md#2-ce-qui-sort-de-la-machine)).
 >
-> L'API réelle d'Anthropic **n'a pas été appelée** par la validation de cette version (aucune clé ni crédit ; voir le [rapport de validation](validation.md)). Le SDK est exercé contre un faux serveur HTTP — requête, réponse structurée, erreurs, masquage de la clé — et ce qui l'entoure (schéma imposé, recherche des citations, typage, tri retenues/écartées) est testé. Essayez d'abord sur quelques dossiers pseudonymisés.
+> L'API réelle d'Anthropic **n'a pas été appelée** par la validation de cette version (aucune clé ni crédit ; voir le [rapport de validation](validation.md)). Le SDK est exercé contre un faux serveur HTTP — vérification de la clé, requête, réponse structurée, erreurs, masquage de la clé — et ce qui l'entoure (schéma imposé, recherche des citations, typage, tri retenues/écartées, coût) est testé. Essayez d'abord sur quelques dossiers pseudonymisés.
 
 ### 4.6 Revue bibliographique
 

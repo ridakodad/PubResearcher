@@ -8,7 +8,7 @@ L'espace de travail d'une étude rétrospective, sur votre poste. D'un côté, c
 
 Pensée pour un travail de thèse ou une étude rétrospective : on part d'une pile de dossiers, on obtient un tableau exploitable dans Excel, R ou SPSS — sans ressaisir chaque variable à la main, et sans perdre la trace de l'origine de chaque valeur.
 
-**Version 1.3.0** · Node.js ≥ 22.13 · un seul processus, aucun module natif à compiler · 793 tests
+**Version 1.4.0** · Node.js ≥ 22.13 · un seul processus, aucun module natif à compiler · 816 tests
 
 > **Données de santé.** Par défaut l'outil n'écoute que sur le poste et n'envoie **rien** hors de la machine. Il n'anonymise pas : importez des documents pseudonymisés. Avant tout import, l'application demande de **confirmer une charte d'anonymisation** (cinq engagements, rappelés à chaque nouvelle version du texte). Lisez [Sécurité et données](docs/securite-et-donnees.md) avant la première étude.
 
@@ -157,7 +157,19 @@ Les règles excellent sur ce qui est structuré. Elles atteignent leur limite su
 
 **Ce qui empêche une valeur inventée d'entrer dans le jeu de données** : deux contrôles indépendants. (1) Le modèle doit recopier un extrait du document ; cet extrait est **recherché dans le texte réel** du dossier — à défaut, c'est la valeur elle-même qui l'est (confiance plus basse) ; ni l'un ni l'autre, et la valeur est écartée. (2) La valeur passe ensuite par le même typage que celles des règles (type, options, bornes). L'extrait affiché en relecture est celui du document, pas celui du modèle. **Rien de ce qui vient d'un modèle ne devrait entrer dans une publication sans relecture humaine.**
 
-> **Cette fonction envoie le texte des documents à l'API d'Anthropic**, sous les noms « Document 1 », « Document 2 »… (ni les noms de fichier ni le code du dossier ne partent, mais **le texte, lui, part tel quel**, nom du patient compris s'il y figure). C'est une sortie de données de santé hors de l'établissement : elle relève des mêmes autorisations que tout traitement externalisé, et se décide avant l'usage. Sans `ANTHROPIC_API_KEY`, les deux modes « Claude » sont indisponibles. Le mode n'a pas été exercé contre l'API réelle dans la validation (le SDK l'a été contre un faux serveur ; voir le [rapport](docs/validation.md#11-limites-et-ce-qui-na-pas-été-vérifié)).
+> **Cette fonction envoie le texte des documents à l'API d'Anthropic**, sous les noms « Document 1 », « Document 2 »… (ni les noms de fichier ni le code du dossier ne partent, mais **le texte, lui, part tel quel**, nom du patient compris s'il y figure). C'est une sortie de données de santé hors de l'établissement : elle relève des mêmes autorisations que tout traitement externalisé, et se décide avant l'usage. Sans clé d'API, les deux modes « Claude » sont indisponibles. Le mode n'a pas été exercé contre l'API réelle dans la validation (le SDK l'a été contre un faux serveur ; voir le [rapport](docs/validation.md#11-limites-et-ce-qui-na-pas-été-vérifié)).
+
+### Votre clé, votre facture
+
+**Chacun utilise sa propre clé d'API Anthropic** : PubResearcher ne facture rien et ne revend pas d'IA ; ce que consomment Claude et l'assistant de rédaction est facturé directement sur votre compte Anthropic.
+
+1. Créez une clé dans la [console d'Anthropic](https://console.anthropic.com/settings/keys) (compte gratuit, puis crédit prépayé) et fixez-y une **limite de dépenses mensuelle**.
+2. Dans PubResearcher : **Extraction › Clé d'API Anthropic**, collez la clé, puis « Vérifier et enregistrer ». Le serveur la vérifie auprès d'Anthropic (une requête gratuite) avant de l'enregistrer.
+3. Choisissez « Règles puis Claude » : l'écran affiche une **fourchette de coût en dollars** avant la passe, et le **coût réel** après.
+
+La clé reste **sur la machine qui fait tourner l'outil**, dans `DATA_DIR/anthropic-key.json` (lisible du seul compte de service) : ni dans la base, ni dans les sauvegardes, ni dans les exports, et l'interface n'en montre plus que les quatre derniers caractères. « Retirer » l'efface.
+
+Sur un serveur administré, la clé peut aussi venir de l'environnement ; celle saisie dans l'application l'emporte :
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...    # Windows : setx ANTHROPIC_API_KEY sk-ant-...
@@ -166,13 +178,13 @@ npm start
 
 | Variable | Défaut | Rôle |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | — | Clé API. Sans elle, seules les règles sont disponibles |
-| `LLM_MODEL` | `claude-opus-5` | Modèle utilisé (à vérifier contre les modèles de votre compte) |
+| `ANTHROPIC_API_KEY` | — | Clé de secours, si aucune n'est saisie dans l'application |
+| `LLM_MODEL` | `claude-opus-5-5` | Modèle utilisé (Claude Opus 5.5 : 4 $US par million de jetons lus, 20 $US par million écrits). `claude-sonnet-5-5` coûte deux fois moins |
 | `LLM_EFFORT` | `high` | Profondeur de raisonnement ; `medium` ou `low` réduisent le coût sur de grandes séries |
 | `LLM_MAX_CHARS_PER_DOC` | `60000` | Texte transmis par document ; au-delà, tronqué et signalé au modèle |
 | `LLM_MAX_TOKENS` | `16000` | Plafond de génération |
 
-Un appel par dossier ; la consigne et le dictionnaire des variables sont mis en cache. Commencez par quelques dossiers pour mesurer le coût et la qualité avant d'engager la cohorte entière.
+Un appel par dossier ; la consigne et le dictionnaire des variables sont mis en cache. Avec le modèle par défaut, un dossier ordinaire (une vingtaine de milliers de caractères, une trentaine de variables) coûte de l'ordre de **0,05 à 0,20 $US** ; l'estimation affichée avant chaque passe vaut pour votre corpus, la console d'Anthropic pour la facture. Commencez par quelques dossiers pour mesurer le coût et la qualité avant d'engager la cohorte entière.
 
 ---
 
@@ -247,7 +259,7 @@ server/          API Node/TypeScript, SQLite (module intégré `node:sqlite`)
   src/biblio/    Revue bibliographique : client Apify, adaptateurs, exports RIS / BibTeX / CSV
   src/repo/      Accès aux données (dont fiabilité et rapport « Méthodes »)
   src/routes/    API HTTP
-  test/          37 fichiers de test (dont la logique et la configuration de la page d'accueil)
+  test/          38 fichiers de test (dont la logique et la configuration de la page d'accueil)
 web/             Interface React/TypeScript (Vite) : styles à la main, police et illustrations embarquées
 landing/         Site public, déployé à part (Vercel) : présentation, inscription Google ou e-mail,
                  parcours d'accueil, charte d'anonymisation ; tables Supabase (migration), parcours e2e
@@ -269,6 +281,6 @@ cd landing && node --test e2e/flows.test.mjs   # 25 parcours de la page d'accuei
 
 Les tests couvrent le moteur (repliage, typage, chaque famille de règles, négation, unités, expressions surveillées), la chaîne complète — import, extraction, relecture, export — sur de vrais fichiers PDF, DOCX, DICOM et images (PNG, JPEG avec EXIF, TIFF) construits par les fixtures, un **vrai processus serveur** (démarrage, verrou, réglages invalides, arrêt par signal), l'isolation sur de vrais fichiers piégés, le SDK d'Anthropic contre un faux serveur, et la revue bibliographique contre un faux serveur Apify qui rejoue de vraies sorties.
 
-Le [rapport de validation](docs/validation.md) donne les mesures (banc d'essai du moteur, 97 fichiers hostiles, 25 arrêts brutaux, 1 000 à 5 000 dossiers, 64 combinaisons d'accessibilité, la suite sous cinq versions de Node — mesurées sur la 1.1.0, le moteur étant inchangé ; les § 1.2 et 1.3 disent ce qui a été rejoué pour la 1.2.0 et la 1.3.0, le § 13 ce qui a été mesuré sur la page d'accueil) **et ce qui n'a pas été vérifié** : aucun corpus clinique réel, le mode « Claude » jamais exécuté contre l'API réelle, Excel et PowerPoint jamais ouverts, Chromium seulement.
+Le [rapport de validation](docs/validation.md) donne les mesures (banc d'essai du moteur, 97 fichiers hostiles, 25 arrêts brutaux, 1 000 à 5 000 dossiers, 64 combinaisons d'accessibilité, la suite sous cinq versions de Node — mesurées sur la 1.1.0, le moteur étant inchangé ; les § 1.2 à 1.4 disent ce qui a été rejoué pour la 1.2.0, la 1.3.0 et la 1.4.0, le § 13 ce qui a été mesuré sur la page d'accueil) **et ce qui n'a pas été vérifié** : aucun corpus clinique réel, le mode « Claude » jamais exécuté contre l'API réelle, Excel et PowerPoint jamais ouverts, Chromium seulement.
 
 `npm audit` (10 octobre 2026) : 3 avis modérés, dans la seule chaîne `mammoth` → `argparse` → `sprintf-js`, sans chemin atteignable avec une entrée utilisateur ; la « correction » proposée est un retour en arrière de `mammoth` — ne la lancez pas.

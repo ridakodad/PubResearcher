@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { ErrorPanel } from '../components/ui';
-import { IconAlert, IconWrite } from '../components/icons';
+import { IconWrite } from '../components/icons';
+import { ApiKeyPanel } from '../components/ApiKeyPanel';
+import { formatUsd } from '../lib/format';
 
 /**
  * Assistant de rédaction.
@@ -55,6 +57,8 @@ export function RedactionPage() {
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [usage, setUsage] = useState<{ inputTokens: number; outputTokens: number; cacheReadTokens: number } | null>(null);
+  /** Prix de la dernière réponse en dollars, sur le compte Anthropic de l'utilisateur (`null` : inconnu). */
+  const [cost, setCost] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -97,7 +101,10 @@ export function RedactionPage() {
             }
             return copie;
           }),
-        onDone: (u) => setUsage(u),
+        onDone: (u, costUsd) => {
+          setUsage(u);
+          setCost(costUsd);
+        },
         onError: (message) => setError(message),
       });
     } catch (err) {
@@ -123,14 +130,17 @@ export function RedactionPage() {
             <h1>Rédaction</h1>
           </div>
         </div>
-        <div className="notice notice-warn">
-          <IconAlert size={18} />
-          <div>
-            <strong>Assistant non configuré.</strong> Renseignez{' '}
-            <span className="mono">ANTHROPIC_API_KEY</span> dans l’environnement du serveur, puis
-            redémarrez l’application. Le reste de l’espace de travail fonctionne sans cette clé.
-          </div>
-        </div>
+        <p className="secondary small" style={{ margin: 0 }}>
+          L’assistant de rédaction utilise votre clé d’API Anthropic. Le reste de l’espace de travail fonctionne sans elle.
+        </p>
+        <ApiKeyPanel
+          onChange={() => {
+            void api
+              .redactionStatus()
+              .then((s) => setAvailable(s.available))
+              .catch(() => setAvailable(false));
+          }}
+        />
       </div>
     );
   }
@@ -229,7 +239,8 @@ export function RedactionPage() {
             {usage
               ? `${usage.inputTokens.toLocaleString('fr-FR')} jetons en entrée ` +
                 `(${usage.cacheReadTokens.toLocaleString('fr-FR')} depuis le cache), ` +
-                `${usage.outputTokens.toLocaleString('fr-FR')} en sortie`
+                `${usage.outputTokens.toLocaleString('fr-FR')} en sortie` +
+                (cost !== null ? ` — ${formatUsd(cost)} sur votre compte Anthropic` : '')
               : 'Entrée pour envoyer, Maj+Entrée pour aller à la ligne'}
           </span>
           <div className="spacer" />

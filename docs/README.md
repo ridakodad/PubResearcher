@@ -1,6 +1,6 @@
 # Documentation
 
-Version 1.3.0 · octobre 2026 · en français, comme l'interface.
+Version 1.4.0 · octobre 2026 · en français, comme l'interface.
 
 | Document | Pour qui | Contenu |
 |---|---|---|
@@ -8,13 +8,13 @@ Version 1.3.0 · octobre 2026 · en français, comme l'interface.
 | [Guide de l'administrateur](guide-administrateur.md) | Qui installe et exploite l'outil | Prérequis, installation, **toutes les variables d'environnement**, exposition sur un réseau (mot de passe, HTTPS, proxy), sauvegarde et restauration, mise à jour, dimensionnement, dépannage |
 | [Méthodes et reproductibilité](methodes-et-reproductibilite.md) | Qui publie | Le rapport « Méthodes et traçabilité », paragraphes types (français, anglais), mesurer la fiabilité sur ses dossiers (échantillon, intervalles, effectifs), reproduire une extraction, que conserver |
 | [Sécurité et données personnelles](securite-et-donnees.md) | Administrateur, délégué à la protection des données, comité d'éthique | Ce qui sort de la machine, modèle de menaces, protections, ce que l'outil ne fait pas, liste de contrôle d'avant-étude, incidents |
-| [Référence de l'API](reference-api.md) | Qui scripte l'outil | Conventions, erreurs, garde-fous, les 53 routes (52 de ressources + la sonde de santé) avec paramètres et exemples, recettes |
+| [Référence de l'API](reference-api.md) | Qui scripte l'outil | Conventions, erreurs, garde-fous, les 57 routes (56 de ressources + la sonde de santé) avec paramètres et exemples, recettes |
 | [Architecture](architecture.md) | Qui modifie ou audite le code | Composants, flux, moteur d'extraction, isolation des fichiers, modèle de données, décisions et compromis |
 | [Rapport de validation](validation.md) | Tous | Ce qui a été exécuté, les mesures, et **ce qui n'a pas été vérifié** |
 | [Revue bibliographique](revue-bibliographique.md) | Chercheur | PubMed et Google Scholar par acteurs Apify : sources, coût, tri, diagramme de flux, exports |
 | [Page d'accueil](page-d-accueil.md) | Qui met en ligne le site public ; délégué à la protection des données | Le site `landing/` (inscription Google ou e-mail, parcours d'accueil, **charte d'anonymisation**), ce qu'il conserve et ne reçoit jamais, mise en service pas à pas (Supabase, Google, Vercel), variables, contrôles, limites, dépannage |
 | [Identité visuelle](identite-visuelle.md) | Qui modifie l'interface | Couleurs et contrastes mesurés, police, formes, composants (carte d'en-tête, rail, tuiles), thèmes clair et sombre, comment modifier la charte |
-| [Journal des versions](changelog.md) | Tous | Ce qui a changé de la 1.0.0 à la 1.3.0, dont l'unique changement de comportement à connaître (écoute locale par défaut, depuis la 1.1.0) |
+| [Journal des versions](changelog.md) | Tous | Ce qui a changé de la 1.0.0 à la 1.4.0, dont les changements de comportement à connaître (écoute locale par défaut depuis la 1.1.0 ; clé d'API de l'utilisateur et modèle par défaut Claude Opus 5.5 depuis la 1.4.0) |
 
 Les captures (`img/`) montrent les 24 dossiers fictifs de démonstration (`npm run demo`) ; la relecture y est simulée.
 

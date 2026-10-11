@@ -1,6 +1,6 @@
-# Rapport de validation — PubResearcher 1.3.0
+# Rapport de validation — PubResearcher 1.4.0
 
-*Établi le 9 octobre 2026 pour la version 1.1.0 (alors nommée « Research Tool »), complété le 10 octobre 2026 pour la 1.2.0 (changement de nom et refonte visuelle) et le 11 octobre 2026 pour la 1.3.0 (charte d'anonymisation devant l'import, page d'accueil publique : § 1.3 et § 13). Les mesures des § 3 à 8 sont celles de la **1.1.0** : la 1.2.0 ne modifie ni le moteur d'extraction, ni le schéma de la base, ni les routes de l'API (voir le [journal des versions](changelog.md)) ; ce qui a été **rejoué** pour elle, et ce qui ne l'a pas été, est au § 1.2 et au § 9. Les mesures du code et de l'interface de la 1.1.0 (§ 5 à 8) ont été faites sur la version compilée dans l'environnement décrit au § 2 ; la suite de tests et les versions de Node (§ 3) sur une copie neuve du dépôt. Les scripts qui produisent les chiffres (dossier `qa/`, cité dans tout le rapport) ont été écrits pour cet environnement de validation, avec des chemins absolus : **ils ne sont pas publiés dans ce dépôt** (§ 12).*
+*Établi le 9 octobre 2026 pour la version 1.1.0 (alors nommée « Research Tool »), complété le 10 octobre 2026 pour la 1.2.0 (changement de nom et refonte visuelle) et le 11 octobre 2026 pour la 1.3.0 (charte d'anonymisation devant l'import, page d'accueil publique : § 1.3 et § 13) et pour la 1.4.0 (clé d'API de l'utilisateur, coût en dollars : § 1.4). Les mesures des § 3 à 8 sont celles de la **1.1.0** : la 1.2.0 ne modifie ni le moteur d'extraction, ni le schéma de la base, ni les routes de l'API (voir le [journal des versions](changelog.md)) ; ce qui a été **rejoué** pour elle, et ce qui ne l'a pas été, est au § 1.2 et au § 9. Les mesures du code et de l'interface de la 1.1.0 (§ 5 à 8) ont été faites sur la version compilée dans l'environnement décrit au § 2 ; la suite de tests et les versions de Node (§ 3) sur une copie neuve du dépôt. Les scripts qui produisent les chiffres (dossier `qa/`, cité dans tout le rapport) ont été écrits pour cet environnement de validation, avec des chemins absolus : **ils ne sont pas publiés dans ce dépôt** (§ 12).*
 
 **Ce que ce rapport est** : la liste de ce qui a été exécuté, de ce que cela a donné, et de ce qui n'a pas été vérifié.
 **Ce qu'il n'est pas** : une validation clinique, ni une certification. Aucun dossier patient réel n'a servi : tout le corpus est synthétique ou fabriqué pour l'essai.
@@ -64,6 +64,21 @@ La 1.3.0 ajoute la **charte d'anonymisation** devant l'import (interface seuleme
 | Page d'accueil : clavier | 392 arrêts de tabulation : tous avec un anneau de focus visible, aucun élément focalisable invisible (§ 13.3) |
 
 **Non rejoué pour la 1.3.0**, parce que le code concerné n'a pas changé : corpus de fichiers hostiles, arrêts brutaux, gros document, montée en charge, suite sous cinq versions de Node (la suite complète a tourné sous Node 22.22.2 seulement). **Vérifié sur le projet Supabase réel** : règles d'accès, droits et réponses de l'API (§ 13.4). **Non vérifié** : un parcours dans un navigateur contre ce projet, un vrai client Google, un vrai envoi de courriels, et un vrai déploiement Vercel (§ 13.5).
+
+### 1.4 Rejeu pour la version 1.4.0
+
+La 1.4.0 fait payer l'IA par l'utilisateur, avec **sa propre clé d'API Anthropic** saisie dans l'application, affiche le **coût** des passes en dollars et prend **Claude Opus 5.5** (`claude-opus-5-5`) pour modèle par défaut. Le moteur des règles, l'import et le schéma de la base ne changent pas ; `server/src` gagne la clé (`engine/api-key.ts`), le barème (`engine/pricing.ts`) et quatre routes (`/api/llm/…`), et l'extraction comme la rédaction lisent désormais la clé à chaque appel.
+
+| Contrôle | Résultat (1.4.0) |
+|---|---|
+| Typage (serveur, interface, page d'accueil), compilation | Sans erreur. Interface : 75 modules, 376 Ko de script (116 Ko compressés), 45 Ko de feuille de style (9 Ko). Page d'accueil : inchangée en taille (269 Ko et 228 Ko de script, 38 Ko de style) |
+| Tests automatisés | **816 / 816 réussis** (793 en 1.3.0 ; +20 clé et barème, +3 affichage du coût et des modèles), 38 fichiers, sous Node 22.22.2 |
+| Clé et barème (`api-key.test.ts`, contre un faux Anthropic) | Forme (vide, espaces, clé d'administration, préfixe) ; fichier `0600`, relu après redémarrage, illisible = absent ; **clé refusée ou Anthropic injoignable : rien n'est écrit** ; priorité sur `ANTHROPIC_API_KEY` et retour à elle après retrait ; masquage des deux clés dans les messages ; aucune clé dans une réponse ni dans la base ; `Origin` étrangère refusée ; une passe facturée sur la clé saisie avec son coût exact ; « crédit épuisé » traduit |
+| Parcours dans le navigateur (application compilée, faux Anthropic, 24 dossiers fictifs), thèmes clair et sombre | Sans clé : panneau visible et modes « Claude » désactivés ; clé refusée : raison affichée ; clé acceptée : « Votre clé (…AbCd) », mode « Règles puis Claude » choisi, **estimation « entre 0,61 $US et 2,91 $US »** ; passe : **coût constaté 0,70 $US** ; assistant de rédaction : coût de la réponse. **La clé entière n'apparaît jamais dans la page** ; 47 appels reçus par le faux service (44 avec la bonne clé, 3 avec la clé refusée) |
+| Accessibilité (axe-core, WCAG 2.2 AA) | Panneau de la clé et estimation, 1 280 et 390 px, deux thèmes : **10 audits, 0 violation**, 0 débordement horizontal, 0 erreur de console. Page d'accueil (nouvelle question sur le coût), 320, 390 et 1 280 px, deux thèmes : **6 audits, 0 violation** |
+| Page d'accueil : parcours de bout en bout (faux Supabase) | **25 / 25** |
+
+**Non vérifié pour la 1.4.0** : la clé n'a été vérifiée, et les passes facturées, **que contre un faux service** — l'API réelle d'Anthropic n'a jamais été appelée (§ 11) ; les prix du barème sont recopiés des tarifs publics d'octobre 2026 et ne sont pas lus chez Anthropic : la console fait foi. La fourchette de coût n'a pas été comparée à des factures réelles. Le stockage `0600` n'a été éprouvé que sous Linux (sous Windows, le fichier hérite des droits du dossier de données). Non rejoués, le code concerné n'ayant pas changé : fichiers hostiles, arrêts brutaux, gros document, montée en charge, suite sous cinq versions de Node, audit des 64 combinaisons de l'interface (seule la page *Extraction* a changé ; elle a été auditée ci-dessus).
 
 ## 2. Environnement de test
 
@@ -381,7 +396,7 @@ Deux autres agents ont relu la documentation **contre le code** : l'un le README
 - Les années à deux chiffres se lisent avec l'année courante pour pivot : le même document peut se lire autrement dans quelques années.
 
 **Modes qui dépendent d'un service tiers**
-- **Mode « Claude »** (extraction et rédaction) : **jamais exécuté contre l'API réelle** (aucune clé). Sont testés : le schéma imposé, la recherche des citations dans les documents, le typage, le tri retenues / écartées, la consigne. Ne sont **pas** testés : les réponses réelles d'un modèle, le coût, la limite de débit, les erreurs réseau réelles.
+- **Mode « Claude »** (extraction et rédaction) : **jamais exécuté contre l'API réelle** (aucune clé). Sont testés : le schéma imposé, la recherche des citations dans les documents, le typage, le tri retenues / écartées, la consigne, la vérification et l'enregistrement d'une clé, le calcul du coût à partir des jetons déclarés. Ne sont **pas** testés : les réponses réelles d'un modèle, la justesse de la fourchette de coût face à une facture réelle, la limite de débit, les erreurs réseau réelles.
 - **Revue bibliographique** : les adaptateurs lisent de **vraies sorties** enregistrées en octobre 2026, mais tous les appels de la validation sont allés à un faux serveur local. La facturation, les quotas, la disponibilité des acteurs et les changements de leurs champs ne sont pas éprouvés. Google Scholar n'autorise pas l'extraction automatisée.
 
 **Formats de sortie**
@@ -404,7 +419,7 @@ Deux autres agents ont relu la documentation **contre le code** : l'un le README
 
 **Moteur et configuration**
 - **Expressions régulières** : un motif jugé sain est évalué une première fois sans chronomètre (seuls les motifs jugés à risque sont surveillés) ; une heuristique peut laisser passer un motif lent.
-- **Modèle Claude par défaut** (`LLM_MODEL`, `claude-opus-5`) : jamais interrogé ; l'outil ne vérifie pas que l'identifiant existe avant une passe. À régler selon les modèles de votre compte.
+- **Modèle Claude par défaut** (`LLM_MODEL`, `claude-opus-5-5`) : jamais interrogé réellement. Depuis la 1.4.0, une clé saisie dans l'application est vérifiée **contre ce modèle** (une clé sans accès est refusée) ; une clé d'environnement ne l'est pas avant la première passe.
 - Les champs inconnus à la racine d'une fiche JSON importée sont ignorés sans avertissement (P3-3, § 10.1).
 
 **Sécurité**

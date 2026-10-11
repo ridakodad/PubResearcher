@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
-import { foldForSearch, formatDateTime, plural } from '../lib/format';
+import { foldForSearch, formatDateTime, formatUsd, modelLabel, plural } from '../lib/format';
 import { FolderUploader } from '../components/FolderUploader';
 import {
   ConfirmButton,
@@ -221,15 +221,15 @@ export function DossiersPage() {
                 <div>
                   <strong>Extraction par Claude non configurée.</strong> Les règles traitent les
                   libellés ; Claude traite en plus le texte rédigé, où aucun libellé n’annonce la
-                  valeur. Renseignez <span className="mono">ANTHROPIC_API_KEY</span> dans
-                  l’environnement du serveur pour l’activer.
+                  valeur. Pour l’activer, enregistrez votre clé d’API Anthropic sur la page{' '}
+                  <Link to="/extraction">Extraction</Link> : vous payez Anthropic directement, à l’usage.
                 </div>
               </div>
             )}
 
             {llmReady && mode !== 'rules' && (
               <div className="small muted">
-                Modèle {capabilities?.llm.model} · effort {capabilities?.llm.effort}. Chaque valeur
+                Modèle {modelLabel(capabilities?.llm.model)} · effort {capabilities?.llm.effort}. Chaque valeur
                 proposée doit citer un extrait retrouvé dans le document, sinon elle est écartée.
               </div>
             )}
@@ -273,7 +273,8 @@ export function DossiersPage() {
                   <div className="small muted" style={{ marginTop: 8 }}>
                     Jetons consommés : {lastRun.usage.inputTokens.toLocaleString('fr-FR')} en
                     entrée ({lastRun.usage.cacheReadTokens.toLocaleString('fr-FR')} lus depuis le
-                    cache), {lastRun.usage.outputTokens.toLocaleString('fr-FR')} en sortie.
+                    cache), {lastRun.usage.outputTokens.toLocaleString('fr-FR')} en sortie
+                    {typeof lastRun.costUsd === 'number' ? ` — ${formatUsd(lastRun.costUsd)} sur votre compte Anthropic.` : '.'}
                   </div>
                 )}
 

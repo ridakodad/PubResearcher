@@ -17,6 +17,29 @@ export function formatNumber(n: number): string {
   return NUMBER_FORMAT.format(n);
 }
 
+const USD_FORMAT = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const MODEL_LABELS: Record<string, string> = {
+  'claude-opus-5-5': 'Claude Opus 5.5',
+  'claude-opus-5': 'Claude Opus 5',
+  'claude-sonnet-5-5': 'Claude Sonnet 5.5',
+  'claude-sonnet-5': 'Claude Sonnet 5',
+  'claude-haiku-5-5': 'Claude Haiku 5.5',
+  'claude-fable-5-1': 'Claude Fable 5.1',
+};
+
+/** Nom lisible d'un modèle (« Claude Opus 5.5 ») ; un identifiant inconnu est rendu tel quel. */
+export function modelLabel(id: string | null | undefined): string {
+  if (!id) return 'Claude';
+  return MODEL_LABELS[id] ?? id;
+}
+
+/** Montant en dollars, à la française (« 0,14 $US ») ; sous le centime, « moins de 0,01 $US ». */
+export function formatUsd(amount: number): string {
+  if (amount > 0 && amount < 0.005) return `moins de ${USD_FORMAT.format(0.01)}`;
+  return USD_FORMAT.format(amount);
+}
+
 /** Minuscules sans accents, pour comparer ce que l'on tape à ce qui est affiché. */
 export function foldForSearch(text: string): string {
   return text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();

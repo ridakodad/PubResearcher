@@ -8,6 +8,7 @@ import { finishRun, listRuns, startRun } from '../repo/runs.js';
 import { listEventsForRecord } from '../repo/events.js';
 import { runExtractionForPatient, type PatientExtractionReport } from '../engine/run.js';
 import { llmStatus } from '../engine/llm.js';
+import { costOf } from '../engine/pricing.js';
 import type { FieldValue, TemplateField, TemplateWithFields } from '../domain/types.js';
 
 export const recordsRouter = Router();
@@ -164,6 +165,12 @@ recordsRouter.post(
 
     const sum = (pick: (r: PatientExtractionReport) => number) =>
       reports.reduce((total, r) => total + pick(r), 0);
+    const usage = mode === 'rules' ? null : {
+      inputTokens: sum((r) => r.usage?.inputTokens ?? 0),
+      outputTokens: sum((r) => r.usage?.outputTokens ?? 0),
+      cacheReadTokens: sum((r) => r.usage?.cacheReadTokens ?? 0),
+      cacheWriteTokens: sum((r) => r.usage?.cacheWriteTokens ?? 0),
+    };
 
     res.json({
       runId,
@@ -178,13 +185,10 @@ recordsRouter.post(
         unverified: sum((r) => r.unverified),
         invalid: sum((r) => r.invalid),
       },
-      // Consommation cumulée, pour que le coût d'une passe soit visible.
-      usage: mode === 'rules' ? null : {
-        inputTokens: sum((r) => r.usage?.inputTokens ?? 0),
-        outputTokens: sum((r) => r.usage?.outputTokens ?? 0),
-        cacheReadTokens: sum((r) => r.usage?.cacheReadTokens ?? 0),
-        cacheWriteTokens: sum((r) => r.usage?.cacheWriteTokens ?? 0),
-      },
+      // Consommation cumulée, et son prix en dollars sur le compte Anthropic de l'utilisateur.
+      usage,
+      model: mode === 'rules' ? null : llmStatus().model,
+      costUsd: costOf(mode === 'rules' ? null : llmStatus().model, usage),
       errors: reports.filter((r) => r.llmError).map((r) => ({ patientCode: r.patientCode, message: r.llmError })),
       reports,
     });

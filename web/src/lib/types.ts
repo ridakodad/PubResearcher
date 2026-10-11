@@ -324,6 +324,9 @@ export interface ExtractionRunResult {
     invalid: number;
   };
   usage: LlmUsage | null;
+  /** Modèle employé, et prix de la passe en dollars (`null` : règles seules, ou tarif inconnu). */
+  model?: string | null;
+  costUsd?: number | null;
   errors: { patientCode: string; message: string }[];
   reports: ExtractionReport[];
 }
@@ -348,8 +351,35 @@ export interface RuleTestResult {
 
 export interface Capabilities {
   ocr: { available: boolean; lang: string; reason: string | null };
-  llm: { available: boolean; model: string; effort: string; reason: string | null };
+  llm: {
+    available: boolean;
+    model: string;
+    effort: string;
+    reason: string | null;
+    /** D'où vient la clé d'API : saisie dans l'application, ou environnement du serveur. */
+    keySource: 'app' | 'env' | null;
+    /** Ses quatre derniers caractères (`…a1B2`). */
+    keyHint: string | null;
+  };
   maxUploadBytes: number;
+}
+
+/** Clé d'API Anthropic de l'utilisateur : jamais transmise en entier, seulement sa provenance et sa fin. */
+export interface ApiKeyStatus {
+  source: 'app' | 'env' | null;
+  hint: string | null;
+  savedAt: string | null;
+  model: string;
+  available: boolean;
+}
+
+/** Fourchette de coût d'une passe par Claude, en dollars, sur le compte Anthropic de l'utilisateur. */
+export interface CostEstimate {
+  model: string;
+  patients: number;
+  low: number;
+  high: number;
+  inputTokens: number;
 }
 
 /* ----------------------------------------------- rendement de l'extraction */

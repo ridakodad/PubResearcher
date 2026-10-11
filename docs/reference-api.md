@@ -8,7 +8,7 @@ L'interface web n'est qu'un client de cette API : tout ce qu'elle fait se fait a
 
 ## Sommaire
 
-[Conventions](#conventions) · [Accès et garde-fous](#accès-et-garde-fous) · [Santé](#santé) · [Dossiers patients](#dossiers-patients) · [Documents](#documents) · [Fiches d'exploitation](#fiches-dexploitation) · [Fiches remplies et extraction](#fiches-remplies-et-extraction) · [Analyses](#analyses) · [Exports](#exports) · [Revue bibliographique](#revue-bibliographique) · [Rédaction assistée](#rédaction-assistée) · [Recettes](#recettes)
+[Conventions](#conventions) · [Accès et garde-fous](#accès-et-garde-fous) · [Santé](#santé) · [Dossiers patients](#dossiers-patients) · [Documents](#documents) · [Fiches d'exploitation](#fiches-dexploitation) · [Fiches remplies et extraction](#fiches-remplies-et-extraction) · [Analyses](#analyses) · [Exports](#exports) · [Revue bibliographique](#revue-bibliographique) · [Clé d'API Anthropic et coût](#clé-dapi-anthropic-et-coût) · [Rédaction assistée](#rédaction-assistée) · [Recettes](#recettes)
 
 ---
 
@@ -36,8 +36,9 @@ L'interface web n'est qu'un client de cette API : tout ce qu'elle fait se fait a
 | 413 | Fichier, envoi ou corps JSON trop volumineux | message avec la limite ; pour un fichier ou un envoi, il nomme `MAX_UPLOAD_BYTES` ou `MAX_REQUEST_BYTES` ; le corps JSON a une limite fixe de 5 Mo |
 | 415 | Encodage non pris en charge : `charset` autre que UTF-8, ou `Content-Encoding` (compression) | `{ "error": "Type de contenu non pris en charge : attendu application/json en UTF-8, sans compression." }`. Un corps qui n'est pas du JSON (`text/plain`) n'est pas lu : la validation répond `400` |
 | 422 | Valeur hors des bornes de plausibilité (voir `PUT …/values`) | `{ "error": "…", "code": "out_of_bounds", "details": [ … ] }` |
-| 429 | Trop d'essais de mot de passe | `Retry-After` en secondes |
+| 429 | Trop d'essais de mot de passe ; ou Anthropic limite le débit pendant la vérification d'une clé (`PUT /api/llm/key`) | `Retry-After` en secondes (mot de passe) ; `{ "error": "…", "code": "api-key-refused" }` (clé) |
 | 500 | Erreur interne | `{ "error": "Erreur interne du serveur (référence a3f9c2d1). Le journal du serveur en donne le détail." }` — jamais de message SQL ni de chemin disque ; la référence retrouve la pile dans le journal du serveur |
+| 502 | `PUT /api/llm/key` : Anthropic injoignable, la clé n'a pas pu être vérifiée | `{ "error": "…", "code": "api-key-refused" }` |
 | 503 | `GET /api/health` : base inaccessible | `{ "status": "degraded", … }` |
 
 **Mise en cache.** Les réponses `/api/*` portent `Cache-Control: no-store` : des données de patients ne séjournent ni dans le cache du navigateur ni dans celui d'un intermédiaire. Seule exception, le flux de la rédaction assistée, qui impose `no-cache, no-transform` pour qu'aucun intermédiaire ne le tamponne.
@@ -69,10 +70,10 @@ Sans HTTPS, le mot de passe circule en clair : placez l'outil derrière un proxy
 Interroge réellement la base : un serveur qui répond mais ne peut plus lire ses données n'est pas « en bonne santé ». Aucune donnée de patient ni chemin dans la réponse.
 
 ```json
-{ "status": "ok", "version": "1.3.0", "schemaVersion": 1, "uptimeSeconds": 80, "time": "2026-10-09T02:28:49.188Z" }
+{ "status": "ok", "version": "1.4.0", "schemaVersion": 1, "uptimeSeconds": 80, "time": "2026-10-09T02:28:49.188Z" }
 ```
 
-`503 { "status": "degraded", "version": "1.3.0", "error": "Base de données inaccessible." }` si la base ne répond pas. Accessible sans mot de passe.
+`503 { "status": "degraded", "version": "1.4.0", "error": "Base de données inaccessible." }` si la base ne répond pas. Accessible sans mot de passe.
 
 ---
 
@@ -142,7 +143,7 @@ Réponse `201` :
 | `POST` | `/api/documents/:id/reparse` | — | `200 { "document" }` — relance l'analyse (après activation de l'OCR, par exemple) |
 | `PATCH` | `/api/documents/:id` | `{ "filename" }` | `200 { "document" }` — renomme ; l'extension ne change pas (`400` sinon), pas de `/` ni de `\` |
 | `DELETE` | `/api/documents/:id` | — | `204` — supprime la ligne **et** le fichier |
-| `GET` | `/api/documents-capabilities` | — | `200 { "ocr": { "available", "lang", "reason" }, "llm": { "available", "model", "effort", "reason" }, "maxUploadBytes" }` |
+| `GET` | `/api/documents-capabilities` | — | `200 { "ocr": { "available", "lang", "reason" }, "llm": { "available", "model", "effort", "reason", "keySource", "keyHint" }, "maxUploadBytes" }` — `keySource` : `"app"`, `"env"` ou `null` (voir [Clé d'API Anthropic](#clé-dapi-anthropic-et-coût)) |
 
 `DocumentMeta` :
 
@@ -342,7 +343,7 @@ Les passes d'extraction, de la plus récente à la plus ancienne (50 par défaut
   "runs": [
     { "id": 4, "templateId": 1, "templateName": "Fiche d'exploitation générale",
       "templateFingerprint": "7fc4005260e60df63fe46dd30cbc7beef70b33c53efaaccea499fe3e87bab521",
-      "mode": "rules", "model": null, "overwriteManual": false, "appVersion": "1.3.0",
+      "mode": "rules", "model": null, "overwriteManual": false, "appVersion": "1.4.0",
       "startedAt": "2026-10-09T02:31:22.806Z", "finishedAt": "2026-10-09T02:31:22.844Z", "status": "done",
       "patients": 1, "documents": 1, "extracted": 1, "notFound": 20, "keptManual": 1, "rejected": 0 }
   ]
@@ -365,7 +366,7 @@ Tout est facultatif : sans `templateId`, la fiche active ; sans `patientIds`, to
 {
   "runId": 5, "templateId": 1, "mode": "rules", "patientsProcessed": 24,
   "totals": { "extracted": 500, "notFound": 28, "keptManual": 0, "rejected": 0, "unverified": 0, "invalid": 0 },
-  "usage": null,
+  "usage": null, "model": null, "costUsd": null,
   "errors": [],
   "reports": [
     { "patientId": 1, "patientCode": "PAT-001", "documentCount": 6, "extracted": 21, "notFound": 1, "keptManual": 0,
@@ -376,7 +377,7 @@ Tout est facultatif : sans `templateId`, la fiche active ; sans `patientIds`, to
 ```
 
 - `status` d'un champ : `extracted`, `not-found`, `kept-manual` (déjà relu), `disabled`. `rejected` : la première valeur trouvée puis écartée (seuil, bornes, type), pour une variable restée vide.
-- `unverified` / `invalid` (modes `llm`, `hybrid`) : valeurs proposées par le modèle puis écartées faute de citation retrouvée, ou incompatibles avec la fiche. `usage` : jetons consommés (dont la part lue dans le cache) ; `errors` : échecs du modèle par dossier — un échec n'annule ni les règles ni les dossiers suivants.
+- `unverified` / `invalid` (modes `llm`, `hybrid`) : valeurs proposées par le modèle puis écartées faute de citation retrouvée, ou incompatibles avec la fiche. `usage` : jetons consommés (`inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`) ; `model` : le modèle interrogé ; `costUsd` : leur prix en dollars, facturé sur le compte Anthropic du titulaire de la clé (indicatif, arrondi au centième de cent ; `null` en mode `rules` ou pour un modèle absent du barème) ; `errors` : échecs du modèle par dossier — un échec n'annule ni les règles ni les dossiers suivants.
 - **Ce qu'une passe retire** : une variable qui n'est plus trouvée perd sa valeur automatique (événement `unset`), mais une passe ne retire que ce qu'elle a pu produire — `rules` ne retire que des valeurs `auto`, `llm` et `hybrid` retirent aussi des valeurs `llm` **quand l'appel au modèle a réussi** ; un appel en échec (`errors`) n'efface rien. Les valeurs relues (`manual`) ne sont retirées par aucune passe, sauf `overwriteManual`.
 - **Atomicité** : pour chaque dossier, valeurs, journal et date de passe s'écrivent dans **une seule transaction**. Un arrêt brutal (`kill -9`, vérifié sur 25 passes interrompues à des instants aléatoires) au milieu d'une passe laisse chaque fiche exactement dans l'état d'avant ou d'après, jamais à moitié effacée. Une coupure de courant n'a pas été simulée.
 - `400` si le mode demande un modèle indisponible (« Extraction par Claude indisponible : … ») ou s'il n'y a aucun dossier ; `404` pour un `patientId` inconnu.
@@ -480,14 +481,36 @@ Noms de fichier des exports : `references-toutes-AAAA-MM-JJ.ris`, `references-re
 
 ---
 
+## Clé d'API Anthropic et coût
+
+Chaque utilisateur paie l'IA avec sa propre clé : elle se saisit dans l'interface (*Extraction › Clé d'API Anthropic*) ou par ces routes. **Aucune réponse ne contient la clé** : seulement sa provenance et ses quatre derniers caractères.
+
+| Méthode | Chemin | Corps | Réponse |
+|---|---|---|---|
+| `GET` | `/api/llm/key` | — | `200` état de la clé (ci-dessous) |
+| `PUT` | `/api/llm/key` | `{ "key": "sk-ant-…" }` (400 caractères au plus, aucun autre champ) | `200` état de la clé, une fois la clé **vérifiée auprès d'Anthropic** et enregistrée |
+| `DELETE` | `/api/llm/key` | — | `200` état de la clé : celle de l'application est effacée ; `ANTHROPIC_API_KEY`, s'il est défini, reprend la main |
+| `GET` | `/api/llm/estimate[?templateId=:id]` | — | `200 { "estimate": { "model", "patients", "low", "high", "inputTokens" } }` : fourchette en dollars d'une passe par Claude sur tous les dossiers, pour la fiche donnée (ou active) ; `estimate` vaut `null` pour un modèle absent du barème. `404` sans fiche |
+
+```json
+{ "source": "app", "hint": "…AbCd", "savedAt": "2026-10-11T09:12:30.000Z", "model": "claude-opus-5-5", "available": true }
+```
+
+- `source` : `"app"` (clé saisie, dans `DATA_DIR/anthropic-key.json`), `"env"` (`ANTHROPIC_API_KEY`) ou `null` (aucune : seules les règles sont possibles). La clé saisie l'emporte sur celle de l'environnement.
+- `PUT` contrôle d'abord la forme (`sk-ant-…`, sans espace ; une clé d'administration `sk-ant-admin…` est refusée), puis interroge Anthropic une fois (la fiche du modèle configuré). **Rien n'est écrit si la clé est refusée.** Erreurs, toutes avec `code: "api-key-refused"` et un message en français, sans la clé : `400` clé mal formée, refusée par Anthropic, sans accès à l'API ou au modèle ; `429` limite de débit d'Anthropic ; `502` Anthropic injoignable ou réponse inattendue.
+- Ce sont des routes **modifiantes** : une `Origin` étrangère est refusée (`403`), comme partout.
+- `low` / `high` : la longueur du raisonnement ne se prévoit pas, d'où une fourchette. En mode `hybrid`, les règles trouvent une partie des variables d'abord : la passe coûte moins que `high`. Le calcul est décrit dans l'[architecture](architecture.md#45-modèle-de-langage-enginellmts-llm-schemats-llm-verifyts).
+
+---
+
 ## Rédaction assistée
 
 | Méthode | Chemin | Corps | Réponse |
 |---|---|---|---|
-| `GET` | `/api/redaction/status` | — | `{ "available": false }` tant que `ANTHROPIC_API_KEY` n'est pas défini |
+| `GET` | `/api/redaction/status` | — | `{ "available": false }` tant qu'aucune clé d'API Anthropic n'est disponible (ni saisie, ni `ANTHROPIC_API_KEY`) |
 | `POST` | `/api/redaction/message` | `{ "templateId"?, "messages": [{ "role": "user"\|"assistant", "content" }] }` (1 à 60 messages de 40 000 caractères au plus) | `text/event-stream` |
 
-Le contexte transmis au modèle ne contient que des **agrégats** : nom et objet de la fiche, effectifs, complétude, indicateurs ou modalités de chaque variable avec leurs effectifs, définitions des variables. Les variables en texte libre ne donnent que leurs effectifs (« valeurs non transmises ») : aucune ligne de patient, aucun code de dossier, aucun nom de fichier. Le flux émet des événements `delta` (`{ "text" }`), puis `done` (`{ "usage" }`), ou `error` (`{ "message" }`) — l'en-tête HTTP étant déjà parti, une erreur en cours de route voyage dans le flux.
+Le contexte transmis au modèle ne contient que des **agrégats** : nom et objet de la fiche, effectifs, complétude, indicateurs ou modalités de chaque variable avec leurs effectifs, définitions des variables. Les variables en texte libre ne donnent que leurs effectifs (« valeurs non transmises ») : aucune ligne de patient, aucun code de dossier, aucun nom de fichier. Le flux émet des événements `delta` (`{ "text" }`), puis `done` (`{ "usage", "costUsd" }` : jetons consommés et leur prix en dollars, ou `null` hors barème), ou `error` (`{ "message" }`) — l'en-tête HTTP étant déjà parti, une erreur en cours de route voyage dans le flux.
 
 ---
 

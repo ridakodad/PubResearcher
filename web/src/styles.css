@@ -999,7 +999,7 @@ select:focus-visible, textarea:focus-visible, a:focus-visible, [tabindex]:focus-
 .topbar .btn-icon:hover:not(:disabled) { background: var(--surface-2); }
 
 input[type='text'], input[type='number'], input[type='date'],
-input[type='search'], select, textarea {
+input[type='search'], input[type='password'], select, textarea {
   font: inherit;
   font-size: 0.875rem;
   padding: 9px 11px;

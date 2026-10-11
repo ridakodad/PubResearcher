@@ -2,7 +2,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { TemplateWithFields } from '../domain/types.js';
 import type { FieldStats } from '../routes/analytics.js';
 import { numberOr } from '../lib/env-check.js';
-import { redactSecret } from '../lib/redact.js';
+import { keyStore } from './api-key.js';
+import { isCreditError, NO_KEY_REASON } from './llm.js';
 
 /**
  * Assistant de rédaction scientifique.
@@ -25,19 +26,31 @@ import { redactSecret } from '../lib/redact.js';
  * n'employer que les chiffres fournis et de signaler ce qui manque.
  */
 
-export const DEFAULT_CHAT_MODEL = 'claude-opus-5';
+export const DEFAULT_CHAT_MODEL = 'claude-opus-5-5';
 
 const model = process.env.LLM_MODEL ?? DEFAULT_CHAT_MODEL;
 const maxTokens = numberOr(process.env.CHAT_MAX_TOKENS, 8_000, 256);
 
 let client: Anthropic | null = null;
+let clientKey = '';
 
+/** Même clé que l'extraction : celle de l'utilisateur, ou à défaut celle de l'environnement du serveur. */
 function getClient(): Anthropic | null {
-  if (client) return client;
-  if (!process.env.ANTHROPIC_API_KEY) return null;
-  client = new Anthropic();
+  const active = keyStore.active();
+  if (!active) {
+    client = null;
+    clientKey = '';
+    return null;
+  }
+  if (!client || clientKey !== active.key) {
+    client = new Anthropic({ apiKey: active.key });
+    clientKey = active.key;
+  }
   return client;
 }
+
+/** Le modèle de l'assistant (pour chiffrer une réponse). */
+export const chatModel = (): string => model;
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -179,10 +192,7 @@ export async function streamReply(
 ): Promise<ChatUsage> {
   const anthropic = getClient();
   if (!anthropic) {
-    throw new ChatError(
-      "Aucune clé API. Renseignez ANTHROPIC_API_KEY dans l'environnement du serveur.",
-      false,
-    );
+    throw new ChatError(NO_KEY_REASON, false);
   }
   if (messages.length === 0) throw new ChatError('Aucun message à traiter.', false);
 
@@ -228,7 +238,15 @@ function toChatError(error: unknown): ChatError {
     return new ChatError('Limite de débit atteinte. Réessayez dans un instant.', true);
   }
   if (error instanceof Anthropic.AuthenticationError) {
-    return new ChatError('Clé API refusée. Vérifiez ANTHROPIC_API_KEY.', false);
+    return new ChatError(
+      keyStore.active()?.source === 'env'
+        ? 'Clé API refusée. Vérifiez ANTHROPIC_API_KEY.'
+        : 'Anthropic refuse votre clé d’API : elle a été désactivée ou supprimée. Enregistrez-en une nouvelle (Extraction › Clé d’API).',
+      false,
+    );
+  }
+  if (isCreditError(error)) {
+    return new ChatError('Crédit épuisé sur votre compte Anthropic : rechargez-le dans la console d’Anthropic (Billing).', false);
   }
   if (error instanceof Anthropic.PermissionDeniedError) {
     return new ChatError(`Accès refusé au modèle « ${model} » pour cette clé.`, false);
@@ -250,5 +268,5 @@ function toChatError(error: unknown): ChatError {
 
 /** Un message d'erreur qui répéterait la clé d'API (passerelle, mandataire) ne la fait pas parvenir à l'interface. */
 function withoutKey(message: string): string {
-  return redactSecret(message, process.env.ANTHROPIC_API_KEY ?? '', '[clé masquée]');
+  return keyStore.redact(message);
 }

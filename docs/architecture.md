@@ -33,7 +33,8 @@ Ce document décrit comment l'outil est construit et **pourquoi**. Il s'adresse 
          la base                              les fichiers d'origine, tels quels
 
  Sorties hors de la machine, **seulement si configurées** :
-   ANTHROPIC_API_KEY → texte des documents (modes « Claude ») et agrégats (Rédaction)
+   Clé Anthropic     → texte des documents (modes « Claude ») et agrégats (Rédaction) ;
+                       clé de l'utilisateur (DATA_DIR/anthropic-key.json) ou ANTHROPIC_API_KEY
    APIFY_TOKEN       → équation de recherche (revue bibliographique) — jamais de donnée de patient
 ```
 
@@ -58,13 +59,14 @@ server/
     db/                 index.ts (connexion, transactions imbriquées), schema.ts, migrations.ts, seed.ts
     domain/             types.ts (fiches, règles, valeurs), labels.ts
     extract/            Un extracteur par format, plafonds, OCR, isolation en fils
-    engine/             fold, règles, typage, regex surveillées, passe d'extraction, Claude
+    engine/             fold, règles, typage, regex surveillées, passe d'extraction, Claude,
+                        clé d'API de l'utilisateur (api-key.ts), barème et estimation du coût (pricing.ts)
     repo/               Accès aux données (patients, documents, templates, records, runs, events, quality, methods, biblio)
     routes/             Une route par ressource
     biblio/             Client Apify, adaptateurs par acteur, normalisation, exports RIS/BibTeX/CSV
     lib/                http, schemas (zod), security, csv, xlsx, pptx, zip, backup, data-lock, stats, report…
   scripts/              generate-demo.ts, backup.ts, restore.ts
-  test/                 37 fichiers de test (node:test), dont la logique de la page d'accueil
+  test/                 38 fichiers de test (node:test), dont la logique de la page d'accueil
 web/
   src/
     App.tsx             Coquille : rail d'outils (pastille flottante sur écran étroit), routes
@@ -73,7 +75,7 @@ web/
     assets/             hero-dust.svg : illustration de la carte d'en-tête (générée)
     pages/              Une page par outil
     components/         Marque, éditeurs (variable, règle, valeur), visionneuse de document, graphiques, biblio,
-                        AnonymisationGate (la charte devant tout import)
+                        AnonymisationGate (la charte devant tout import), ApiKeyPanel (la clé d'API Anthropic)
     lib/                Client d'API, types (dupliqués du serveur), formats, regroupement des dossiers déposés,
                         anonymisation.ts (texte et version de la charte, mémorisation de l'engagement)
   public/               Icône (favicon.svg), theme-init.js (thème avant le premier rendu)
@@ -151,6 +153,10 @@ Un appel par dossier ; consigne et dictionnaire de variables mis en cache. Deux 
 
 L'extrait affiché en relecture est celui **du document**, pas celui recopié par le modèle. Confiance : 0,90 si la citation est retrouvée, 0,75 si seule la valeur l'est. Une valeur retrouvée seule ne prouve pas qu'elle a été lue à cet endroit : c'est la raison de la confiance plus basse. Le modèle ne voit ni le code du dossier ni les noms de fichiers : les documents lui sont présentés sous les noms « Document 1 », « Document 2 »…, et sa réponse est retraduite avant la vérification. L'échec du modèle sur un dossier ne détruit ni les valeurs des règles ni les dossiers suivants.
 
+**La clé** (`engine/api-key.ts`, routes `/api/llm/key`). Chaque utilisateur paie l'IA avec sa propre clé ; l'outil ne revend rien. La clé saisie dans l'interface est contrôlée sur sa forme, puis **vérifiée auprès d'Anthropic** par une seule requête gratuite (`models.retrieve` sur le modèle configuré : elle prouve à la fois la validité de la clé et l'accès au modèle) ; refusée, rien n'est écrit. Acceptée, elle est écrite dans `DATA_DIR/anthropic-key.json` — fichier temporaire créé en `0600`, puis renommé : la clé n'existe jamais dans un fichier lisible par d'autres —, **hors de `uploads/` et de la base**, donc hors des sauvegardes et des exports. Priorité : clé de l'application, puis `ANTHROPIC_API_KEY`. Le client du SDK est recréé quand la clé change : pas de redémarrage. Aucune réponse ne contient la clé (provenance et quatre derniers caractères seulement), et tout message d'erreur passe par un masquage des deux clés connues.
+
+**Le coût** (`engine/pricing.ts`). Barème par modèle (dollars par million de jetons : entrée, sortie, lecture et écriture du cache). *Avant* la passe, `GET /api/llm/estimate` donne une fourchette : le texte réel de chaque dossier, plafonné comme il le sera à l'envoi, à 3,2 caractères par jeton (estimation prudente pour du français médical) ; la consigne écrite une fois au cache puis relue ; en sortie, de 40 jetons par variable + 300 (bas) à 90 par variable + 4 000 de raisonnement (haut), sans dépasser `LLM_MAX_TOKENS`. *Après*, la réponse de la passe et la fin du flux de la rédaction portent le **coût constaté**, calculé sur les jetons que l'API a facturés. Un modèle absent du barème n'a pas de montant (`null`) : l'interface n'affiche alors que les jetons.
+
 ## 5. Isolation de l'analyse des fichiers (`extract/isolation.ts`)
 
 Les plafonds de `limits.ts` (pages, taille de texte, taille décompressée, mégapixels) protègent des fichiers *volumineux*, pas d'un fichier qui *piège* sa bibliothèque de lecture : un PDF dont l'arbre de pages se mord la queue, un flux qui se gonfle de mille fois sa taille. Pendant ce temps le fil principal — donc le serveur pour tous — ne répond plus, et un signal d'arrêt n'y change rien.
@@ -202,7 +208,7 @@ Détail et modèle de menaces : [Sécurité et données](securite-et-donnees.md)
 | Expressions | Motifs utilisateur surveillés (§ 4.4) |
 | Fichiers hostiles | Isolation en fils (§ 5) |
 | Erreurs | Jamais de message SQL ni de chemin dans une réponse ; référence retrouvable dans le journal |
-| Jetons | `APIFY_TOKEN` et `ANTHROPIC_API_KEY` restent côté serveur ; des tests (un par jeton) établissent qu'ils ne figurent dans aucune réponse, messages d'erreur compris |
+| Jetons | `APIFY_TOKEN` et la clé Anthropic (saisie ou d'environnement) restent côté serveur ; la clé saisie est dans un fichier `0600` hors base et hors sauvegardes ; des tests établissent qu'aucune ne figure dans une réponse, messages d'erreur compris |
 
 ## 8. Fiabilité et exploitation
 
@@ -225,7 +231,7 @@ Détail et modèle de menaces : [Sécurité et données](securite-et-donnees.md)
 
 ## 10. Stratégie de test
 
-37 fichiers sous `server/test`, chacun exécuté dans son **propre processus** (l'environnement — dossier de données, OCR — est fixé avant l'import de l'application). Deux familles :
+38 fichiers sous `server/test`, chacun exécuté dans son **propre processus** (l'environnement — dossier de données, OCR — est fixé avant l'import de l'application). Deux familles :
 
 - **Unitaires** : moteur (repliage, typage, règles, négation, regex surveillées), formats d'import, exports, statistiques.
 - **Intégration** : l'application complète sur de vrais fichiers PDF, DOCX, images et DICOM fabriqués par les fixtures ; un **vrai processus serveur** (démarrage, verrou, réglages invalides, arrêt par signal ; les arrêts brutaux `kill -9` sont rejoués par un script de la validation, non par la suite) ; le SDK d'Anthropic contre un **faux serveur HTTP** ; l'isolation sur de vrais fichiers piégés ; l'API de la revue bibliographique contre un **faux serveur Apify** qui rejoue des sorties réelles enregistrées.
@@ -245,6 +251,7 @@ Voir le [rapport de validation](validation.md) pour les résultats, ce qui est c
 | Écriture **dernière arrivée gagnante** sur un même champ | Pas de gestion de verrous d'édition | Deux onglets sur le même dossier ne se préviennent pas |
 | Mot de passe unique partagé | Équipe d'une étude, pas de comptes | Pas de traçabilité par personne ; pas de rôles |
 | Pas d'anonymisation | Ce n'est pas son rôle, et un outil qui prétend anonymiser engage sa responsabilité | Les documents doivent être pseudonymisés **avant** import |
+| Clé d'API de l'utilisateur plutôt que revente de crédits | Aucun compte de facturation à tenir, aucune marge sur l'IA : l'utilisateur paie Anthropic au prix public et garde la main (limite de dépenses, révocation) | Il faut un compte Anthropic et une carte ; la clé est celle de l'**instance**, pas d'une personne : sur une instance partagée, tous ceux qui y accèdent dépensent sur ce compte |
 | Confiance = indice de rang, pas probabilité | Aucune calibration honnête n'est possible sans vérité de terrain par étude | C'est la page *Fiabilité*, mesurée sur les relectures, qui fait foi |
 
 ## 12. Limites connues

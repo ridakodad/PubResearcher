@@ -2,6 +2,41 @@
 
 Le format suit l'ordre des versions, de la plus récente à la plus ancienne ; l'historique git de ce dépôt commence à la 1.2.0, les versions antérieures n'y sont décrites qu'ici. Les numéros de version sont ceux de `package.json` ; le rapport « Méthodes et traçabilité » consigne la version qui a produit un jeu de données.
 
+## 1.4.0 — 11 octobre 2026
+
+**Votre clé, votre facture.** Chacun utilise désormais **sa propre clé d'API Anthropic**, saisie dans l'application : PubResearcher ne facture rien et ne revend pas d'IA ; ce que consomment l'extraction par Claude et la rédaction assistée est facturé directement sur le compte Anthropic du titulaire de la clé, au prix public. Avant chaque passe, l'écran donne une **fourchette de coût en dollars** ; après, le **coût constaté**.
+
+**Changement à connaître** : le modèle par défaut devient **Claude Opus 5.5** (`claude-opus-5-5`, 4 $US par million de jetons lus, 20 $US par million écrits) au lieu de `claude-opus-5`. Une installation qui fixe `LLM_MODEL` n'est pas concernée. `ANTHROPIC_API_KEY` fonctionne comme avant, mais une clé saisie dans l'application l'emporte sur elle.
+
+**Aucun changement du schéma de la base** : une base, une fiche ou une sauvegarde de la 1.3.0 s'ouvre telle quelle.
+
+### Application
+
+- **Panneau « Clé d'API Anthropic »** sur la page *Extraction* (et sur *Rédaction* tant qu'aucune clé n'est disponible) : la marche à suivre (créer la clé dans la console d'Anthropic, y fixer une limite de dépenses), une saisie masquée, *Vérifier et enregistrer*, puis *Changer de clé* et *Retirer* ; *Utiliser ma propre clé* quand le serveur en fournit une. Enregistrer une clé choisit le mode « Règles puis Claude ».
+- **Vérification avant enregistrement** : la forme d'abord (une clé d'administration `sk-ant-admin…` est refusée : elle n'interroge pas de modèle), puis **une requête gratuite à Anthropic**, qui prouve que la clé est valide et qu'elle a accès au modèle configuré. Clé erronée ou désactivée, sans accès, limite de débit, Anthropic injoignable : chaque cas a son message, et **rien n'est enregistré**.
+- **Stockage** : `DATA_DIR/anthropic-key.json`, droits `0600` dès la création, écriture atomique, **hors de la base, des sauvegardes et des exports**. La clé ne repart jamais vers l'interface (provenance et quatre derniers caractères seulement), ni dans un message d'erreur, ni dans le journal. Elle sert aussitôt, sans redémarrage.
+- **Coût** : fourchette en dollars avant une passe par Claude, calculée sur le texte réel des dossiers ; confirmation demandée au-delà de 5 $US ; coût constaté dans le bilan de passe (*Extraction*, *Dossiers patients*) et après chaque réponse de l'assistant de rédaction. Barème intégré des modèles Claude 5 ; un modèle absent du barème n'affiche que les jetons.
+- **Erreurs d'Anthropic en clair** : clé révoquée en cours d'usage (« enregistrez-en une nouvelle »), **crédit épuisé** (« rechargez-le dans la console d'Anthropic ») — une passe interrompue n'efface rien.
+- Le modèle s'affiche sous son nom (« Claude Opus 5.5 ») plutôt que son identifiant.
+
+### API
+
+- Nouvelles routes : `GET`, `PUT`, `DELETE /api/llm/key` (état, enregistrement après vérification, retrait) et `GET /api/llm/estimate` (fourchette de coût). Voir la [référence](reference-api.md#clé-dapi-anthropic-et-coût).
+- `POST /api/records/extraction/run` renvoie aussi `model` et `costUsd` ; l'événement `done` de la rédaction, `costUsd` ; `GET /api/documents-capabilities`, `llm.keySource` et `llm.keyHint`.
+
+### Page d'accueil
+
+- Nouvelle question « Combien cela coûte-t-il ? » : l'application ne coûte rien ; les fonctions de Claude se paient avec sa propre clé, directement à Anthropic.
+
+### Tests et outillage
+
+- **816 tests** (793 en 1.3.0) : +20 pour la clé et le barème (`api-key.test.ts`, contre un faux Anthropic : forme, fichier `0600`, refus sans écriture, priorité sur l'environnement, masquage, routes, `Origin` étrangère, passe facturée sur la clé saisie, crédit épuisé), +3 pour l'affichage du coût et des noms de modèles.
+- Versions : `pubresearcher`, `@pubresearcher/server`, `@pubresearcher/web`, `@pubresearcher/landing` en 1.4.0.
+
+### Documentation
+
+- Mis à jour : README (« Votre clé, votre facture »), [Guide du chercheur](guide-chercheur.md) (§ 5 et messages), [Guide de l'administrateur](guide-administrateur.md) (§ 3 et § 4.5), [Sécurité et données personnelles](securite-et-donnees.md) (ce qui sort, menaces, liste de contrôle, incidents), [Architecture](architecture.md), [Référence de l'API](reference-api.md), [Rapport de validation](validation.md) (§ 1.4), [Page d'accueil](page-d-accueil.md).
+
 ## 1.3.0 — 11 octobre 2026
 
 **Une charte d'anonymisation avant tout import, et une page d'accueil publique.** L'application demande désormais, avant de laisser déposer le moindre fichier, de confirmer cinq engagements d'anonymisation. Un site public (`landing/`, à déployer sur Vercel) présente l'outil, permet de créer un accès avec Google ou une adresse e-mail et mène, par un court parcours d'accueil, jusqu'à ce même engagement. [Mise en service et fonctionnement](page-d-accueil.md).

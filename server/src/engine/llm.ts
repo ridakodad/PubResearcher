@@ -2,8 +2,9 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { Evidence, FieldValue, TemplateField } from '../domain/types.js';
 import { coerce } from './coerce.js';
 import { numberOr } from '../lib/env-check.js';
-import { redactSecret } from '../lib/redact.js';
+import { keyStore, type KeySource } from './api-key.js';
 import { locateEvidence } from './llm-verify.js';
+import { estimateCost, type CostEstimate } from './pricing.js';
 import {
   buildOutputSchema,
   buildSystemPrompt,
@@ -28,7 +29,7 @@ import type { SourceDoc } from './rules.js';
  *    par les listes d'options et les bornes de plausibilité de la fiche.
  */
 
-export const DEFAULT_MODEL = 'claude-opus-5';
+export const DEFAULT_MODEL = 'claude-opus-5-5';
 
 /** Modèle utilisé. Configurable, mais le défaut est le modèle recommandé. */
 const model = process.env.LLM_MODEL ?? DEFAULT_MODEL;
@@ -46,17 +47,25 @@ const maxCharsPerDocument = numberOr(process.env.LLM_MAX_CHARS_PER_DOC, 60_000, 
 /** Plafond de génération. Couvre le raisonnement, actif par défaut sur ce modèle. */
 const maxTokens = numberOr(process.env.LLM_MAX_TOKENS, 16_000, 256);
 
-let client: Anthropic | null = null;
-let unavailableReason: string | null = null;
+/** Raison affichée quand aucune clé n'est disponible. */
+export const NO_KEY_REASON =
+  "Aucune clé d'API Anthropic : ajoutez la vôtre dans l'application (Extraction › Clé d'API), ou renseignez ANTHROPIC_API_KEY dans l'environnement du serveur.";
 
+let client: Anthropic | null = null;
+let clientKey = '';
+
+/** Le client de la clé active : recréé quand l'utilisateur change de clé, abandonné quand il la retire. */
 function getClient(): Anthropic | null {
-  if (client) return client;
-  if (!process.env.ANTHROPIC_API_KEY) {
-    unavailableReason =
-      "Aucune clé API. Renseignez ANTHROPIC_API_KEY dans l'environnement du serveur.";
+  const active = keyStore.active();
+  if (!active) {
+    client = null;
+    clientKey = '';
     return null;
   }
-  client = new Anthropic();
+  if (!client || clientKey !== active.key) {
+    client = new Anthropic({ apiKey: active.key });
+    clientKey = active.key;
+  }
   return client;
 }
 
@@ -65,11 +74,41 @@ export interface LlmStatus {
   model: string;
   effort: string;
   reason: string | null;
+  /** D'où vient la clé : saisie dans l'application, ou environnement du serveur. */
+  keySource: KeySource | null;
+  /** Ses quatre derniers caractères, pour la reconnaître. */
+  keyHint: string | null;
 }
 
 export function llmStatus(): LlmStatus {
   const ready = getClient() !== null;
-  return { available: ready, model, effort, reason: ready ? null : unavailableReason };
+  const key = keyStore.status();
+  return { available: ready, model, effort, reason: ready ? null : NO_KEY_REASON, keySource: key.source, keyHint: key.hint };
+}
+
+/** Le modèle utilisé pour l'extraction (celui que la clé doit pouvoir interroger). */
+export const extractionModel = (): string => model;
+
+/**
+ * Fourchette de coût d'une passe par Claude sur ces dossiers, avant de la lancer. En mode mixte, les règles
+ * trouveront une partie des variables et Claude n'aura que le reste : la fourchette est alors un plafond.
+ */
+export function estimateExtraction(
+  fields: TemplateField[],
+  templateName: string,
+  patients: SourceDoc[][],
+): CostEstimate | null {
+  const system = buildSystemPrompt(fields, templateName);
+  const charsPerPatient = patients.map((docs) =>
+    docs.reduce((sum, doc) => sum + Math.min(doc.text.trim().length, maxCharsPerDocument), 0),
+  );
+  return estimateCost({
+    model,
+    charsPerPatient: charsPerPatient.filter((chars) => chars > 0),
+    systemChars: system.length,
+    fieldCount: fields.length,
+    maxOutputTokens: maxTokens,
+  });
 }
 
 /** Consommation de jetons d'une passe, pour afficher le coût à l'utilisateur. */
@@ -118,7 +157,7 @@ export async function extractWithLlm(
   templateName: string,
 ): Promise<LlmExtraction> {
   const anthropic = getClient();
-  if (!anthropic) throw new LlmError(unavailableReason ?? 'Extraction par Claude indisponible.', false);
+  if (!anthropic) throw new LlmError(NO_KEY_REASON, false);
 
   const usable = docs.filter((doc) => doc.text.trim().length > 0);
   if (fields.length === 0 || usable.length === 0) {
@@ -236,7 +275,18 @@ function toLlmError(error: unknown): LlmError {
     return new LlmError('Limite de débit atteinte. Relancez l’extraction dans un instant.', true);
   }
   if (error instanceof Anthropic.AuthenticationError) {
-    return new LlmError('Clé API refusée. Vérifiez ANTHROPIC_API_KEY.', false);
+    return new LlmError(
+      keyStore.active()?.source === 'env'
+        ? 'Clé API refusée. Vérifiez ANTHROPIC_API_KEY.'
+        : 'Anthropic refuse votre clé d’API : elle a été désactivée ou supprimée. Enregistrez-en une nouvelle (Extraction › Clé d’API).',
+      false,
+    );
+  }
+  if (isCreditError(error)) {
+    return new LlmError(
+      'Crédit épuisé sur votre compte Anthropic : rechargez-le dans la console d’Anthropic (Billing), puis relancez la passe.',
+      false,
+    );
   }
   if (error instanceof Anthropic.PermissionDeniedError) {
     return new LlmError(`Accès refusé au modèle « ${model} » pour cette clé.`, false);
@@ -255,7 +305,12 @@ function toLlmError(error: unknown): LlmError {
 
 /** Un message d'erreur qui répéterait la clé d'API (passerelle, mandataire) ne la fait pas parvenir à l'interface. */
 function withoutKey(message: string): string {
-  return redactSecret(message, process.env.ANTHROPIC_API_KEY ?? '', '[clé masquée]');
+  return keyStore.redact(message);
+}
+
+/** Crédit insuffisant sur le compte de la clé : Anthropic répond 400 avec un message explicite. */
+export function isCreditError(error: unknown): boolean {
+  return error instanceof Anthropic.APIError && error.status === 400 && /credit balance/i.test(error.message);
 }
 
 /**

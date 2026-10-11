@@ -15,6 +15,7 @@ import { analyticsRouter } from './routes/analytics.js';
 import { exportRouter } from './routes/export.js';
 import { redactionRouter } from './routes/redaction.js';
 import { biblioRouter } from './routes/biblio.js';
+import { llmRouter } from './routes/llm.js';
 
 export interface AppOptions {
   /** Mot de passe d'accès ; par défaut `APP_PASSWORD`. `null` supprime tout contrôle d'accès. */
@@ -83,6 +84,7 @@ export function createApp(options: AppOptions = {}): Express {
   app.use('/api/analytics', analyticsRouter);
   app.use('/api/export', exportRouter);
   app.use('/api/biblio', biblioRouter);
+  app.use('/api/llm', llmRouter);
   app.use('/api', redactionRouter);
 
   app.use('/api', (_req, res) => {

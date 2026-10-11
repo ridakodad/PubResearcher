@@ -5,7 +5,7 @@ Cet outil manipule des comptes rendus de patients. Ce document dit ce qu'il prot
 ## 1. L'essentiel
 
 1. **Par défaut, rien ne sort de la machine et rien n'y entre depuis le réseau.** L'outil écoute sur `127.0.0.1`, extrait par des règles locales, fait son OCR hors connexion.
-2. **Trois fonctions peuvent faire sortir des données, et seulement si vous les configurez** : l'extraction par Claude (envoie le texte des documents à l'API d'Anthropic), la rédaction assistée (lui envoie des agrégats de la cohorte) et la revue bibliographique (envoie l'équation de recherche à Apify). Voir § 2.
+2. **Trois fonctions peuvent faire sortir des données, et seulement si vous les configurez** : l'extraction par Claude (envoie le texte des documents à l'API d'Anthropic), la rédaction assistée (lui envoie des agrégats de la cohorte) et la revue bibliographique (envoie l'équation de recherche à Apify). Les deux premières demandent une **clé d'API Anthropic** — celle de l'utilisateur, saisie dans l'application, ou celle de l'environnement du serveur — et sont facturées sur le compte de son titulaire. Voir § 2.
 3. **L'outil n'anonymise rien.** Ce qu'il lit est ce qu'il stocke et, le cas échéant, ce qu'il envoie. Importez des documents **pseudonymisés**, avec des codes de dossier sans lien avec l'identité. Avant tout import, l'interface fait confirmer une **charte d'anonymisation** (cinq engagements, redemandés à chaque nouvelle version du texte) : c'est un rappel, pas un contrôle (§ 5).
 4. **Il n'y a ni chiffrement au repos, ni comptes individuels.** La base et les fichiers sont en clair dans `DATA_DIR`. Un mot de passe unique, partagé, peut protéger l'accès réseau. Le reste relève du poste : disque chiffré, droits du système de fichiers, sauvegardes protégées.
 5. **Sur un réseau, mettez-le derrière HTTPS.** Le mot de passe HTTP Basic circule en clair sans TLS.
@@ -15,8 +15,9 @@ Cet outil manipule des comptes rendus de patients. Ce document dit ce qu'il prot
 | Fonction | Condition | Ce qui est transmis | À qui |
 |---|---|---|---|
 | Extraction « Règles seules » (défaut) | — | **Rien** | — |
-| Extraction « Règles puis Claude » / « Claude seul » | `ANTHROPIC_API_KEY` défini **et** mode choisi à chaque passe | Le **texte des documents** des dossiers traités (au plus `LLM_MAX_CHARS_PER_DOC` caractères par document, 60 000 par défaut), présentés sous les noms « Document 1 », « Document 2 »… — **ni les noms de fichier ni le code du dossier ne partent** —, le nom de la fiche, et les libellés, unités, définitions et options des variables | API d'Anthropic |
-| Rédaction assistée | `ANTHROPIC_API_KEY` défini | Des **agrégats** de la cohorte : nom et objet de la fiche, effectifs, complétude, et pour chaque variable ses indicateurs (moyenne, écart type, médiane, quartiles, extrêmes) ou ses modalités avec leurs effectifs, plus les définitions des variables. **Une variable en texte libre ne donne que ses effectifs** : aucune de ses valeurs, aucun code de dossier, aucun nom de fichier ne part | API d'Anthropic |
+| Extraction « Règles puis Claude » / « Claude seul » | Une clé d'API Anthropic disponible (saisie dans l'application ou `ANTHROPIC_API_KEY`) **et** mode choisi à chaque passe | Le **texte des documents** des dossiers traités (au plus `LLM_MAX_CHARS_PER_DOC` caractères par document, 60 000 par défaut), présentés sous les noms « Document 1 », « Document 2 »… — **ni les noms de fichier ni le code du dossier ne partent** —, le nom de la fiche, et les libellés, unités, définitions et options des variables | API d'Anthropic |
+| Rédaction assistée | Une clé d'API Anthropic disponible | Des **agrégats** de la cohorte : nom et objet de la fiche, effectifs, complétude, et pour chaque variable ses indicateurs (moyenne, écart type, médiane, quartiles, extrêmes) ou ses modalités avec leurs effectifs, plus les définitions des variables. **Une variable en texte libre ne donne que ses effectifs** : aucune de ses valeurs, aucun code de dossier, aucun nom de fichier ne part | API d'Anthropic |
+| Vérification d'une clé saisie | L'utilisateur enregistre une clé dans l'application | La **clé** elle-même et l'identifiant du modèle configuré (une seule requête, qui demande la fiche du modèle). **Aucune donnée d'étude** | API d'Anthropic |
 | Revue bibliographique | `APIFY_TOKEN` défini | L'**équation de recherche** saisie, la période, le nombre de résultats | Apify, qui interroge PubMed ou Google Scholar |
 | OCR | — | **Rien** : le moteur et les données de langue française sont installés avec l'outil | — |
 | Installation (`npm install`) | — | Téléchargement des dépendances depuis le registre npm | npm |
@@ -24,11 +25,12 @@ Cet outil manipule des comptes rendus de patients. Ce document dit ce qu'il prot
 
 **Conséquences pratiques**
 
-- Le **mode « Règles seules »** est le seul qui reste intégralement dans l'établissement. Si l'étude n'a pas obtenu l'autorisation de transférer des données de santé à un sous-traitant, **ne renseignez pas `ANTHROPIC_API_KEY`** : sans elle, les deux autres modes sont indisponibles (l'interface le dit).
+- Le **mode « Règles seules »** est le seul qui reste intégralement dans l'établissement. Si l'étude n'a pas obtenu l'autorisation de transférer des données de santé à un sous-traitant, **n'enregistrez aucune clé d'API Anthropic** — ni dans l'application, ni dans `ANTHROPIC_API_KEY` : sans clé, les deux autres modes sont indisponibles (l'interface le dit).
 - **Le texte part tel quel.** Les noms de fichier et le code du dossier restent sur la machine (le modèle ne voit que « Document 1 », « Document 2 »…), mais un compte rendu qui commence par « Nom : DUPONT Jean » transmet ce nom au sous-traitant : l'outil ne le retire pas. Pseudonymisez les documents **avant** l'import.
 - Si vous l'activez, le transfert est un traitement par un sous-traitant : à déclarer, à encadrer contractuellement, à décrire dans le protocole. Vérifiez les conditions d'utilisation et de conservation de votre compte API, et l'éventuelle option de non-conservation des données.
 - **N'écrivez aucune donnée de patient dans l'équation bibliographique** (nom, date de naissance, numéro de dossier…).
-- Pour qu'un envoi ne parte jamais par inadvertance, laissez la clé **hors** de l'environnement habituel de l'outil et ne la définissez que le temps d'une passe voulue.
+- **La clé est celle de l'instance.** Une clé saisie dans l'application sert à toute personne qui accède à l'outil : sur une instance partagée, chacun peut lancer des passes facturées sur ce compte (sans jamais pouvoir lire la clé). Une instance par étude, et une **limite de dépenses** fixée dans la console d'Anthropic.
+- Pour qu'un envoi ne parte jamais par inadvertance, n'enregistrez la clé que le temps des passes voulues (*Retirer* l'efface), et ne la placez pas dans l'environnement habituel de l'outil.
 
 ## 3. Modèle de menaces
 
@@ -44,7 +46,9 @@ Cet outil manipule des comptes rendus de patients. Ce document dit ce qu'il prot
 | **Injection de formule dans Excel** via une valeur extraite (`=CMD(…)`) | Les cellules texte qui commencent par `=`, `+`, `-`, `@` sont préfixées d'une apostrophe dans les CSV ; jamais pour un nombre | Ouvrir un CSV dans un tableur reste à vos risques : relisez les sources non fiables |
 | **Chemin de fichier forgé** (`../../…`) | Nom de stockage généré par le serveur ; nom d'affichage purgé de tout chemin ; type servi d'après une liste fermée, `nosniff`, `inline` réservé au PDF, aux images et au texte brut (`.txt`, servi en `text/plain`) | — |
 | **Fuite par message d'erreur** | Aucune réponse ne contient de message SQL ni de chemin disque ; une référence aléatoire renvoie à la pile dans le **journal du serveur** | Le journal du serveur peut contenir des noms de fichiers : protégez-le comme les données |
-| **Fuite d'un jeton** | `ANTHROPIC_API_KEY` et `APIFY_TOKEN` ne quittent jamais le serveur ; des tests établissent qu'aucune réponse de l'API, messages d'erreur compris, ne les contient — y compris quand une passerelle répète les en-têtes de la requête dans son refus (jeton Apify : `api-hardening.test.ts` ; clé Anthropic : `llm-secrets.test.ts`, avec un faux serveur) | Une clé placée dans un fichier `.env` ou un historique de shell reste exposée à qui lit ce fichier |
+| **Fuite d'un jeton** | La clé Anthropic (saisie ou d'environnement) et `APIFY_TOKEN` ne quittent jamais le serveur, sauf vers leur fournisseur ; des tests établissent qu'aucune réponse de l'API, messages d'erreur compris, ne les contient — y compris quand une passerelle répète les en-têtes de la requête dans son refus (jeton Apify : `api-hardening.test.ts` ; clé Anthropic : `llm-secrets.test.ts` et `api-key.test.ts`, avec un faux serveur). Une clé saisie dans l'application est écrite dans `DATA_DIR/anthropic-key.json`, droits `0600` dès la création, **hors de la base, des sauvegardes et des exports** ; l'interface n'en reçoit que les quatre derniers caractères, le journal aussi | Le fichier de la clé est en clair sur le disque, lisible du compte de service (et de l'administrateur du poste) : protégez `DATA_DIR`. Une clé placée dans un fichier `.env` ou un historique de shell reste exposée à qui lit ce fichier |
+| **Un site tiers remplace la clé** (pour faire passer les envois par son compte) ou l'efface | Les routes de la clé (`PUT`/`DELETE /api/llm/key`) sont modifiantes : refus d'une `Origin` étrangère (CSRF) et liste blanche de l'en-tête `Host` (DNS rebinding), comme le reste de l'API ; la nouvelle clé doit en outre être acceptée par Anthropic | Qui a accès à l'outil (mot de passe) peut changer la clé : c'est un réglage de l'instance |
+| **Dépense imprévue** (passe lancée sur toute une cohorte, boucle d'essais) | Fourchette de coût affichée avant chaque passe par Claude, confirmation au-delà de 5 $US, coût constaté après ; aucune relance automatique d'une passe | La seule borne ferme est la **limite de dépenses** du compte Anthropic : fixez-la |
 | **Contenu actif servi** (un `.html` déposé comme « document ») | Les fichiers sont servis d'après une liste fermée d'extensions ; tout ce qui n'est pas PDF, image ou texte brut est servi en téléchargement | — |
 | **Deux instances sur les mêmes données** | Verrou du dossier de données | — |
 | **Perte de données** (crash, coupure, disque plein) | WAL, transactions atomiques par dossier, passes `running` marquées `failed` au redémarrage, dépôt provisoire purgé ; **sauvegarde/restauration vérifiables** | Une sauvegarde non faite ne se rattrape pas : planifiez-les |
@@ -77,7 +81,7 @@ Posés sur toutes les réponses : `X-Content-Type-Options: nosniff`, `X-Frame-Op
 - [ ] Disque chiffré ; session verrouillée ; accès limité aux personnes de l'étude.
 - [ ] `DATA_DIR` dans un dossier accessible **seulement** à l'utilisateur qui lance l'outil.
 - [ ] L'outil reste sur `127.0.0.1`. S'il doit être partagé : `HOST`, `APP_PASSWORD` (long, unique), HTTPS devant, `ALLOWED_HOSTS` défini.
-- [ ] Les clés (`ANTHROPIC_API_KEY`, `APIFY_TOKEN`) ne sont pas dans un fichier partagé, un dépôt, un historique de commandes ; une **limite d'usage** est fixée côté fournisseur.
+- [ ] Les clés (Anthropic, `APIFY_TOKEN`) ne sont pas dans un fichier partagé, un dépôt, un historique de commandes ; une **limite de dépenses** est fixée côté fournisseur. Une clé Anthropic se saisit de préférence dans l'application (fichier `0600` hors sauvegardes) plutôt que dans l'environnement.
 
 **Données**
 
@@ -96,7 +100,8 @@ Posés sur toutes les réponses : `X-Content-Type-Options: nosniff`, `X-Frame-Op
 
 | Situation | À faire |
 |---|---|
-| Clé `ANTHROPIC_API_KEY` ou `APIFY_TOKEN` exposée | La **révoquer** chez le fournisseur et en créer une nouvelle ; contrôler l'usage facturé |
+| Clé Anthropic ou `APIFY_TOKEN` exposée | La **révoquer** chez le fournisseur et en créer une nouvelle ; contrôler l'usage facturé. Pour une clé saisie dans l'application : *Changer de clé* (ou *Retirer*) une fois la nouvelle créée |
+| Dépense anormale sur le compte Anthropic | Retirer la clé de l'application (ou de l'environnement), consulter l'usage dans la console d'Anthropic, puis le journal du serveur (chaque enregistrement de clé y est noté avec ses quatre derniers caractères) |
 | Poste perdu ou volé | Si le disque était chiffré, le signaler et révoquer les accès ; sinon traiter comme une violation de données selon la procédure de l'établissement |
 | Outil resté ouvert sur un réseau sans mot de passe | Arrêter l'outil, définir `APP_PASSWORD` ou revenir à `127.0.0.1`, consulter le journal du serveur et le journal d'audit des valeurs pour repérer ce qui a changé, informer le délégué à la protection des données |
 | Export envoyé au mauvais destinataire | Procédure de violation de données de l'établissement : l'export contient des codes de dossier et des valeurs de santé |

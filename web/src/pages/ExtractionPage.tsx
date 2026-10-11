@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
-import { formatDateTime, plural } from '../lib/format';
+import { formatDateTime, formatUsd, modelLabel, plural } from '../lib/format';
 import { EmptyState, ErrorPanel, LoadingPanel, Pager, Spinner, clampPage, useToast } from '../components/ui';
 import { Panel, PanelGroupControls } from '../components/Panel';
 import { StatTile } from '../components/charts/StatTile';
-import { IconAlert, IconDocument } from '../components/icons';
+import { IconAlert, IconDocument, IconInfo } from '../components/icons';
+import { ApiKeyPanel } from '../components/ApiKeyPanel';
 import type {
   Capabilities,
+  CostEstimate,
   ExtractionMode,
   ExtractionOverview,
   ExtractionRow,
@@ -35,6 +37,8 @@ export function ExtractionPage() {
   const [running, setRunning] = useState(false);
   const [lastRun, setLastRun] = useState<ExtractionRunResult | null>(null);
   const [mode, setMode] = useState<ExtractionMode>('rules');
+  /** Fourchette de coût d'une passe par Claude sur tous les dossiers (`null` : pas encore calculée, ou sans objet). */
+  const [estimate, setEstimate] = useState<CostEstimate | null>(null);
   /** Filtre de lecture : on cherche d'abord ce qui n'a rien donné. */
   const [filter, setFilter] = useState<'tous' | 'incomplets' | 'vides'>('tous');
   const [page, setPage] = useState(0);
@@ -57,8 +61,37 @@ export function ExtractionPage() {
     void load();
   }, [load]);
 
+  const llmAvailable = capabilities?.llm.available ?? false;
+  const templateId = overview?.template.id;
+  const patientCount = overview?.rows.length ?? 0;
+  useEffect(() => {
+    if (mode === 'rules' || !llmAvailable || templateId === undefined || patientCount === 0) {
+      setEstimate(null);
+      return undefined;
+    }
+    let cancelled = false;
+    api
+      .estimateExtraction(templateId)
+      .then((r) => {
+        if (!cancelled) setEstimate(r.estimate);
+      })
+      .catch(() => {
+        if (!cancelled) setEstimate(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, llmAvailable, templateId, patientCount]);
+
   async function run() {
     if (!overview) return;
+    // Payée par l'utilisateur sur son propre compte : au-delà de quelques dollars, on demande d'abord.
+    if (mode !== 'rules' && estimate && estimate.high >= 5) {
+      const ok = window.confirm(
+        `Cette passe peut coûter jusqu’à ${formatUsd(estimate.high)} sur votre compte Anthropic (${plural(estimate.patients, 'dossier')}). La lancer ?`,
+      );
+      if (!ok) return;
+    }
     setRunning(true);
     try {
       const result = await api.runExtraction({ templateId: overview.template.id, mode });
@@ -161,13 +194,31 @@ export function ExtractionPage() {
       </div>
 
       {!llmReady && (
-        <div className="notice">
-          <IconAlert size={18} />
+        <p className="secondary small" style={{ margin: 0 }}>
+          Les règles traitent les libellés ; Claude traite en plus le texte rédigé, où aucun libellé n’annonce la valeur.
+          Pour l’activer, enregistrez votre clé d’API Anthropic :
+        </p>
+      )}
+      {(!llmReady || mode !== 'rules') && (
+        <ApiKeyPanel
+          compact={llmReady}
+          onChange={(key) => {
+            // Une clé vient d'être enregistrée : on passe au mode recommandé, et l'estimation du coût s'affiche.
+            if (key.available) setMode((current) => (current === 'rules' ? 'hybrid' : current));
+            void load();
+          }}
+        />
+      )}
+
+      {mode !== 'rules' && llmReady && estimate && estimate.patients > 0 && (
+        <div className="notice notice-info">
+          <IconInfo size={18} />
           <div>
-            <strong>Extraction par Claude non configurée.</strong> Les règles traitent les
-            libellés ; Claude traite en plus le texte rédigé, où aucun libellé n’annonce la
-            valeur. Renseignez <span className="mono">ANTHROPIC_API_KEY</span> dans
-            l’environnement du serveur pour l’activer.
+            <strong>
+              Coût estimé de la passe : entre {formatUsd(estimate.low)} et {formatUsd(estimate.high)}
+            </strong>{' '}
+            sur votre compte Anthropic ({plural(estimate.patients, 'dossier')}, {modelLabel(estimate.model)}).
+            {mode === 'hybrid' && ' Avec « Règles puis Claude », c’est souvent moins : Claude ne reçoit que ce que les règles n’ont pas trouvé.'}
           </div>
         </div>
       )}
@@ -412,7 +463,15 @@ function RunSummary({ run }: { run: ExtractionRunResult }) {
           <div className="small muted" style={{ marginTop: 6 }}>
             Jetons : {run.usage.inputTokens.toLocaleString('fr-FR')} en entrée (
             {run.usage.cacheReadTokens.toLocaleString('fr-FR')} depuis le cache),{' '}
-            {run.usage.outputTokens.toLocaleString('fr-FR')} en sortie.
+            {run.usage.outputTokens.toLocaleString('fr-FR')} en sortie
+            {typeof run.costUsd === 'number' ? (
+              <>
+                {' '}
+                — <strong>{formatUsd(run.costUsd)}</strong> sur votre compte Anthropic.
+              </>
+            ) : (
+              '.'
+            )}
           </div>
         )}
       </div>
