@@ -170,12 +170,19 @@ describe('export CSV', () => {
       return line!.split(delimiter)[index]!;
     };
 
-    assert.equal(column(await fetchCsv(''), ';', 'temperature (°C)'), '36,7');
-    assert.equal(column(await fetchCsv('&delimiter=,'), ',', 'temperature (°C)'), '36.7');
-    assert.equal(column(await fetchCsv('&decimal=.'), ';', 'temperature (°C)'), '36.7', 'le choix explicite l’emporte');
+    // Clés techniques : des noms de colonne valides pour R, Stata ou SPSS, sans l'unité (elle est dans le dictionnaire).
+    assert.equal(column(await fetchCsv(''), ';', 'temperature'), '36,7');
+    assert.equal(column(await fetchCsv('&delimiter=,'), ',', 'temperature'), '36.7');
+    assert.equal(column(await fetchCsv('&decimal=.'), ';', 'temperature'), '36.7', 'le choix explicite l’emporte');
+    assert.doesNotMatch((await fetchCsv('')).split('\r\n')[0]!, /\(/, 'aucune unité dans les clés techniques');
 
     const labelled = await fetchCsv('&labels=1');
     assert.match(labelled.split('\r\n')[0]!, /^Code dossier;Libellé du dossier;Nombre de documents;/);
+    assert.equal(column(labelled, ';', 'Température (°C)'), '36,7', 'les en-têtes en clair gardent l’unité');
+
+    // Sans le libellé libre des dossiers : le fichier se partage.
+    const shared = await fetchCsv('&deidentify=1');
+    assert.match(shared.split('\r\n')[0]!, /^patient_code;nb_documents;/);
   });
 });
 

@@ -282,3 +282,62 @@ describe('tri des valeurs proposées par le modèle', () => {
     assert.equal(result.unverified.length, 1);
   });
 });
+
+describe('la citation doit dire ce que la valeur affirme', () => {
+  const fields = [
+    field({ key: 'diabete', label: 'Diabète', type: 'boolean', id: 1 }),
+    field({ key: 'crp', label: 'CRP', type: 'number', unit: 'mg/L', id: 2 }),
+    field({ key: 'hb', label: 'Hémoglobine', type: 'number', unit: 'g/dL', id: 3 }),
+    field({ key: 'entree', label: 'Date d’entrée', type: 'date', id: 4 }),
+  ];
+  const documents = [
+    doc('Pas de diabète. CRP 45 mg/L le 12/03, puis 180 mg/L le 14/03. Hémoglobine : 8,1 g/dL. Entré le 12 mars 2024.'),
+  ];
+  const ask = (answers: Record<string, { value: string; quote: string }>) =>
+    interpret(
+      fields,
+      documents,
+      {
+        fields: Object.fromEntries(
+          fields.map((f) => [f.key, { value: answers[f.key]?.value ?? '', quote: answers[f.key]?.quote ?? '', document: 'cr.pdf' }]),
+        ),
+      },
+      noUsage,
+      'claude-opus-5-5-20260601',
+    );
+
+  test('« oui » tiré d’une négation est écarté, avec sa raison', () => {
+    const result = ask({ diabete: { value: 'Oui', quote: 'Pas de diabète' } });
+    assert.equal(result.values.length, 0);
+    assert.equal(result.unverified.length, 1);
+    assert.match(result.unverified[0]!.reason ?? '', /pas de/);
+  });
+
+  test('un nombre absent de sa citation est écarté', () => {
+    const result = ask({ crp: { value: '180', quote: 'CRP 45 mg/L' }, hb: { value: '12,6', quote: 'Hémoglobine : 8,1 g/dL' } });
+    assert.equal(result.values.length, 0);
+    assert.deepEqual(result.unverified.map((u) => u.key).sort(), ['crp', 'hb']);
+  });
+
+  test('une valeur que sa citation contient est retenue, virgule décimale comprise', () => {
+    const result = ask({
+      crp: { value: '180', quote: 'puis 180 mg/L le 14/03' },
+      hb: { value: '8.1', quote: 'Hémoglobine : 8,1 g/dL' },
+      entree: { value: '2024-03-12', quote: 'Entré le 12 mars 2024' },
+    });
+    assert.deepEqual(result.values.map((v) => v.key).sort(), ['crp', 'entree', 'hb']);
+    assert.equal(result.unverified.length, 0);
+  });
+
+  test('une date absente de sa citation est écartée', () => {
+    const result = ask({ entree: { value: '2024-03-14', quote: 'Entré le 12 mars 2024' } });
+    assert.equal(result.values.length, 0);
+    assert.equal(result.unverified.length, 1);
+  });
+
+  test('le modèle qui a réellement répondu est celui que la valeur nomme', () => {
+    const result = ask({ hb: { value: '8,1', quote: 'Hémoglobine : 8,1 g/dL' } });
+    assert.equal(result.model, 'claude-opus-5-5-20260601');
+    assert.equal(result.values[0]!.evidence.rule, 'Claude (claude-opus-5-5-20260601)');
+  });
+});

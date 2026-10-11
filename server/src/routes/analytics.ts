@@ -158,6 +158,8 @@ export type FieldStats =
       n: number;
       missing: number;
       chart: 'categories';
+      /** Variable à choix multiples : un dossier peut compter dans plusieurs catégories. */
+      multiple?: boolean;
       categories: ReturnType<typeof countCategories>;
     }
   | {
@@ -234,10 +236,10 @@ export function buildFieldStats(
       }
 
       case 'multi': {
-        // Une observation peut cocher plusieurs options : les effectifs
-        // portent sur les citations, le total peut dépasser l'effectif.
+        // Un dossier peut cocher plusieurs options : chaque pourcentage porte
+        // sur les dossiers renseignés, et leur somme peut dépasser 100 %.
         const flat = present.flatMap((v) => (Array.isArray(v) ? v : [String(v)]));
-        return { ...base, chart: 'categories', categories: countCategories(flat) };
+        return { ...base, chart: 'categories', multiple: true, categories: countCategories(flat, present.length) };
       }
 
       case 'date': {

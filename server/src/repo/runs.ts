@@ -165,6 +165,14 @@ export function finishRun(id: number, status: RunStatus, totals: RunTotals): voi
   );
 }
 
+/**
+ * Corrige le modèle enregistré pour une passe : le repli côté serveur d'Anthropic peut faire répondre un autre modèle
+ * que celui demandé, et le rapport « Méthodes » doit nommer celui qui a réellement relevé les valeurs.
+ */
+export function setRunModel(id: number, model: string): void {
+  db.prepare('UPDATE extraction_runs SET model = ? WHERE id = ?').run(model, id);
+}
+
 /** Passes restées « en cours » parce que le serveur s'est arrêté pendant leur exécution. */
 export function recoverInterruptedRuns(): number {
   return db

@@ -346,11 +346,12 @@ export const api = {
   // ------------------------------------------------------------------ export
   csvUrl: (
     templateId: number,
-    opts: { delimiter: string; booleans: string; labels: boolean; decimal?: '.' | ',' },
+    opts: { delimiter: string; booleans: string; labels: boolean; decimal?: '.' | ','; deidentify?: boolean },
   ) =>
     `/api/export/csv?templateId=${templateId}&delimiter=${encodeURIComponent(opts.delimiter)}` +
     `&booleans=${opts.booleans}&labels=${opts.labels ? '1' : '0'}` +
-    (opts.decimal ? `&decimal=${encodeURIComponent(opts.decimal)}` : ''),
+    (opts.decimal ? `&decimal=${encodeURIComponent(opts.decimal)}` : '') +
+    (opts.deidentify ? '&deidentify=1' : ''),
   xlsxUrl: (templateId: number, labels: boolean) =>
     `/api/export/xlsx?templateId=${templateId}&labels=${labels ? '1' : '0'}`,
   pptxUrl: (templateId: number) => `/api/export/pptx?templateId=${templateId}`,

@@ -5,6 +5,7 @@ import { numberOr } from '../lib/env-check.js';
 import { clientIdentity, clientOptions, keyStore, type KeySource } from './api-key.js';
 import { explainProblem, explainRefusedKey, problemOf } from './anthropic-errors.js';
 import { locateEvidence } from './llm-verify.js';
+import { quoteContradiction } from './quote-check.js';
 import { estimateCost, type CostEstimate } from './pricing.js';
 import {
   buildOutputSchema,
@@ -132,11 +133,13 @@ export interface LlmExtraction {
   values: LlmFieldOutcome[];
   /** Variables laissées vides par le modèle. */
   notFound: string[];
-  /** Valeurs écartées faute de citation retrouvable dans les documents. */
-  unverified: { key: string; value: string; quote: string }[];
+  /** Valeurs écartées : citation introuvable dans les documents, ou qui ne dit pas ce que la valeur affirme. */
+  unverified: { key: string; value: string; quote: string; reason?: string }[];
   /** Valeurs écartées parce qu'incompatibles avec le type ou les options. */
   invalid: { key: string; value: string; reason: string }[];
   usage: LlmUsage;
+  /** Le modèle qui a réellement répondu : le repli côté serveur peut en désigner un autre que celui demandé. */
+  model: string;
 }
 
 export class LlmError extends Error {
@@ -150,26 +153,35 @@ export class LlmError extends Error {
  * Relève les variables demandées dans les documents d'un patient.
  *
  * `fields` peut être un sous-ensemble de la fiche : en mode mixte, seules les
- * variables que les règles n'ont pas trouvées sont soumises au modèle.
+ * variables que les règles n'ont pas trouvées sont soumises au modèle. La consigne, elle, décrit toujours la fiche
+ * entière (`dictionary`) : identique d'un dossier à l'autre, elle reste en cache et n'est facturée au tarif plein
+ * qu'une fois par série ; la liste des variables à relever pour ce dossier passe dans le message.
  */
 export async function extractWithLlm(
   fields: TemplateField[],
   docs: SourceDoc[],
   templateName: string,
+  dictionary: TemplateField[] = fields,
 ): Promise<LlmExtraction> {
   const anthropic = getClient();
   if (!anthropic) throw new LlmError(NO_KEY_REASON, false);
 
   const usable = docs.filter((doc) => doc.text.trim().length > 0);
   if (fields.length === 0 || usable.length === 0) {
-    return { values: [], notFound: fields.map((f) => f.key), unverified: [], invalid: [], usage: emptyUsage() };
+    return { values: [], notFound: fields.map((f) => f.key), unverified: [], invalid: [], usage: emptyUsage(), model };
   }
 
   // Le modèle ne voit ni le code du dossier ni les noms de fichiers : les documents lui sont présentés sous des alias.
+  const subset = fields.length < dictionary.length;
+  const documents = buildUserPrompt(usable.map((d, i) => ({ name: documentAlias(i), text: d.text })), maxCharsPerDocument);
   const response = await callModel(
     anthropic,
-    buildSystemPrompt(fields, templateName),
-    buildUserPrompt(usable.map((d, i) => ({ name: documentAlias(i), text: d.text })), maxCharsPerDocument),
+    buildSystemPrompt(dictionary, templateName),
+    subset
+      ? `Variables à relever pour ce dossier (les autres sont déjà renseignées) : ${fields.map((f) => f.key).join(', ')}.
+
+${documents}`
+      : documents,
     buildOutputSchema(fields),
   );
 
@@ -179,12 +191,13 @@ export async function extractWithLlm(
     if (finding && typeof finding.document === 'string') finding.document = nameOf.get(finding.document.trim()) ?? finding.document;
   }
 
-  return interpret(fields, usable, response.parsed, response.usage);
+  return interpret(fields, usable, response.parsed, response.usage, response.model);
 }
 
 interface ModelCall {
   parsed: LlmResponse;
   usage: LlmUsage;
+  model: string;
 }
 
 async function callModel(
@@ -256,6 +269,7 @@ async function callModel(
 
   return {
     parsed,
+    model: typeof message.model === 'string' && message.model.length > 0 ? message.model : model,
     usage: {
       inputTokens: message.usage.input_tokens ?? 0,
       outputTokens: message.usage.output_tokens ?? 0,
@@ -310,6 +324,7 @@ export function interpret(
   docs: SourceDoc[],
   response: LlmResponse,
   usage: LlmUsage,
+  servedModel: string = model,
 ): LlmExtraction {
   const values: LlmFieldOutcome[] = [];
   const notFound: string[] = [];
@@ -337,6 +352,14 @@ export function interpret(
       continue;
     }
 
+    // La citation existe ; encore faut-il qu'elle dise ce que la valeur affirme (« Pas de diabète » ne justifie
+    // pas « diabète : oui », « CRP 45 » ne justifie pas 180).
+    const contradiction = located.method === 'quote' ? quoteContradiction(typed.value, field.type, finding?.quote ?? '') : null;
+    if (contradiction) {
+      unverified.push({ key: field.key, value: raw, quote: finding?.quote ?? '', reason: contradiction });
+      continue;
+    }
+
     // Une citation retrouvée telle quelle est plus fiable que la seule
     // localisation de la valeur : la confiance affichée le reflète.
     values.push({
@@ -350,12 +373,12 @@ export function interpret(
         snippet: located.snippet,
         start: located.start,
         end: located.end,
-        rule: `Claude (${model})`,
+        rule: `Claude (${servedModel})`,
       },
     });
   }
 
-  return { values, notFound, unverified, invalid, usage };
+  return { values, notFound, unverified, invalid, usage, model: servedModel };
 }
 
 function emptyUsage(): LlmUsage {

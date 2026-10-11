@@ -40,8 +40,16 @@ export interface TokenUsage {
   cacheWriteTokens?: number;
 }
 
+/**
+ * Tarif d'un modèle. Le modèle qui répond peut porter un identifiant daté (`claude-opus-5-5-20260601`) :
+ * il prend alors le tarif de l'identifiant le plus long dont il est la déclinaison.
+ */
 export function priceOf(model: string): ModelPrice | null {
-  return PRICES[model] ?? null;
+  if (PRICES[model]) return PRICES[model]!;
+  const base = Object.keys(PRICES)
+    .filter((id) => model.startsWith(`${id}-`))
+    .sort((a, b) => b.length - a.length)[0];
+  return base ? PRICES[base]! : null;
 }
 
 const usd = (tokens: number, perMillion: number): number => (tokens * perMillion) / 1_000_000;

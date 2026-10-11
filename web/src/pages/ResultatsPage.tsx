@@ -358,6 +358,12 @@ function RawTable({ template, rows }: { template: TemplateWithFields; rows: Data
 
 /* --------------------------------------------------------------- graphiques */
 
+/** Part des dossiers sans valeur pour cette variable. */
+function missingShare(stat: FieldStats): number {
+  const total = stat.n + stat.missing;
+  return total > 0 ? stat.missing / total : 0;
+}
+
 function ChartsPanel({ stats, patientCount }: { stats: FieldStats[]; patientCount: number }) {
   const plottable = stats.filter((s) => s.chart !== 'none');
 
@@ -409,7 +415,24 @@ function ChartsPanel({ stats, patientCount }: { stats: FieldStats[]; patientCoun
                 )}
               </>
             ) : (
-              <CategoryBars data={stat.categories} total={stat.n} />
+              <>
+                <CategoryBars data={stat.categories} total={stat.n} />
+                {stat.multiple && (
+                  <p className="small muted" style={{ marginTop: 8 }}>
+                    Plusieurs réponses possibles : chaque pourcentage porte sur les {stat.n} dossiers renseignés, et
+                    leur somme peut dépasser 100 %.
+                  </p>
+                )}
+              </>
+            )}
+            {stat.n > 0 && missingShare(stat) > 0.2 && (
+              <div className="notice notice-warn small" role="note" style={{ marginTop: 10 }}>
+                <div>
+                  {formatNumber(Math.round(missingShare(stat) * 100))} % de valeurs manquantes : ces chiffres ne portent
+                  que sur les {stat.n} dossiers renseignés. Un relecteur demandera comment les données manquantes ont été
+                  traitées.
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -597,6 +620,7 @@ function QualityPanel({ templateId }: { templateId: number }) {
 
 function ExportPanel({ templateId }: { templateId: number }) {
   const [delimiter, setDelimiter] = useState(';');
+  const [deidentify, setDeidentify] = useState(false);
   /** `auto` : la virgule décimale accompagne le point-virgule, le point accompagne la virgule. */
   const [decimal, setDecimal] = useState<'auto' | '.' | ','>('auto');
   const [booleans, setBooleans] = useState('numeric');
@@ -725,6 +749,11 @@ function ExportPanel({ templateId }: { templateId: number }) {
           <span>En-têtes en clair plutôt que les clés techniques</span>
         </label>
 
+        <label className="checkbox" style={{ marginBottom: 8 }}>
+          <input type="checkbox" checked={deidentify} onChange={(e) => setDeidentify(e.target.checked)} />
+          <span>Sans le libellé des dossiers (pour partager le fichier)</span>
+        </label>
+
         <div className="spacer" />
 
         <div className="row" style={{ gap: 8 }}>
@@ -740,7 +769,7 @@ function ExportPanel({ templateId }: { templateId: number }) {
           </a>
           <a
             className="btn btn-primary"
-            href={api.csvUrl(templateId, { delimiter, booleans, labels, decimal: decimal === 'auto' ? undefined : decimal })}
+            href={api.csvUrl(templateId, { delimiter, booleans, labels, deidentify, decimal: decimal === 'auto' ? undefined : decimal })}
           >
             Télécharger le CSV
           </a>

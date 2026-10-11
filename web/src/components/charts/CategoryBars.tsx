@@ -104,7 +104,7 @@ export function CategoryBars({
           <div>
             <span className="val">{formatNumber(shown[hover.index]!.count)}</span>{' '}
             <span className="secondary">
-              sur {total} ({shown[hover.index]!.percent} %)
+              sur {total} ({formatNumber(shown[hover.index]!.percent)} %)
             </span>
           </div>
         </ChartTooltip>

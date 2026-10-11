@@ -4,7 +4,7 @@ import { extractionRunSchema, valueUpdateSchema } from '../lib/schemas.js';
 import { getActiveTemplate, getTemplate } from '../repo/templates.js';
 import { getPatient, listPatients } from '../repo/patients.js';
 import { applyHumanEdits, ensureRecord, type HumanEdit } from '../repo/records.js';
-import { finishRun, listRuns, startRun } from '../repo/runs.js';
+import { finishRun, listRuns, setRunModel, startRun } from '../repo/runs.js';
 import { listEventsForRecord } from '../repo/events.js';
 import { runExtractionForPatient, type PatientExtractionReport } from '../engine/run.js';
 import { llmStatus } from '../engine/llm.js';
@@ -163,6 +163,11 @@ recordsRouter.post(
     }
     finishRun(runId, 'done', totalsOf(reports));
 
+    // Le modèle qui a réellement répondu, dossier par dossier : c'est lui que nomment la passe et le coût.
+    const servedModels = [...new Set(reports.map((r) => r.model).filter((m): m is string => m !== null))];
+    const runModel = mode === 'rules' ? null : servedModels.length > 0 ? servedModels.join(', ') : llmStatus().model;
+    if (runModel && servedModels.length > 0 && runModel !== llmStatus().model) setRunModel(runId, runModel);
+
     const sum = (pick: (r: PatientExtractionReport) => number) =>
       reports.reduce((total, r) => total + pick(r), 0);
     const usage = mode === 'rules' ? null : {
@@ -187,13 +192,28 @@ recordsRouter.post(
       },
       // Consommation cumulée, et son prix en dollars sur le compte Anthropic de l'utilisateur.
       usage,
-      model: mode === 'rules' ? null : llmStatus().model,
-      costUsd: costOf(mode === 'rules' ? null : llmStatus().model, usage),
+      model: runModel,
+      costUsd: mode === 'rules' ? null : costOfReports(reports),
       errors: reports.filter((r) => r.llmError).map((r) => ({ patientCode: r.patientCode, message: r.llmError })),
       reports,
     });
   }),
 );
+
+/**
+ * Coût d'une passe, dossier par dossier au tarif du modèle qui a répondu. `null` si un dossier a consommé des jetons
+ * sur un modèle dont le tarif est inconnu : mieux vaut ne rien afficher qu'un montant faux.
+ */
+function costOfReports(reports: PatientExtractionReport[]): number | null {
+  let total = 0;
+  for (const report of reports) {
+    if (!report.usage) continue;
+    const cost = costOf(report.model ?? llmStatus().model, report.usage);
+    if (cost === null) return null;
+    total += cost;
+  }
+  return Math.round(total * 10_000) / 10_000;
+}
 
 interface OutOfBounds {
   fieldId: number;

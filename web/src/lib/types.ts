@@ -269,7 +269,7 @@ interface FieldStatsBase {
 }
 export type FieldStats =
   | (FieldStatsBase & { chart: 'histogram'; summary: NumericSummary | null; bins: HistogramBin[] })
-  | (FieldStatsBase & { chart: 'categories'; categories: CategoryCount[] })
+  | (FieldStatsBase & { chart: 'categories'; multiple?: boolean; categories: CategoryCount[] })
   | (FieldStatsBase & { chart: 'none'; topValues: CategoryCount[] });
 
 export interface CompletenessField {

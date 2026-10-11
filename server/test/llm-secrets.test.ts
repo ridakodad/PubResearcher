@@ -52,7 +52,7 @@ globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
       fields: {
         age: { value: '54', quote: 'Âge : 54 ans', document: 'Document 1' },
         // Une variable que les règles ne savent pas retrouver (aucun libellé « CRP » dans le texte).
-        crp: { value: '12', quote: 'bilan sans particularité', document: 'Document 1' },
+        crp: { value: '12', quote: 'syndrome inflammatoire à 12 mg/L', document: 'Document 1' },
       },
     };
     return new Response(
@@ -133,7 +133,7 @@ before(async () => {
   patientId = (JSON.parse(created.text) as { patient: { id: number } }).patient.id;
   const boundary = '----rtsecret';
   const body = Buffer.from(
-    `--${boundary}\r\nContent-Disposition: form-data; name="files"; filename="DUPONT_Jean_1962.txt"\r\nContent-Type: text/plain\r\n\r\nÂge : 54 ans\r\nSexe : féminin\r\nBiologie : bilan sans particularité.\r\n--${boundary}--\r\n`,
+    `--${boundary}\r\nContent-Disposition: form-data; name="files"; filename="DUPONT_Jean_1962.txt"\r\nContent-Type: text/plain\r\n\r\nÂge : 54 ans\r\nSexe : féminin\r\nBiologie : syndrome inflammatoire à 12 mg/L.\r\n--${boundary}--\r\n`,
   );
   const uploaded = await new Promise<Reply>((resolve, reject) => {
     const url = new URL(base);

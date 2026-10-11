@@ -101,11 +101,17 @@ function niceStep(raw: number): number {
   return step * magnitude;
 }
 
-/** Effectifs par catégorie, triés du plus fréquent au moins fréquent. */
-export function countCategories(values: string[]): CategoryCount[] {
+/**
+ * Effectifs par catégorie, triés du plus fréquent au moins fréquent.
+ *
+ * Le pourcentage porte par défaut sur les valeurs comptées. Une variable à choix multiples passe en
+ * `denominator` le nombre de dossiers renseignés : « 12 dossiers sur 24 » font 50 %, même si les
+ * citations, elles, sont plus nombreuses que les dossiers.
+ */
+export function countCategories(values: string[], denominator = values.length): CategoryCount[] {
   const counts = new Map<string, number>();
   for (const v of values) counts.set(v, (counts.get(v) ?? 0) + 1);
-  const total = values.length;
+  const total = denominator;
   return [...counts.entries()]
     .map(([label, count]) => ({
       label,

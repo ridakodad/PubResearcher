@@ -4,7 +4,6 @@ import { getActiveTemplate, getTemplate } from '../repo/templates.js';
 import { toCsv } from '../lib/csv.js';
 import { makeXlsx, type CellValue, type Sheet } from '../lib/xlsx.js';
 import { makePptx, type ChartSlide } from '../lib/pptx.js';
-import { summarize } from '../lib/stats.js';
 import { fieldTypeLabel } from '../domain/labels.js';
 import { buildDataset, buildFieldStats } from './analytics.js';
 import { renderHtml, renderMarkdown } from '../lib/report.js';
@@ -48,22 +47,23 @@ exportRouter.get(
     // (Excel français, read.csv2), « , » avec « . ». `decimal=.` ou `decimal=,` force le choix.
     const decimal = req.query.decimal === '.' || req.query.decimal === ',' ? req.query.decimal : delimiter === ';' ? ',' : '.';
     const booleanAsText = req.query.booleans === 'text';
-    // `labels=1` : en-têtes en clair plutôt que les clés techniques.
+    // `labels=1` : en-têtes en clair plutôt que les clés techniques. Les clés techniques restent des noms
+    // de colonne valides pour R, Stata ou SPSS : l'unité n'y figure pas (elle est dans le dictionnaire).
     const useLabels = req.query.labels === '1';
+    // `deidentify=1` : sans la colonne du libellé libre des dossiers, qui peut contenir un nom ou une
+    // initiale — le fichier se partage alors avec un statisticien ou une revue.
+    const withLabel = req.query.deidentify !== '1';
 
     const headers = [
       useLabels ? 'Code dossier' : 'patient_code',
-      useLabels ? 'Libellé du dossier' : 'patient_label',
+      ...(withLabel ? [useLabels ? 'Libellé du dossier' : 'patient_label'] : []),
       useLabels ? 'Nombre de documents' : 'nb_documents',
-      ...template.fields.map((f) => {
-        const base = useLabels ? f.label : f.key;
-        return f.unit ? `${base} (${f.unit})` : base;
-      }),
+      ...template.fields.map((f) => (useLabels && f.unit ? `${f.label} (${f.unit})` : useLabels ? f.label : f.key)),
     ];
 
     const data: FieldValue[][] = rows.map((row) => [
       row.patientCode,
-      row.patientLabel,
+      ...(withLabel ? [row.patientLabel] : []),
       row.documentCount,
       ...template.fields.map((f) => row.values[f.key] ?? null),
     ]);
@@ -217,12 +217,9 @@ exportRouter.get(
       ]),
     };
 
-    const renseignees = (key: string): number =>
-      rows.filter((row) => {
-        const v = row.values[key] ?? null;
-        return v !== null && v !== '' && !(Array.isArray(v) && v.length === 0);
-      }).length;
-
+    // Mêmes calculs que l'écran et le diaporama : une valeur manquante n'est jamais comptée comme un zéro,
+    // et le classeur ne peut pas contredire la figure tirée des mêmes données.
+    const fieldStats = new Map(buildFieldStats(template, rows).map((stat) => [stat.key, stat]));
     const synthese: Sheet = {
       name: 'Synthèse',
       columns: [
@@ -234,12 +231,16 @@ exportRouter.get(
         { header: 'Moyenne', width: 12, type: 'number' },
         { header: 'Écart-type', width: 12, type: 'number' },
         { header: 'Médiane', width: 12, type: 'number' },
+        { header: '1er quartile', width: 12, type: 'number' },
+        { header: '3e quartile', width: 12, type: 'number' },
         { header: 'Minimum', width: 12, type: 'number' },
         { header: 'Maximum', width: 12, type: 'number' },
+        { header: 'Effectifs n (%)', width: 60 },
       ],
       rows: template.fields.map((field): CellValue[] => {
-        const n = renseignees(field.key);
+        const stat = fieldStats.get(field.key);
         const total = rows.length;
+        const n = stat?.n ?? 0;
         const base: CellValue[] = [
           field.label + (field.unit ? ` (${field.unit})` : ''),
           fieldTypeLabel(field.type),
@@ -247,23 +248,23 @@ exportRouter.get(
           total - n,
           total > 0 ? Math.round((n / total) * 100) : 0,
         ];
-
-        // Les indicateurs de position n'ont de sens que sur du quantitatif.
-        if (field.type !== 'number' && field.type !== 'integer') {
-          return [...base, null, null, null, null, null];
-        }
-        const numbers = rows
-          .map((row) => row.values[field.key] ?? null)
-          .map((v) => (typeof v === 'number' ? v : Number(v)))
-          .filter((v) => Number.isFinite(v));
-        const stats = summarize(numbers);
+        const summary = stat?.chart === 'histogram' ? stat.summary : null;
+        const counts =
+          stat?.chart === 'categories'
+            ? stat.categories
+                .map((c) => `${c.label} ${c.count} (${String(c.percent).replace('.', ',')} %)`)
+                .join(' ; ') + (stat.multiple ? ' — plusieurs réponses possibles' : '')
+            : null;
         return [
           ...base,
-          stats?.mean ?? null,
-          stats?.sd ?? null,
-          stats?.median ?? null,
-          stats?.min ?? null,
-          stats?.max ?? null,
+          summary?.mean ?? null,
+          summary?.sd ?? null,
+          summary?.median ?? null,
+          summary?.q1 ?? null,
+          summary?.q3 ?? null,
+          summary?.min ?? null,
+          summary?.max ?? null,
+          counts,
         ];
       }),
     };
@@ -303,14 +304,19 @@ exportRouter.get(
 
     const slides: ChartSlide[] = [];
     for (const stat of stats) {
-      const manquants = stat.missing > 0 ? `, ${stat.missing} manquantes` : '';
-      const subtitle = `${stat.n} observations${manquants} · ${stat.section}`;
+      const plural = (n: number, word: string) => `${n} ${word}${n > 1 ? 's' : ''}`;
+      const manquants = stat.missing > 0 ? `, ${plural(stat.missing, 'manquante')}` : '';
+      const subtitle = `${plural(stat.n, 'observation')}${manquants} · ${stat.section}`;
 
       if (stat.chart === 'categories' && stat.categories.length > 0) {
         slides.push({
           title: stat.label + (stat.unit ? ` (${stat.unit})` : ''),
           subtitle,
           bars: stat.categories.map((c) => ({ label: c.label, value: c.count })),
+          // Les barres d'une variable à choix multiples additionnent plus de réponses que de dossiers : le dire.
+          note: stat.multiple
+            ? `Plusieurs réponses possibles : ${plural(stat.n, 'dossier renseigné')}, le total des barres peut dépasser ce nombre.`
+            : undefined,
         });
       } else if (stat.chart === 'histogram' && stat.bins.length > 0 && stat.n > 0) {
         const s = stat.summary;

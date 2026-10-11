@@ -53,6 +53,8 @@ export interface PatientExtractionReport {
   /** Message d'erreur si l'appel au modèle a échoué pour ce dossier. */
   llmError: string | null;
   usage: LlmUsage | null;
+  /** Le modèle qui a répondu pour ce dossier (null en règles seules ou si l'appel a échoué). */
+  model: string | null;
   fields: FieldOutcome[];
 }
 
@@ -140,11 +142,13 @@ export async function runExtractionForPatient(
   let invalid = 0;
   let llmError: string | null = null;
   let usage: LlmUsage | null = null;
+  let servedModel: string | null = null;
 
   if (mode !== 'rules' && remaining.length > 0) {
     try {
-      const result = await extractWithLlm(remaining, docs, template.name);
+      const result = await extractWithLlm(remaining, docs, template.name, template.fields);
       usage = result.usage;
+      servedModel = result.model;
       unverified = result.unverified.length;
       invalid = result.invalid.length;
 
@@ -200,6 +204,7 @@ export async function runExtractionForPatient(
     invalid,
     llmError,
     usage,
+    model: servedModel,
     fields,
   };
 }
