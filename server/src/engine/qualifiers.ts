@@ -84,7 +84,7 @@ const NOT_DOCUMENTED =
  */
 const AMBIGUOUS_AFTER = /^[\s:=]*anciens?\b|^[\s:=]*anciennes?\b/;
 const UNCERTAIN_AFTER =
-  /^[\s:=]*\?|\b(?:probables?|possibles?|suspecte?s?|suspicion|presumee?s?|douteu(?:x|se)s?|evoquee?s?|hypothetique|eventuel(?:le)?s?|a (?:confirmer|eliminer|exclure|discuter|evoquer|rechercher|verifier|preciser|explorer|documenter|objectiver)|non (?:confirmee?s?|exclue?s?|eliminee?s?|ecartee?s?)|pas (?:exclue?s?|eliminee?s?)|ne peut (?:etre )?(?:exclue?|eliminee?|ecartee?))\b/;
+  /^[\s:=]*\?|^\s*passi(?:f|ve|fs|ves)\b|\b(?:probables?|possibles?|suspecte?s?|suspicion|presumee?s?|douteu(?:x|se)s?|evoquee?s?|hypothetique|eventuel(?:le)?s?|a (?:confirmer|eliminer|exclure|discuter|evoquer|rechercher|verifier|preciser|explorer|documenter|objectiver)|non (?:confirmee?s?|exclue?s?|eliminee?s?|ecartee?s?)|pas (?:exclue?s?|eliminee?s?)|ne peut (?:etre )?(?:exclue?|eliminee?|ecartee?))\b/;
 
 /**
  * Hypothèse placée AVANT le terme, à trois mots au plus : « suspicion de diabète », « probable HTA », « recherche
@@ -109,7 +109,7 @@ const CONTRADICTION = /\b(?:mais|cependant|toutefois|neanmoins|pourtant|en revan
 
 /** Négation restreinte dans le temps : « pas de complication immédiate » ne dit rien des suivantes. */
 const RESTRICTED_AFTER =
-  /^\s*(?:[a-z-]+\s+)?(?:immediate?s?|precoces?|initiale?s?|initiaux|per-?\s?operatoires?|intra-?\s?operatoires?|anesthesiques?|a ce stade|pour le moment|pour l'instant|a court terme|jusqu'a present|a ce jour)\b/;
+  /^\s*(?:[a-z-]+\s+)?(?:immediate?s?|precoces?|initiale?s?|initiaux|per-?\s?operatoires?|intra-?\s?operatoires?|anesthesiques?|a ce stade|pour le moment|pour l'instant|a court terme|jusqu'a present|a ce jour|(?:connue?s?\s+)?avant (?:la grossesse|l'hospitalisation|l'admission|l'intervention|ce sejour|cet episode))\b/;
 
 /**
  * Épisode passé et clos, dans la proposition du terme : année précédée de « en » (« fébrile en 2019 »), « il y a
@@ -199,6 +199,10 @@ export function qualifyAnswer(foldedAnswer: string): Exclude<MentionStatus, 'aff
   if (/^\?+$/.test(s) || NOT_DOCUMENTED.test(s)) return 'not-documented';
   if (UNCERTAIN_AFTER.test(s) || /\?/.test(s)) return 'uncertain';
   // « Sevré » vaut pour toute la réponse : « oui, sevré depuis 2 ans » décrit un ancien fumeur.
+  // « Non prêt au sevrage », « sevrage envisagé », « aide au sevrage proposée » : le patient fume encore.
+  if (/\bsevrage\b/.test(s) && /\b(?:non|pas)\s+pret|\benvisag|\bpropos|\bsouhait|\baide au sevrage|\ben cours de sevrage|\bconsultation\b/.test(s)) {
+    return 'uncertain';
+  }
   if (/^(?:ex\b|ex-|arret\b)/.test(s) || /\b(?:sevree?s?|sevrage)\b/.test(s) || RULED_OUT_AFTER.test(s)) {
     return 'ruled-out';
   }
@@ -239,7 +243,14 @@ export function describeStatus(status: MentionStatus): string {
  * « au cours du séjour », « secondairement », « pic fébrile ». Une date seule ne suffit pas : l'entrée aussi est datée.
  */
 const LATER_IN_STAY =
-  /(?:\bj\s?[1-9]\d?\b|\bpost-?op|\bpostoperatoire|\bapres (?:l'intervention|l'operation|la chirurgie)|\bau cours (?:du sejour|de l'hospitalisation|de son sejour)|\bpendant (?:le sejour|l'hospitalisation|son sejour)|\ben cours de sejour|\bdurant (?:le|son) sejour|\bsecondairement|\bpic febrile|\bdans les suites)/;
+  /(?:\bj\s?[1-9]\d?\b|\bpost-?op|\bpostoperatoire|\bapres (?:l'intervention|l'operation|la chirurgie)|\bau cours (?:du sejour|de l'hospitalisation|de son sejour)|\bpendant (?:le sejour|l'hospitalisation|son sejour)|\ben cours de sejour|\bdurant (?:le|son) sejour|\bsecondairement|\bpic febrile|\bdans les suites|\b(?:baisse|chute|ascension|remontee|aggravation|normalisation|deglobulisation)\s+(?:de|du|des|a)\b|\bnadir\b)/;
+
+/**
+ * Indices d'une valeur antérieure à l'arrivée : « dernier bilan (octobre 2025) », « bilan antérieur », « valeur
+ * habituelle », « créatinine de base », « en ville », « pré-cure ».
+ */
+const BEFORE_STAY =
+  /(?:\bdernier bilan|\bbilan (?:anterieur|precedent|habituel|de ville|pre-?cure|pre-?therapeutique)|\bvaleurs? (?:habituelles?|de base|anterieures?)|\bde base\b|\bhabituel(?:le)?s?\b|\ben ville\b|\bpre-?cure\b|\bil y a \d+\s*(?:jours?|semaines?|mois|ans?)\b)/;
 
 /**
  * La mention `[start, end)` décrit-elle un moment postérieur à l'arrivée ? La phrase qui la précède et la proposition
@@ -255,5 +266,7 @@ export function laterInStay(folded: string, start: number, end: number): boolean
   let after = clauseAfter(folded, end);
   if (/^\d/.test(mention)) after = after.slice(0, after.search(/\d/) === -1 ? after.length : after.search(/\d/));
   const own = mention.length <= 25 ? mention + after : mention.slice(0, 12);
-  return LATER_IN_STAY.test(sentenceBefore(folded, start) + own);
+  const sentence = sentenceBefore(folded, start) + own;
+  // Une valeur antérieure à l'arrivée (« dernier bilan : créatinine 11 ») n'est pas plus l'état d'entrée.
+  return LATER_IN_STAY.test(sentence) || BEFORE_STAY.test(sentence);
 }

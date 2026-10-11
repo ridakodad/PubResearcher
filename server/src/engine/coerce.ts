@@ -593,6 +593,14 @@ function coerceNumber(
 ): CoerceResult {
   // « Séjour du 14/01/2024 au 21/01/2024 » : pour une durée en jours, la période donne la valeur. Toute autre date
   // n'est pas un nombre : la lire donnerait le jour du mois (14) pour une durée.
+  // En-tête de tableau « Leucocytes (/mm3) 9 800 » : l'unité entre parenthèses précède la valeur. Elle est replacée
+  // après le nombre, pour être contrôlée — et pour que le « 3 » de « mm3 » ne soit pas lu comme la valeur.
+  const header = /^\s*\(([^()]{1,24})\)\s*(.*)$/s.exec(text);
+  if (header && /[a-zµμ/%°]/i.test(header[1]!) && /\d/.test(header[2]!)) {
+    const rest = header[2]!;
+    const first = /^-?\d{1,3}(?:[ \u00a0\u202f]\d{3})+(?:[.,]\d+)?|^-?\d+(?:[.,]\d+)?/.exec(rest.trim());
+    text = first ? `${first[0]} ${header[1]!.trim()}` : `${rest} ${header[1]!.trim()}`;
+  }
   const days = unit && DAY_UNITS.has(fold(unit).trim()) ? dateSpanDays(text) : null;
   if (days !== null) text = String(days);
   else if (startsWithDate(text)) return { ok: false, reason: `« ${text} » est une date, pas une valeur numérique` };

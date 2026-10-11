@@ -102,3 +102,33 @@ describe('identifiant de dossier', () => {
     assert.equal(value('numero_dossier', 'IPP : inconnu'), null);
   });
 });
+
+describe('second jeu inédit : causes générales', () => {
+  test('unité entre parenthèses dans l’en-tête d’un tableau : jamais le « 3 » de « mm3 »', () => {
+    assert.notEqual(value('globules_blancs', 'Leucocytes (/mm3) 7 400 9 100'), 3);
+    assert.equal(value('globules_blancs', 'Leucocytes (G/L) 7,4 9,1'), 7.4);
+    assert.equal(read('hemoglobine', 'Hémoglobine (g/L) 124 110').hit, null, 'g/L pour une fiche en g/dL : signalé');
+  });
+
+  test('une valeur antérieure à l’arrivée n’est pas celle de l’entrée', () => {
+    assert.equal(value('creatinine', 'Dernier bilan (mars 2025) : créatinine 9 mg/L.'), null);
+    assert.equal(value('creatinine', 'Créatinine de base à 10 mg/L.'), null);
+  });
+
+  test('une évolution pendant le séjour n’est pas la valeur d’entrée', () => {
+    assert.equal(value('hemoglobine', "Puis baisse de l'hémoglobine à 10,2 g/dL, sans transfusion."), null);
+  });
+
+  test('« non prêt au sevrage » : le patient fume encore, ce n’est pas un « non »', () => {
+    assert.notEqual(value('tabagisme', 'Tabac : patiente non prête au sevrage.'), false);
+    assert.equal(value('tabagisme', 'Tabagisme sevré en 2018.'), false);
+  });
+
+  test('une négation limitée à l’avant-grossesse n’est pas un « non » sûr', () => {
+    assert.equal(value('hta', "Pas d'HTA connue avant la grossesse."), null);
+  });
+
+  test('le tabagisme passif n’est pas celui du patient', () => {
+    assert.equal(value('tabagisme', 'Conseils aux parents : éviction du tabagisme passif.'), null);
+  });
+});
