@@ -133,7 +133,7 @@ before(async () => {
   patientId = (JSON.parse(created.text) as { patient: { id: number } }).patient.id;
   const boundary = '----rtsecret';
   const body = Buffer.from(
-    `--${boundary}\r\nContent-Disposition: form-data; name="files"; filename="DUPONT_Jean_1962.txt"\r\nContent-Type: text/plain\r\n\r\nÂge : 54 ans\r\nSexe : féminin\r\nBiologie : syndrome inflammatoire à 12 mg/L.\r\n--${boundary}--\r\n`,
+    `--${boundary}\r\nContent-Disposition: form-data; name="files"; filename="DUPONT_Jean_1962.txt"\r\nContent-Type: text/plain\r\n\r\nPatiente : Mme MARCHAL Odile, tél. 06 98 76 54 32\r\nÂge : 54 ans\r\nSexe : féminin\r\nBiologie : syndrome inflammatoire à 12 mg/L.\r\n--${boundary}--\r\n`,
   );
   const uploaded = await new Promise<Reply>((resolve, reject) => {
     const url = new URL(base);
@@ -212,6 +212,8 @@ describe('la clé Anthropic ne sort jamais', () => {
     assert.match(sent, /Âge : 54 ans/, 'le texte du document, lui, est transmis : c’est le principe de ce mode');
     assert.doesNotMatch(sent, /SECRET-001/, 'le code du dossier ne part pas');
     assert.doesNotMatch(sent, /DUPONT|1962|\.txt/, 'le nom du fichier ne part pas');
+    assert.doesNotMatch(sent, /MARCHAL|Odile|06 98 76 54 32/, 'le nom et le téléphone écrits dans le document sont masqués avant l’envoi');
+    assert.match(sent, /\[NOM\]/);
   });
 
   test('ce qui part vers l’API pour la rédaction : des agrégats, jamais un code de dossier, un nom de fichier ou une valeur de texte libre', async () => {

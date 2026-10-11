@@ -6,6 +6,8 @@ import { clientIdentity, clientOptions, keyStore, type KeySource } from './api-k
 import { explainProblem, explainRefusedKey, problemOf } from './anthropic-errors.js';
 import { locateEvidence } from './llm-verify.js';
 import { quoteContradiction } from './quote-check.js';
+import { pseudonymize, type Pseudonymized } from './pseudonymize.js';
+import { makeSnippet } from './fold.js';
 import { estimateCost, type CostEstimate } from './pricing.js';
 import {
   buildOutputSchema,
@@ -34,6 +36,8 @@ import type { SourceDoc } from './rules.js';
 export const DEFAULT_MODEL = 'claude-opus-5-5';
 
 /** Modèle utilisé. Configurable, mais le défaut est le modèle recommandé. */
+/** Masquage des données identifiantes avant l'envoi à l'API : actif sauf `LLM_PSEUDONYMIZE=0`. */
+const pseudonymizeBeforeSending = process.env.LLM_PSEUDONYMIZE !== '0';
 const model = process.env.LLM_MODEL ?? DEFAULT_MODEL;
 
 /**
@@ -140,6 +144,8 @@ export interface LlmExtraction {
   usage: LlmUsage;
   /** Le modèle qui a réellement répondu : le repli côté serveur peut en désigner un autre que celui demandé. */
   model: string;
+  /** Données identifiantes remplacées avant l'envoi (noms, téléphones…), toutes natures confondues. */
+  masked?: number;
 }
 
 export class LlmError extends Error {
@@ -172,8 +178,13 @@ export async function extractWithLlm(
   }
 
   // Le modèle ne voit ni le code du dossier ni les noms de fichiers : les documents lui sont présentés sous des alias.
+  // Pseudonymisation locale avant tout envoi (LLM_PSEUDONYMIZE=0 la désactive) : le modèle ne lit que le texte masqué,
+  // et ses citations sont vérifiées sur ce même texte avant d'être ramenées au document d'origine.
+  const masks: (Pseudonymized | null)[] = usable.map((d) => (pseudonymizeBeforeSending ? pseudonymize(d.text) : null));
+  const sent = usable.map((d, i) => ({ ...d, text: masks[i]?.text ?? d.text }));
+
   const subset = fields.length < dictionary.length;
-  const documents = buildUserPrompt(usable.map((d, i) => ({ name: documentAlias(i), text: d.text })), maxCharsPerDocument);
+  const documents = buildUserPrompt(sent.map((d, i) => ({ name: documentAlias(i), text: d.text })), maxCharsPerDocument);
   const response = await callModel(
     anthropic,
     buildSystemPrompt(dictionary, templateName),
@@ -191,7 +202,16 @@ ${documents}`
     if (finding && typeof finding.document === 'string') finding.document = nameOf.get(finding.document.trim()) ?? finding.document;
   }
 
-  return interpret(fields, usable, response.parsed, response.usage, response.model);
+  const result = interpret(fields, sent, response.parsed, response.usage, response.model);
+  for (const found of result.values) {
+    const index = usable.findIndex((d) => d.id === found.evidence.documentId);
+    const mask = masks[index];
+    if (!mask) continue;
+    const range = mask.toOriginal(found.evidence.start, found.evidence.end);
+    found.evidence = { ...found.evidence, ...range, snippet: makeSnippet(usable[index]!.text, range.start, range.end) };
+  }
+  result.masked = masks.reduce((sum, mask) => sum + Object.values(mask?.counts ?? {}).reduce((a, b) => a + b, 0), 0);
+  return result;
 }
 
 interface ModelCall {
