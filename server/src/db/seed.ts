@@ -92,7 +92,11 @@ const DEFAULT_FIELDS: FieldInput[] = [
     extraction: {
       enabled: true,
       rules: [
-        { kind: 'label', labels: ["Date d'admission", 'Admission le', 'Admis le', 'Admise le', "Date d'entrée"], maxLength: 40 },
+        {
+          kind: 'label',
+          labels: ["Date d'admission", 'Admission le', 'Admis le', 'Admise le', "Date d'entrée", 'Entré le', 'Entrée le'],
+          maxLength: 40,
+        },
         { kind: 'dicom', tag: 'StudyDate' },
       ],
     },
@@ -110,7 +114,8 @@ const DEFAULT_FIELDS: FieldInput[] = [
         { kind: 'label', labels: ['Diabète', 'Diabete'], maxLength: 30 },
         {
           kind: 'keyword',
-          any: ['diabete', 'diabétique', 'diabetique'],
+          // Sigles usuels : « DT2 sous metformine », « DNID », « DID ».
+          any: ['diabete', 'diabétique', 'diabetique', 'dt1', 'dt2', 'dnid', 'did'],
           // Évite le faux positif sur « pas de diabète », très fréquent.
           none: NEGATIONS,
           skip: PROCHES,
@@ -216,10 +221,14 @@ const DEFAULT_FIELDS: FieldInput[] = [
           kind: 'keyword',
           any: ['fievre', 'febrile', 'fébrile'],
           none: [...NEGATIONS, 'apyre'],
+          // « Antécédents : pneumopathie fébrile » ne dit rien de la fièvre de ce séjour.
+          history: 'exclude',
           emit: true,
           emitIfNegated: false,
         },
       ],
+      // Une fièvre notée à un moment du séjour suffit, même si un autre compte rendu la dit absente.
+      select: 'any',
     },
   },
   {
@@ -231,7 +240,7 @@ const DEFAULT_FIELDS: FieldInput[] = [
     extraction: {
       enabled: true,
       rules: [
-        { kind: 'label', labels: ['Température', 'Temperature', 'T°', 'TC'], maxLength: 20 },
+        { kind: 'label', labels: ['Température', 'Temperature', 'Temp.', 'Temp', 'T°', 'TC', 'T'], maxLength: 20 },
         { kind: 'regex', pattern: '(\\d{2}[.,]\\d)\\s*°?\\s*c\\b' },
       ],
       postProcess: { min: 30, max: 45 },
@@ -318,6 +327,8 @@ const DEFAULT_FIELDS: FieldInput[] = [
           TDM: 'Scanner', scanner: 'Scanner', irm: 'IRM',
         },
       },
+      // Plusieurs examens de modalités différentes : toutes sont retenues.
+      select: 'any',
     },
   },
   {
@@ -331,6 +342,8 @@ const DEFAULT_FIELDS: FieldInput[] = [
         { kind: 'dicom', tag: 'StudyDate' },
         { kind: 'label', labels: ["Date de l'examen", "Date de l'imagerie"], maxLength: 40 },
       ],
+      // Plusieurs examens : le premier importé fait foi (les coupes d'un même examen portent la même date).
+      select: 'first',
     },
   },
 
@@ -359,8 +372,13 @@ const DEFAULT_FIELDS: FieldInput[] = [
         valueMap: {
           medical: 'Médical', chirurgie: 'Chirurgical', chirurgical: 'Chirurgical',
           operatoire: 'Chirurgical', endoscopie: 'Endoscopique', surveillance: 'Abstention',
+          // Gestes et traitements nommés plutôt que leur catégorie : « cholécystectomie », « antibiothérapie ».
+          ectomie: 'Chirurgical', laparotomie: 'Chirurgical', coelioscopi: 'Chirurgical', 'cœlioscopi': 'Chirurgical',
+          antibiotherapie: 'Médical', antibiotique: 'Médical',
         },
       },
+      // Traitements cités dans plusieurs documents : ils s'additionnent.
+      select: 'any',
     },
   },
   {
@@ -391,10 +409,14 @@ const DEFAULT_FIELDS: FieldInput[] = [
           kind: 'keyword',
           any: ['complication'],
           none: NEGATIONS,
+          // Une complication passée (« ATCD de complication ») n'est pas une complication de ce séjour.
+          history: 'exclude',
           emit: true,
           emitIfNegated: false,
         },
       ],
+      // Une complication rapportée dans un document suffit, même si un autre, antérieur, n'en signale pas.
+      select: 'any',
     },
   },
   {

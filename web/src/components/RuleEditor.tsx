@@ -248,6 +248,26 @@ export function RuleEditor({
               laisser la case vide distingue l’absence recherchée de la donnée manquante.
             </div>
           </div>
+
+          {fieldType === 'boolean' && (
+            <div className="field">
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  checked={rule.history === 'exclude'}
+                  onChange={(e) => onChange({ ...rule, history: e.target.checked ? 'exclude' : undefined })}
+                />
+                Ignorer les mentions placées dans les antécédents
+              </label>
+              <div className="field-hint">
+                Pour une variable de l’épisode en cours (fièvre, complication) : « Antécédents :
+                pneumopathie fébrile » ne dit rien de ce séjour. À laisser décoché pour une maladie
+                chronique, qui se documente justement dans les antécédents. Dans tous les cas, une
+                hypothèse (« suspicion de », « ? »), un épisode clos (« en 2019 », « résolutif ») ou
+                une mention « non renseigné » ne donnent jamais « Oui ».
+              </div>
+            </div>
+          )}
         </>
       )}
 

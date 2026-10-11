@@ -510,6 +510,19 @@ export function DossierDetailPage() {
                                 {stored.evidence.documentName}
                               </button>
                             </div>
+                            {stored.evidence.alternatives && stored.evidence.alternatives.length > 0 && (
+                              <div style={{ marginTop: 5 }}>
+                                <span className="muted">
+                                  {stored.evidence.selection ?? 'Mentions discordantes'}. Autres valeurs trouvées :
+                                </span>{' '}
+                                {stored.evidence.alternatives.map((alt, i) => (
+                                  <span key={i}>
+                                    {i > 0 && ' ; '}
+                                    <strong>{displayValue(alt.value, field)}</strong> ({alt.documentName})
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </details>
                       )}

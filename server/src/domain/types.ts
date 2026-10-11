@@ -95,6 +95,14 @@ export interface KeywordRule {
    * interprétable à l'analyse.
    */
   emitIfNegated?: FieldValue;
+  /**
+   * Mentions placées dans les antécédents (« Antécédents : pneumopathie fébrile », « ATCD de … »).
+   *
+   * `include` (défaut) les compte : une maladie chronique — diabète, HTA — se documente précisément là.
+   * `exclude` les écarte : pour une variable de l'épisode en cours (fièvre, complication), une fièvre
+   * d'il y a cinq ans ne dit rien du séjour. Ne s'applique qu'aux variables oui/non.
+   */
+  history?: 'include' | 'exclude';
   source?: RuleSource;
   docKinds?: DocKind[];
   confidence?: number;
@@ -120,12 +128,29 @@ export interface FieldPostProcess {
   max?: number;
 }
 
+/**
+ * Valeur à retenir quand plusieurs mentions d'une même règle divergent (deux documents, deux phrases).
+ *
+ * - `first` : la première, dans l'ordre d'import des documents puis du texte ;
+ * - `last`  : la dernière, dans le même ordre ;
+ * - `max` / `min` : la plus grande / la plus petite (nombres et dates) ;
+ * - `any`   : oui/non — « Oui » dès qu'une mention l'affirme ; choix multiple — la réunion des valeurs.
+ *
+ * Sans réglage, des mentions discordantes ne donnent aucune valeur : la variable est signalée comme
+ * « valeurs discordantes » et se tranche à la main. Exception : le texte libre retient la première.
+ */
+export type SelectPolicy = 'first' | 'last' | 'max' | 'min' | 'any';
+
+export const SELECT_POLICIES: SelectPolicy[] = ['first', 'last', 'max', 'min', 'any'];
+
 /** Configuration d'extraction attachée à une variable. */
 export interface FieldExtraction {
   /** Désactive l'extraction automatique : la variable reste en saisie manuelle. */
   enabled: boolean;
   rules: ExtractionRule[];
   postProcess?: FieldPostProcess;
+  /** Valeur retenue quand les mentions divergent ; absent : la variable est signalée, sans valeur. */
+  select?: SelectPolicy;
 }
 
 export interface TemplateField {
@@ -202,6 +227,21 @@ export interface Evidence {
   end: number;
   /** Description lisible de la règle qui a produit la valeur. */
   rule: string;
+  /**
+   * Autres valeurs trouvées par la même règle, quand les mentions divergeaient et qu'une règle de sélection
+   * (`select`) a tranché : le relecteur voit qu'il y avait un choix, et lequel a été fait.
+   */
+  alternatives?: EvidenceAlternative[];
+  /** Comment la valeur a été choisie parmi des mentions discordantes, en clair. */
+  selection?: string;
+}
+
+/** Valeur écartée au profit de celle retenue, avec sa source. */
+export interface EvidenceAlternative {
+  value: FieldValue;
+  documentId: number;
+  documentName: string;
+  snippet: string;
 }
 
 /**
@@ -219,6 +259,11 @@ export interface Rejection {
   reason: string;
   /** Description lisible de la règle qui l'a trouvée. */
   rule: string;
+  /**
+   * Mentions discordantes (« 12,6 » ici, « 8,1 » là, ou « favorable puis décès ») : la variable reste vide et
+   * aucune règle de repli n'est essayée — choisir entre deux valeurs écrites revient au relecteur.
+   */
+  conflict?: boolean;
 }
 
 /**

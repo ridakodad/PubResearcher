@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import './zod-fr.js';
 import { normalizePatientCode } from './patient-code.js';
-import { FIELD_TYPES } from '../domain/types.js';
+import { FIELD_TYPES, SELECT_POLICIES, type SelectPolicy } from '../domain/types.js';
 
 const docKind = z.enum(['pdf', 'docx', 'image', 'dicom', 'text', 'unknown']);
 const ruleSource = z.enum(['text', 'dicom', 'filename']);
@@ -68,6 +68,7 @@ const keywordRule = z.object({
   skipWindow: z.number().int().min(0).max(500).optional(),
   emit: fieldValue,
   emitIfNegated: fieldValue.optional(),
+  history: z.enum(['include', 'exclude']).optional(),
   source: ruleSource.optional(),
   docKinds: z.array(docKind).optional(),
   confidence,
@@ -97,6 +98,7 @@ export const fieldExtractionSchema = z.object({
       max: z.number().finite().optional(),
     })
     .optional(),
+  select: z.enum(SELECT_POLICIES as [SelectPolicy, ...SelectPolicy[]]).optional(),
 });
 
 /** La clé sert d'en-tête de colonne CSV : on impose un identifiant simple. */

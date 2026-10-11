@@ -7,6 +7,7 @@ import type {
   FieldType,
   PatientSummary,
   RuleTestResult,
+  SelectPolicy,
   TemplateField,
 } from '../lib/types';
 import { Modal, Spinner, StringListEditor, useToast } from './ui';
@@ -480,6 +481,40 @@ function PostProcessEditor({
             de capturer « 120 ans d’évolution » comme un âge.
           </div>
         )}
+
+        <div className="field" style={{ marginTop: 12 }}>
+          <label htmlFor="post-select">Si plusieurs mentions divergent</label>
+          <select
+            id="post-select"
+            value={draft.extraction.select ?? ''}
+            onChange={(e) =>
+              onChange({
+                extraction: {
+                  ...draft.extraction,
+                  select: e.target.value === '' ? undefined : (e.target.value as SelectPolicy),
+                },
+              })
+            }
+            style={{ maxWidth: 360 }}
+          >
+            <option value="">
+              {draft.type === 'text' ? 'Retenir la première (texte libre)' : 'Ne rien retenir : à trancher à la main'}
+            </option>
+            <option value="first">Retenir la première (ordre d’import)</option>
+            <option value="last">Retenir la dernière (ordre d’import)</option>
+            {(numeric || draft.type === 'date') && <option value="max">Retenir la plus grande</option>}
+            {(numeric || draft.type === 'date') && <option value="min">Retenir la plus petite</option>}
+            {draft.type === 'boolean' && <option value="any">« Oui » dès qu’une mention l’affirme</option>}
+            {draft.type === 'multi' && <option value="any">Réunir toutes les valeurs</option>}
+          </select>
+          <div className="field-hint">
+            Une même règle peut trouver la variable dans plusieurs documents — l’hémoglobine
+            d’entrée et celle de sortie. Par défaut, des valeurs différentes ne sont pas départagées
+            au hasard de l’ordre d’import : la variable reste vide et apparaît parmi les valeurs à
+            trancher. La valeur choisie par une règle de sélection garde dans sa justification la
+            trace des autres.
+          </div>
+        </div>
       </div>
     </details>
   );
@@ -589,15 +624,31 @@ function RuleTestBench({ draft, patients }: { draft: Draft; patients: PatientSum
                       <div style={{ marginTop: 3 }}>
                         {result.evidence.rule} — {result.evidence.documentName}
                       </div>
+                      {result.evidence.alternatives && result.evidence.alternatives.length > 0 && (
+                        <div style={{ marginTop: 3 }}>
+                          {result.evidence.selection ?? 'Mentions discordantes'}. Autres valeurs :{' '}
+                          {result.evidence.alternatives
+                            .map((alt) => `${displayValue(alt.value, { type: draft.type })} (${alt.documentName})`)
+                            .join(' ; ')}
+                        </div>
+                      )}
                     </div>
                   )}
                 </>
               ) : result.rejected && result.rejected.length > 0 ? (
                 <>
-                  <div>
-                    <strong>Une valeur a été trouvée, puis écartée.</strong> La règle a bien visé
-                    quelque chose ; c’est la valeur qui n’est pas utilisable.
-                  </div>
+                  {result.rejected[0]?.conflict ? (
+                    <div>
+                      <strong>Des valeurs différentes ont été trouvées.</strong> Aucune n’est retenue
+                      d’office : à trancher à la main, ou choisissez dans le post-traitement la valeur à
+                      retenir quand les mentions divergent.
+                    </div>
+                  ) : (
+                    <div>
+                      <strong>Une valeur a été trouvée, puis écartée.</strong> La règle a bien visé
+                      quelque chose ; c’est la valeur qui n’est pas utilisable.
+                    </div>
+                  )}
                   <ul className="small" style={{ margin: '6px 0 0', paddingLeft: '1.1em' }}>
                     {result.rejected.map((r, i) => (
                       <li key={i}>
