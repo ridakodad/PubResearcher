@@ -1,4 +1,4 @@
-# Rapport de validation — PubResearcher 1.5.0
+# Rapport de validation — PubResearcher 1.6.0
 
 *Établi le 9 octobre 2026 pour la version 1.1.0 (alors nommée « Research Tool »), complété le 10 octobre 2026 pour la 1.2.0 (changement de nom et refonte visuelle) et le 11 octobre 2026 pour la 1.3.0 (charte d'anonymisation devant l'import, page d'accueil publique : § 1.3 et § 13) pour la 1.4.0 (clé d'API de l'utilisateur, coût en dollars : § 1.4) et pour la 1.5.0 (guide « Activer Claude », présentation vidéo : § 1.5). Les mesures des § 3 à 8 sont celles de la **1.1.0** : la 1.2.0 ne modifie ni le moteur d'extraction, ni le schéma de la base, ni les routes de l'API (voir le [journal des versions](changelog.md)) ; ce qui a été **rejoué** pour elle, et ce qui ne l'a pas été, est au § 1.2 et au § 9. Les mesures du code et de l'interface de la 1.1.0 (§ 5 à 8) ont été faites sur la version compilée dans l'environnement décrit au § 2 ; la suite de tests et les versions de Node (§ 3) sur une copie neuve du dépôt. Les scripts qui produisent les chiffres (dossier `qa/`, cité dans tout le rapport) ont été écrits pour cet environnement de validation, avec des chemins absolus : **ils ne sont pas publiés dans ce dépôt** (§ 12).*
 
@@ -99,19 +99,39 @@ La 1.5.0 conduit l'utilisateur jusqu'à sa clé (page **Activer Claude** dans l'
 
 ### 1.6 Phase 1 : précision des règles, import de tableaux, PubMed officiel, version prête à l'emploi
 
-*(chiffres de la porte 1 à venir)*
+**Porte 1 — précision des règles sur des dossiers inédits** (fiche par défaut, « Règles seules », § 5.3) :
+
+| Jeu | Rôle | Précision | IC 95 % (Wilson) | Rappel |
+|---|---|---|---|---|
+| Premier jeu (20 dossiers, 59 documents), avant la phase 1 | référence | 82,1 % (215/262) | 77,0–86,2 % | 56,6 % |
+| Second jeu (20 dossiers, 56 documents), **jamais vu**, mesuré avant toute correction | **mesure de la porte** | **94,8 % (202/213)** | 91,0–97,1 % | 52,6 % |
+| Premier jeu, après mise au point | mise au point | 100 % (220/220) | — | 57,9 % |
+| Second jeu, après correction des causes générales | mise au point | 98,5 % (202/205) | — | 52,6 % |
+| Démonstration (24 dossiers) | non-régression | 100 % (476/476) | — | 93,3 % |
+
+L'objectif de la porte 1 était 95 % : il est **manqué de peu** (94,8 %, dont l'intervalle de confiance contient 95 %). Les
+onze erreurs du second jeu relevaient de six causes générales, corrigées depuis (unité entre parenthèses dans un
+en-tête de tableau, valeur antérieure à l'arrivée ou évolution pendant le séjour prise pour la valeur d'entrée,
+« non prêt au sevrage », négation limitée dans le temps, tabagisme passif) ; les trois erreurs restantes viennent d'un
+seul compte rendu scanné mal lu par l'OCR et d'un tableau de biologie à plusieurs dates. Une valeur fausse sur le
+second jeu après correction ne mesure plus l'outil : la prochaine certification demandera un **troisième jeu inédit**.
+Le rappel est volontairement plus bas qu'avant : dans le doute, la variable est laissée vide et signalée.
+
+Les mêmes contrôles qu'aux versions précédentes ont été rejoués : **1 044 tests** verts (exécution en série ; sous
+forte charge, les tests de délai du fil d'analyse peuvent dépasser leur budget de 400 ms, ils passent seuls), banc
+d'essai **119 / 119 corrects, 0 valeur fausse, 0 vide à tort**, typage du serveur et de l'interface, compilation.
 
 Ce qui change, et comment chaque changement est vérifié :
 
 | Changement | Vérification |
 |---|---|
-| Qualificatifs des mentions (hypothèse, absence établie, épisode passé, antécédent, non renseigné, négation contredite), mentions discordantes signalées et règles de sélection, réglages « Proposer sans remplir » et « Valeur à l'arrivée seulement », durées tirées d'une période, unité dans la cellule suivante, lettres de l'OCR, lignes de PDF coupées | `engine-qualifiers`, `engine-precision`, banc d'essai complété (§ 5.1), et une mesure sur des **dossiers fictifs inédits** (§ 5.3) : un premier jeu de 20 dossiers (59 documents) a servi à la mise au point ; la mesure finale se fait sur un **second jeu jamais vu** — *(chiffres de la porte 1 à venir)* |
-| Claude : citation qui doit contenir la valeur, modèle qui a répondu, consigne stable en mode mixte | `quote-check`, `llm` (faux serveur HTTP) — *(chiffres de la porte 1 à venir)* |
-| Pseudonymisation locale avant l'envoi à Claude | `pseudonymize` (motifs, positions ramenées au texte d'origine), `llm-secrets` (nom et téléphone absents du corps de la requête) — *(chiffres de la porte 1 à venir)* |
-| Import de tableaux de cohorte (`.xlsx`, CSV, TSV) | `table-read` (lecteurs, classeurs piégés, plafonds), `table-import` (simulation, écriture, conflits, provenance, empreinte du plan) — *(chiffres de la porte 1 à venir)* |
-| PubMed par les E-utilities, import RIS/nbib/BibTeX/CSV, diagramme de flux | `biblio-eutils` (vraies réponses d'`esearch`/`efetch` rejouées par un faux service), `biblio-import`, `biblio` ; une vraie recherche PubMed (appendicite, 1 052 notices) a servi à corriger le dédoublonnage — *(chiffres de la porte 1 à venir)* |
-| Export : synthèse Excel, pourcentages des choix multiples, CSV sans unité dans les clés, option sans libellé | `research-io`, `pipeline` — *(chiffres de la porte 1 à venir)* |
-| Version prête à l'emploi (archives par système) | `data-dir` ; `scripts/package/smoke-test.mjs` sous Linux (profil vide, `PATH` sans Node.js, sans réseau) ; Windows et macOS : construites et inspectées, essai confié au flux GitHub Actions — *(chiffres de la porte 1 à venir)* |
+| Qualificatifs des mentions (hypothèse, absence établie, épisode passé, antécédent, non renseigné, négation contredite), mentions discordantes signalées et règles de sélection, réglages « Proposer sans remplir » et « Valeur à l'arrivée seulement », durées tirées d'une période, unité dans la cellule suivante, lettres de l'OCR, lignes de PDF coupées | `engine-qualifiers`, `engine-precision`, banc d'essai complété (§ 5.1), et une mesure sur des **dossiers fictifs inédits** (§ 5.3) : un premier jeu de 20 dossiers (59 documents) a servi à la mise au point ; la mesure finale sur un **second jeu jamais vu** (§ 1.6) : 94,8 % de précision |
+| Claude : citation qui doit contenir la valeur, modèle qui a répondu, consigne stable en mode mixte | `quote-check`, `llm` (faux serveur HTTP) — verts |
+| Pseudonymisation locale avant l'envoi à Claude | `pseudonymize` (motifs, positions ramenées au texte d'origine), `llm-secrets` (nom et téléphone absents du corps de la requête) — verts |
+| Import de tableaux de cohorte (`.xlsx`, CSV, TSV) | `table-read` (lecteurs, classeurs piégés, plafonds), `table-import` (simulation, écriture, conflits, provenance, empreinte du plan) — verts |
+| PubMed par les E-utilities, import RIS/nbib/BibTeX/CSV, diagramme de flux | `biblio-eutils` (vraies réponses d'`esearch`/`efetch` rejouées par un faux service), `biblio-import`, `biblio` ; une vraie recherche PubMed (appendicite, 1 052 notices) a servi à corriger le dédoublonnage — verts |
+| Export : synthèse Excel, pourcentages des choix multiples, CSV sans unité dans les clés, option sans libellé | `research-io`, `pipeline` — verts |
+| Version prête à l'emploi (archives par système) | `data-dir` ; `scripts/package/smoke-test.mjs` sous Linux (profil vide, `PATH` sans Node.js, sans réseau) ; Windows et macOS : construites et inspectées, essai confié au flux GitHub Actions — verts |
 
 ## 2. Environnement de test
 
@@ -189,7 +209,7 @@ Aucun test automatisé ne pilote l'interface : celle-ci est validée par les scr
 
 ### 5.1 Ce qui est mesuré : un banc d'essai synthétique
 
-`engine-benchmark.test.ts` : **des phrases cliniques courantes, rédigées à la main par les auteurs du moteur, dont la bonne réponse est connue**, appliquées à la fiche livrée par défaut (22 variables) — 88 en 1.1.0 (**88 / 88 corrects, 0 valeur fausse, 0 vide à tort**), complétées en phase 1 par des hypothèses, absences établies, antécédents, « non renseigné », négations contredites, lettres de l'OCR, notations de température et options multiples *(chiffres de la porte 1 à venir)*. La condition d'arrêt du test est « aucune valeur fausse ». Pour les variables « Proposer sans remplir » (imagerie, traitement), le banc lit la détection elle-même ; un test à part vérifie que la fiche livrée les **propose** sans les remplir.
+`engine-benchmark.test.ts` : **des phrases cliniques courantes, rédigées à la main par les auteurs du moteur, dont la bonne réponse est connue**, appliquées à la fiche livrée par défaut (22 variables) — 88 en 1.1.0 (**88 / 88 corrects, 0 valeur fausse, 0 vide à tort**), complétées en phase 1 par des hypothèses, absences établies, antécédents, « non renseigné », négations contredites, lettres de l'OCR, notations de température et options multiples : **119 / 119 corrects, 0 valeur fausse, 0 vide à tort**. La condition d'arrêt du test est « aucune valeur fausse ». Pour les variables « Proposer sans remplir » (imagerie, traitement), le banc lit la détection elle-même ; un test à part vérifie que la fiche livrée les **propose** sans les remplir.
 
 **Ce chiffre ne dit presque rien de la précision sur vos dossiers.** Le corpus est écrit par ceux qui ont écrit les règles ; il sert à (1) empêcher qu'un faux positif corrigé réapparaisse (« homme » lu « Féminin » parce qu'il contient « mme » ; « CRP < 5 » lu 5), (2) dire noir sur blanc ce que les règles ne savent pas faire, (3) donner un point de départ.
 
@@ -207,7 +227,18 @@ Si l'une d'elles change de résultat, le test échoue et force à mettre cette d
 
 ### 5.3 Comptes rendus inédits (phase 1)
 
-Pour sortir des phrases écrites par les auteurs des règles, la fiche par défaut est appliquée, en « Règles seules », à des dossiers fictifs complets que les règles n'ont pas vus, et comparée à la réponse attendue pour chaque variable. **Précision** : parmi les valeurs remplies, la part juste ; **rappel** : parmi les valeurs attendues, la part trouvée ; une valeur seulement proposée (« Proposer sans remplir ») ou signalée n'est pas une valeur remplie. Un premier jeu (20 dossiers, 59 documents) a servi à corriger les règles (durées tirées d'une période, unité dans la cellule suivante, options contenues dans une autre, lignes de PDF coupées, variables d'arrivée et de synthèse, numéro de dossier) : c'est désormais un jeu de **mise au point**, dont les chiffres ne mesurent plus l'outil. La mesure se fait sur un **second jeu, jamais vu** pendant la mise au point : *(protocole et chiffres de la porte 1 à venir)*.
+Pour sortir des phrases écrites par les auteurs des règles, la fiche par défaut est appliquée, en « Règles seules », à des dossiers fictifs complets que les règles n'ont pas vus, et comparée à la réponse attendue pour chaque variable. **Précision** : parmi les valeurs remplies, la part juste ; **rappel** : parmi les valeurs attendues, la part trouvée ; une valeur seulement proposée (« Proposer sans remplir ») ou signalée n'est pas une valeur remplie. Un premier jeu (20 dossiers, 59 documents) a servi à corriger les règles (durées tirées d'une période, unité dans la cellule suivante, options contenues dans une autre, lignes de PDF coupées, variables d'arrivée et de synthèse, numéro de dossier) : c'est désormais un jeu de **mise au point**, dont les chiffres ne mesurent plus l'outil. La mesure se fait sur un **second jeu, jamais vu** pendant la mise au point.
+
+Protocole. Chaque jeu a été écrit par un agent distinct de ceux qui ont modifié les règles, sans accès au code des
+règles ni aux autres jeux : 20 patients fictifs, 2 à 4 documents chacun, de spécialités variées, en texte (dont
+Windows-1252), Word et PDF avec de vrais tableaux, et trois scans légèrement bruités et inclinés ; la réponse attendue
+de chaque variable suit des conventions écrites à l'avance (épisode de référence, valeur d'entrée pour la biologie,
+tabagisme actif, imagerie et traitements réalisés pendant l'épisode…), identiques pour les deux jeux. Les dossiers sont
+importés par l'API, une passe « Règles seules » est lancée, et chaque variable est classée : juste, fausse, remplie à
+tort, manquée, signalée, vide à juste titre. Les deux variables en texte libre (antécédents, motif) ne sont pas
+comptées ; la créatinine convertie de µmol/L admet ±0,2 mg/L. Le second jeu a été mesuré **une seule fois avant toute
+correction** : c'est ce chiffre (§ 1.6) qui vaut mesure. Limites : dossiers fictifs, écrits par des modèles et non par
+des cliniciens ; 20 dossiers par jeu ; une seule fiche (la fiche par défaut).
 
 ### 5.4 Ce que vaut l'extraction sur vos dossiers
 

@@ -2,6 +2,74 @@
 
 Le format suit l'ordre des versions, de la plus récente à la plus ancienne ; l'historique git de ce dépôt commence à la 1.2.0, les versions antérieures n'y sont décrites qu'ici. Les numéros de version sont ceux de `package.json` ; le rapport « Méthodes et traçabilité » consigne la version qui a produit un jeu de données.
 
+## 1.6.0 — 11 octobre 2026
+
+**Des valeurs plus sûres, sans rien installer.** Le moteur ne lit plus « oui » dans une hypothèse ni dans un antécédent, ne départage plus au hasard deux valeurs discordantes ; le tableau que l'équipe tenait déjà s'importe ; PubMed fonctionne sans réglage ; une archive par système s'ouvre d'un double-clic, sans Node.js ni connexion.
+
+**Changements à connaître**
+
+- **Mentions discordantes** : deux mentions différentes d'une même variable (« Hb 12,6 » dans un compte rendu, « Hb 8,1 » dans un autre) ne donnent plus la première trouvée : la variable reste vide et signalée « valeurs discordantes », à trancher à la main, sauf si la fiche indique quelle valeur retenir (« Si plusieurs mentions divergent »). Les fiches existantes ne sont pas modifiées : ce sont elles qui signaleront le plus.
+- **Revue bibliographique** : PubMed passe par l'API officielle du NCBI (E-utilities), gratuite et sans jeton. `APIFY_PUBMED_ACTOR` est retiré ; `APIFY_TOKEN` ne sert plus qu'à Google Scholar, en option.
+- **Envoi à Claude** : le texte est pseudonymisé sur le poste avant l'envoi (`LLM_PSEUDONYMIZE=0` pour le désactiver).
+- **CSV en clés techniques** : les noms de colonne ne portent plus l'unité (`temperature`, et non `temperature (°C)`) : à reprendre dans un script qui lisait l'ancien nom.
+- **Réglages contrôlés au démarrage** : `TABLE_MAX_*`, `BIBLIO_PUBMED_MAX`, `BIBLIO_IMPORT_MAX_MB`, `NCBI_TIMEOUT_MS` ; une valeur hors bornes arrête le démarrage.
+- **Base** : deux migrations (2 : import de tableaux ; 3 : journal de recherche PRISMA-S), appliquées seules au démarrage. Une version 1.5.0 refuse ensuite cette base : sauvegardez avant la mise à jour.
+
+### Extraction par les règles
+
+- **Qualificatifs des mentions** oui/non, dans leur proposition (leur phrase pour les antécédents) : hypothèse (« suspicion de », « ? », « probable », « à éliminer », « évoqué ») et « non renseigné » ne donnent ni « Oui » ni « Non » ; absence établie (« éliminé », « ex-fumeur », « ancien fumeur », « sevré ») vaut « Non » ; épisode passé et clos (« fébrile en 2019 », « gestationnel », « résolutif ») n'est pas actuel ; négation contredite (« pas de … mais … ») ou restreinte (« immédiate ») n'est pas un « Non » sûr. Les mentions écartées restent visibles.
+- **Toutes les mentions** : une règle lit toutes ses mentions dans tous les documents ; pour une variable oui/non, libellés et mots-clés sont mis en commun. Règle de sélection par variable : la première ou la dernière (ordre d'import), la plus grande, la plus petite, « Oui » dès qu'une mention l'affirme, ou la réunion des valeurs ; la justification garde alors les autres valeurs trouvées, et la confiance baisse. Un choix unique qui cite plusieurs options (« favorable puis décès ») est signalé.
+- **Nouveaux réglages** : « Ignorer les mentions placées dans les antécédents » (règle mot-clé) ; « Proposer sans remplir » (variables de synthèse : examens réalisés, traitements reçus — les mentions sont proposées, une modalité DICOM remplit toujours) ; « Valeur à l'arrivée seulement » (les mentions « à J4 », « en postopératoire », « au cours du séjour » sont écartées).
+- **Lecture** : unité entre parenthèses dans un en-tête de tableau (« Leucocytes (/mm3) 9 800 ») replacée après la valeur et contrôlée ; valeur antérieure à l'arrivée (« dernier bilan », « de base ») ou évolution pendant le séjour (« baisse de l'hémoglobine à… ») écartée des variables d'arrivée ; « non prêt au sevrage » n'est pas un « non » ; négation limitée dans le temps (« pas d'HTA connue avant la grossesse ») et tabagisme passif ne donnent pas de valeur ; durée en jours tirée d'une période (« Séjour du 14/01 au 21/01 ») et une date jamais lue comme un nombre ; unité écrite dans la cellule suivante d'un tableau, contrôlée ; unité à barre inconnue (« Hmol/L ») signalée ; lettre substituée par l'OCR à un chiffre (« 2O », « 6l ») écartée ; « 38°5 » vaut 38,5 ; correspondances d'options de la plus longue à la plus courte ; ligne de PDF coupée au milieu d'une négation recollée ; numéro de dossier sans débris d'OCR.
+- **Fiche par défaut** (nouvelles bases) : sigles du diabète (DT1, DT2, DNID, DID), « Entré(e) le », « T 38°5 » ; fièvre et complications de l'épisode en cours ; bilan d'entrée lu à l'arrivée ; imagerie et traitement proposés sans remplir.
+
+### Extraction par Claude
+
+- Une valeur n'est retenue que si sa citation la **contient** : un nombre ou une date doit y figurer, un « oui » ne peut pas reposer sur une citation qui nie, doute ou relègue au passé. La raison du rejet est gardée.
+- **Pseudonymisation locale** avant tout envoi : noms précédés d'une civilité ou d'un titre, champs « Nom » et « Prénom », dates de naissance, numéros de sécurité sociale, téléphones, adresses électroniques et postales, identifiants annoncés (IPP, NDA, N° de séjour) deviennent `[NOM]`, `[TÉLÉPHONE]`… Les citations sont vérifiées sur le texte masqué puis ramenées au document : l'extrait surligné reste celui du dossier. C'est une pseudonymisation, **pas une anonymisation**.
+- Le **modèle qui a réellement répondu** (le repli côté serveur peut en désigner un autre) est celui que nomment la valeur, la passe et le coût ; tarif des identifiants datés.
+- Mode « Règles puis Claude » : la consigne décrit toujours la fiche entière et reste en cache d'un dossier à l'autre.
+
+### Import de tableaux de cohorte
+
+- *Dossiers patients › Importer un tableau (Excel, CSV)* : `.xlsx`, CSV, TSV ; cinq étapes — fichier, feuille et ligne d'en-tête, colonne des codes et correspondances proposées, **simulation** (valeurs à écrire, refusées avec motif, conflits), écriture et bilan.
+- Jamais par-dessus une décision de relecteur ni une valeur extraite ou importée différente, sauf option explicite ; écriture refusée si les données ont changé depuis la simulation.
+- Provenance « Importé » partout : justification par fichier (téléchargeable, empreinte SHA-256), feuille, cellule, en-tête et contenu brut ; journal (import n°) ; rapport « Méthodes » (phrase, table des imports, limite). Une passe ne remplace pas une valeur importée ; un relecteur peut la confirmer ou la corriger ; la fiabilité ne la compte pas.
+- Lecteur `.xlsx` maison en lecture seule, dans les fils d'analyse isolés : formules jamais évaluées, macros et liaisons ignorées, plafonds `TABLE_MAX_ROWS`, `TABLE_MAX_COLUMNS`, `TABLE_MAX_CELLS`, `TABLE_MAX_XML_MB`, `TABLE_MAX_TOTAL_MB`. Un tableau déposé avec les comptes rendus renvoie vers l'import de tableau.
+
+### Revue bibliographique
+
+- **PubMed prêt à l'emploi** par les E-utilities : nombre total et traduction de l'équation consignés, toutes les notices (jusqu'à `BIBLIO_PUBMED_MAX`, 10 000) ou les N premières, découpage par dates au-delà de 9 999 résultats, 3 requêtes/s (10 avec `NCBI_API_KEY`), `NCBI_EMAIL`, nouvelles tentatives sur 429/5xx.
+- **Import de références** RIS, MEDLINE (`.nbib`), BibTeX, CSV (Embase, CENTRAL, Scopus, WoS, LiSSa, registres, Zotero…), base d'origine rangée dans sa colonne PRISMA ; `BIBLIO_IMPORT_MAX_MB`.
+- **Diagramme de flux juste** : relancer une recherche ne gonfle plus les notices identifiées ; identifiées par base de données, registre et autres méthodes (Scholar en fait partie) ; motif d'exclusion facultatif au tri sur titre et résumé.
+- **Journal de recherche PRISMA-S** : équation envoyée, traduction PubMed, fichier importé, résultats annoncés et récupérés, avertissements ; export CSV.
+- Dédoublonnage : des PMID différents, ou des DOI différents pour un rapprochement par titre, ne fusionnent plus deux notices. Export RIS : type de référence (JOUR, CONF, BOOK, CHAP…) et PMCID (C2).
+- Une passe dont toutes les sources échouent répond en erreur (502) et reste consignée ; Google Scholar ne reçoit plus les balises de champ PubMed.
+
+### Résultats et exports
+
+- Classeur Excel, feuille « Synthèse » : une valeur manquante n'est plus comptée comme un zéro ; mêmes calculs que l'écran et le diaporama ; quartiles et effectifs n (%).
+- Choix multiples : pourcentages sur les dossiers renseignés ; mention « plusieurs réponses possibles » à l'écran, dans le classeur et sur la planche.
+- Avertissement au-delà de 20 % de valeurs manquantes.
+- CSV : clés techniques sans unité ; option « sans le libellé des dossiers » (`deidentify=1`) ; journal d'audit : colonne `import`.
+
+### Version prête à l'emploi
+
+- `npm run package -- --target win-x64|mac-arm64|mac-x64|linux-x64|all` : une archive par système (Node.js officiel vérifié, dépendances de production, OCR hors ligne), reproductible, avec son empreinte SHA-256 ; lanceurs `PubResearcher.cmd`, `PubResearcher.command`, `pubresearcher.sh` ; `LISEZMOI.txt`.
+- Données dans le dossier de l'utilisateur (`%LOCALAPPDATA%\PubResearcher`, `~/Library/Application Support/PubResearcher`, `~/.local/share/pubresearcher`), jamais dans le dossier de l'application ; `DATA_DIR` l'emporte.
+- Archives **non signées** ; seule l'archive Linux a été essayée de bout en bout.
+
+### Tests et outillage
+
+- **1 044 tests** (828 en 1.5.0) ; banc d'essai du moteur : **119 / 119 corrects, 0 valeur fausse**.
+- **Porte 1** ([rapport de validation, § 1.6 et 5.3](validation.md)) : précision des règles mesurée sur 20 dossiers fictifs **jamais vus** (56 documents) avant toute correction — **94,8 %** (202/213, IC 95 % 91,0–97,1 %), contre 82,1 % avant la phase 1 sur un premier jeu ; objectif de 95 % manqué de peu. Les causes générales de ses erreurs sont corrigées depuis (98,5 % sur ce jeu, devenu jeu de mise au point) ; la prochaine certification demandera un troisième jeu inédit. Démonstration : précision 100 %, rappel 93,3 % (traitements désormais proposés, non remplis).
+- Nouveaux fichiers de test : `engine-qualifiers`, `engine-precision`, `quote-check`, `pseudonymize`, `table-read`, `table-import`, `biblio-eutils`, `biblio-import`, `data-dir` ; `env-check` compare le tableau des bornes du guide de l'administrateur au code.
+- Flux `.github/workflows/package.yml` : construction et essai des archives sur chaque système.
+
+### Documentation
+
+- Mis à jour : README, [Guide du chercheur](guide-chercheur.md) (import de tableaux, § 2.2 à 2.6, § 5, revue, limites, messages), [Guide de l'administrateur](guide-administrateur.md) (§ 2 version prête à l'emploi, § 3, § 4.3, 4.5, 4.6, 4.8), [Référence de l'API](reference-api.md) (`/api/table-imports`, `/api/biblio/imports`, journal de recherche), [Revue bibliographique](revue-bibliographique.md), [Sécurité et données personnelles](securite-et-donnees.md) (§ 2.1 pseudonymisation), [Architecture](architecture.md), [Méthodes et reproductibilité](methodes-et-reproductibilite.md), [Rapport de validation](validation.md) (§ 1.6, § 5).
+
 ## 1.5.0 — 11 octobre 2026
 
 **Personne ne se perd en chemin vers sa clé, et la valeur de l'outil se voit dès l'inscription.**

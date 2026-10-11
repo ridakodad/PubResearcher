@@ -1,6 +1,6 @@
 # Documentation
 
-Version 1.5.0 · octobre 2026 · en français, comme l'interface.
+Version 1.6.0 · octobre 2026 · en français, comme l'interface.
 
 | Document | Pour qui | Contenu |
 |---|---|---|
@@ -14,7 +14,7 @@ Version 1.5.0 · octobre 2026 · en français, comme l'interface.
 | [Revue bibliographique](revue-bibliographique.md) | Chercheur | PubMed par l'API officielle du NCBI, Google Scholar en option, import RIS/nbib/BibTeX/CSV : sources, coût, dédoublonnage, tri, diagramme de flux PRISMA 2020, journal de recherche, exports |
 | [Page d'accueil](page-d-accueil.md) | Qui met en ligne le site public ; délégué à la protection des données | Le site `landing/` (inscription Google ou e-mail, parcours d'accueil, **charte d'anonymisation**), ce qu'il conserve et ne reçoit jamais, mise en service pas à pas (Supabase, Google, Vercel), variables, contrôles, limites, dépannage |
 | [Identité visuelle](identite-visuelle.md) | Qui modifie l'interface | Couleurs et contrastes mesurés, police, formes, composants (carte d'en-tête, rail, tuiles), thèmes clair et sombre, comment modifier la charte |
-| [Journal des versions](changelog.md) | Tous | Ce qui a changé de la 1.0.0 à la 1.5.0, dont les changements de comportement à connaître (écoute locale par défaut depuis la 1.1.0 ; clé d'API de l'utilisateur et modèle par défaut Claude Opus 5.5 depuis la 1.4.0) |
+| [Journal des versions](changelog.md) | Tous | Ce qui a changé de la 1.0.0 à la 1.6.0, dont les changements de comportement à connaître (écoute locale par défaut depuis la 1.1.0 ; clé d'API de l'utilisateur et modèle par défaut Claude Opus 5.5 depuis la 1.4.0) |
 
 Les captures (`img/`) montrent les 24 dossiers fictifs de démonstration (`npm run demo`) ; la relecture y est simulée.
 
