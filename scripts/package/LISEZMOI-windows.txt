@@ -7,6 +7,16 @@ les documents scannés (la reconnaissance de texte fonctionne hors ligne). Inter
 qu'aux fonctions qui l'annoncent : remplissage par Claude, recherche bibliographique.
 
 
+0. Essayer tout de suite, sans vos données
+------------------------------------------
+
+  Le dossier « Dossiers fictifs (démonstration) », à côté de ce fichier, contient 24 patients
+  fictifs (comptes rendus Word et PDF, bilans, images DICOM). Une fois l'application ouverte :
+  page « Dossiers patients » › « Importer » › choisissez ce dossier (ou glissez-le dans la page),
+  puis lancez l'extraction. Vous pourrez ensuite tout parcourir : relecture, résultats, exports.
+  Ces dossiers ne contiennent aucune donnée réelle ; supprimez-les quand vous le souhaitez.
+
+
 1. Démarrer
 -----------
 

@@ -25,6 +25,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const here = path.join(root, 'scripts', 'package');
+const DEMO_DIR = 'Dossiers fictifs (démonstration)';
 
 /** Version de Node.js embarquée : la dernière 22.x au moment de l'écriture (même majeure que `engines`). */
 const DEFAULT_NODE_VERSION = '22.23.3';
@@ -498,6 +499,13 @@ async function main() {
 
     const vars = { VERSION: pkg.version, NODE_VERSION: opts.nodeVersion, TARGET: target, COMMIT: source.commit };
     const executables = writeLaunchers(spec, stageDir, vars);
+
+    // 24 dossiers fictifs, prêts à glisser dans « Dossiers patients » : de quoi parcourir l'outil avant ses propres données.
+    // Sans shell : le nom du dossier contient des espaces et des parenthèses.
+    run(process.execPath, ['--import', 'tsx', path.join('server', 'scripts', 'generate-demo.ts'), path.join(stageDir, DEMO_DIR)], {
+      cwd: root,
+      shell: false,
+    });
     if (spec.os !== 'win32') executables.push(path.join('app', nodeRel));
 
     const entries = listEntries(stageDir, executables);

@@ -10,6 +10,16 @@ Choisir la bonne archive : « mac-arm64 » pour les Mac Apple (M1, M2, M3, M4…
 « mac-x64 » pour les Mac Intel (menu Pomme › À propos de ce Mac › « Puce » ou « Processeur »).
 
 
+0. Essayer tout de suite, sans vos données
+------------------------------------------
+
+  Le dossier « Dossiers fictifs (démonstration) », à côté de ce fichier, contient 24 patients
+  fictifs (comptes rendus Word et PDF, bilans, images DICOM). Une fois l'application ouverte :
+  page « Dossiers patients » › « Importer » › choisissez ce dossier (ou glissez-le dans la page),
+  puis lancez l'extraction. Vous pourrez ensuite tout parcourir : relecture, résultats, exports.
+  Ces dossiers ne contiennent aucune donnée réelle ; supprimez-les quand vous le souhaitez.
+
+
 1. Démarrer
 -----------
 
