@@ -1,0 +1,59 @@
+# Version prête à l'emploi : une archive par système, construite et essayée sur le système lui-même.
+#
+# Chaque cible est empaquetée sur son propre système (et non toutes depuis Linux) pour que l'essai qui suit lance
+# vraiment le Node.js et le module natif de l'archive : démarrage, /api/health, import d'un PDF scanné et d'une photo
+# lus par l'OCR hors ligne, emplacement des données, arrêt. Les archives non signées sont ensuite téléchargeables
+# depuis l'onglet « Actions » (artefacts), avec leur fichier .sha256.
+name: Paquets prêts à l'emploi
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: win-x64
+            os: windows-latest
+          - target: mac-arm64
+            os: macos-15
+          - target: mac-x64
+            os: macos-15-intel
+          - target: linux-x64
+            os: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # Dépendances complètes (compilation) ; l'archive, elle, ne reçoit que celles de production.
+      - run: npm ci
+
+      - name: Empaquetage
+        run: npm run package -- --target ${{ matrix.target }}
+
+      - name: Essai de l'archive
+        shell: bash
+        run: |
+          archive=$(ls dist-packages/PubResearcher-*-${{ matrix.target }}.zip dist-packages/PubResearcher-*-${{ matrix.target }}.tar.gz 2>/dev/null | head -n 1)
+          node scripts/package/smoke-test.mjs "$archive"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PubResearcher-${{ matrix.target }}
+          path: |
+            dist-packages/PubResearcher-*
+          if-no-files-found: error
+          retention-days: 30

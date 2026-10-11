@@ -1,3 +1,6 @@
 # Les lanceurs gardent leurs fins de ligne d'origine : CRLF pour Windows, LF pour macOS et Linux.
 lancer.bat -text
 lancer.command text eol=lf
+# Modèles des lanceurs de la version prête à l'emploi : LF dans le dépôt ; scripts/package.mjs écrit PubResearcher.cmd
+# en CRLF au moment de l'empaquetage.
+scripts/package/* text eol=lf

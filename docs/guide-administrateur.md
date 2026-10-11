@@ -6,13 +6,53 @@ Installer, configurer, exposer, sauvegarder, mettre à jour et dépanner l'outil
 
 | | |
 |---|---|
-| **Node.js** | **22.13 ou plus récent.** Essayé sous 22.13.0, 22.22.2, 22.23.3, 24.21.0 et 26.11.1 : la suite complète y passe (voir le [rapport de validation](validation.md#versions-de-node)). Le stockage utilise le module SQLite intégré à Node, qui n'existe pas avant 22.5 et ne s'emploie sans option de lancement qu'à partir de 22.13. Sur une version plus ancienne, l'outil s'arrête avec une phrase qui dit quoi installer |
+| **Node.js** | **Aucun pour la version prête à l'emploi** (§ 2.1), qui fournit le sien. Depuis les sources : **22.13 ou plus récent.** Essayé sous 22.13.0, 22.22.2, 22.23.3, 24.21.0 et 26.11.1 : la suite complète y passe (voir le [rapport de validation](validation.md#versions-de-node)). Le stockage utilise le module SQLite intégré à Node, qui n'existe pas avant 22.5 et ne s'emploie sans option de lancement qu'à partir de 22.13. Sur une version plus ancienne, l'outil s'arrête avec une phrase qui dit quoi installer |
 | **Système** | Essayé sous **Linux** seulement. Rien dans le code n'est propre à un système et aucun module n'est à compiler (pas de chaîne C++, pas de Visual Studio), mais macOS et Windows n'ont pas été essayés |
 | **Mémoire** | 1 Go suffit pour quelques centaines de dossiers ordinaires. **Prévoyez 2 Go** si des Word ou des PDF très volumineux sont possibles : la lecture d'un Word de 100 000 paragraphes (283 Ko) a porté le serveur à 1,03 Go dans l'essai de fichiers hostiles. Grandes cohortes : § 8 (860 Mo mesurés après 5 000 dossiers) |
 | **Disque** | Les fichiers d'origine sont conservés tels quels : prévoyez leur taille, plus ~11 Mo de base par millier de dossiers |
 | **Navigateur** | Navigateur récent. Vérifié sous Chromium ; Firefox et Safari n'ont pas été testés |
 
 ## 2. Installer et lancer
+
+### 2.1 Version prête à l'emploi (sans Node.js)
+
+Une archive par système, à décompresser puis double-cliquer : **rien à installer, aucune connexion au premier lancement**.
+
+| Système | Archive | Lanceur |
+|---|---|---|
+| Windows 10/11, 64 bits | `PubResearcher-<version>-win-x64.zip` | `PubResearcher.cmd` |
+| macOS 11 ou plus, puce Apple (M1…) | `PubResearcher-<version>-mac-arm64.zip` | `PubResearcher.command` (ou `PubResearcher.app`, après le premier lancement) |
+| macOS 11 ou plus, Intel | `PubResearcher-<version>-mac-x64.zip` | idem |
+| Linux x86-64 (glibc) | `PubResearcher-<version>-linux-x64.tar.gz` | `./pubresearcher.sh` |
+
+Chaque archive (75 à 82 Mo) contient le dossier `PubResearcher/` : le lanceur, un `LISEZMOI.txt` (démarrage, données, sauvegarde, mise à jour), et `app/` — le Node.js officiel de la même majeure que `engines` (22.23.3, vérifié contre `SHASUMS256.txt` de nodejs.org), le serveur et l'interface compilés, les seules dépendances de production, dont le module natif de rendu des PDF scannés **propre à ce système** (`@napi-rs/canvas-…`) et les données de langue française de l'OCR (`@tesseract.js-data/fra`) : la lecture des scans fonctionne hors ligne. Un fichier `.sha256` accompagne chaque archive.
+
+Le lanceur démarre le Node.js fourni (celui du poste, s'il existe, n'est pas utilisé), ouvre le navigateur dès que l'outil répond, et rouvre seulement le navigateur si l'outil tourne déjà. Fermer la fenêtre arrête l'outil proprement. `PUBRESEARCHER_NO_BROWSER=1` : pas de navigateur (serveur). Toutes les variables du § 4 s'appliquent (`PORT`, `DATA_DIR`, `HOST`…).
+
+**Données : jamais dans le dossier de l'application**, qu'une mise à jour remplace entièrement. Par défaut, le dossier de données de l'utilisateur (§ 3) ; `DATA_DIR` l'emporte toujours. Une base créée depuis les sources (`./data`) se reprend en copiant ce dossier, outil arrêté, à cet emplacement (ou en désignant l'ancien par `DATA_DIR`).
+
+**Paquets non signés.** Les archives ne portent pas (encore) de signature d'éditeur Windows ni de notarisation Apple : le système avertit au premier lancement.
+
+- **Windows** : avant d'extraire, clic droit sur le `.zip` › Propriétés › cocher **Débloquer** › OK, puis « Extraire tout… ». Sans cela, SmartScreen (« Windows a protégé votre ordinateur ») demande **Informations complémentaires › Exécuter quand même**, ou l'avertissement « Éditeur inconnu » demande **Exécuter**. Le `node.exe` fourni est celui de nodejs.org, signé par la fondation OpenJS.
+- **macOS 14 et avant** : clic droit (ou Ctrl+clic) sur `PubResearcher.command` › **Ouvrir** › Ouvrir, une seule fois. **macOS 15 et après** : double-clic, refus, puis Réglages Système › Confidentialité et sécurité › **Ouvrir quand même** (mot de passe). Le lanceur lève ensuite la marque de téléchargement (`com.apple.quarantine`) sur tout le dossier, pour que le moteur et ses modules ne soient pas bloqués un à un ; un administrateur peut le faire d'avance : `xattr -dr com.apple.quarantine PubResearcher`. `PubResearcher.app` ouvre `PubResearcher.command` dans le Terminal ; lancée avant toute autorisation, macOS l'exécute depuis une copie isolée (« translocation ») et elle renvoie alors vers `PubResearcher.command`.
+
+**Mise à jour** : outil fermé, sauvegarde (§ 6, ou copie du dossier de données outil arrêté), puis remplacer le dossier `PubResearcher/` par celui de la nouvelle archive (le numéro de version est dans son nom). Les données restent où elles sont et la base est migrée au démarrage (§ 7). Pas de mise à jour automatique. Les scripts `npm run backup`/`restore` ne sont pas dans l'archive : sauvegardez en copiant le dossier de données **outil arrêté** (§ 3).
+
+*Vérifié* sous Linux : archive décompressée dans un dossier neuf, profil utilisateur vide, `PATH` sans Node.js, sans réseau (espace de noms réseau isolé) : démarrage, `/api/health`, import d'un PDF scanné et d'une photo de compte rendu lus par l'OCR, données dans `~/.local/share/pubresearcher`, arrêt ordonné. Les archives Windows et macOS ont été construites et inspectées (binaires de la bonne plateforme) mais **pas encore lancées** sur ces systèmes : le flux GitHub Actions ci-dessous le fait.
+
+### 2.2 Produire les archives
+
+```bash
+npm ci                                       # dépendances complètes : la compilation en a besoin
+npm run package -- --target linux-x64        # ou win-x64, mac-arm64, mac-x64, all (séparées par des virgules)
+node scripts/package/smoke-test.mjs dist-packages/PubResearcher-1.5.0-linux-x64.tar.gz   # essai, sur le système de l'archive
+```
+
+Le script (`scripts/package.mjs`) compile, télécharge Node.js (`--node-version`, 22.23.3 par défaut ; gardé dans `.package-cache/`, revérifié à chaque usage), installe les dépendances de production dans une copie de travail avec `npm ci --omit=dev --workspace server --os=… --cpu=…` (npm 10 ou plus : c'est ce qui place le module natif **de la cible** même depuis un autre système), retire ce qui ne sert pas à l'exécution (cartes de sources, déclarations TypeScript, constructions de pdf.js pour navigateur), puis écrit l'archive et son `.sha256` dans `dist-packages/` (`--out-dir`). L'archive est reproductible : fichiers triés, dates fixées à celle du dernier commit (`SOURCE_DATE_EPOCH` sinon), droits fixés (le `.command` reste exécutable). Toutes les cibles se construisent depuis un seul système ; l'essai, lui, demande le système de l'archive.
+
+Le flux `.github/workflows/package.yml` (lancement manuel, ou étiquette `v*`) construit chaque cible **sur son système** (Windows, macOS Apple et Intel, Ubuntu), l'essaie avec `smoke-test.mjs`, et dépose archives et empreintes comme artefacts.
+
+### 2.3 Depuis les sources
 
 ```bash
 npm ci               # ou « npm install » ; reproduit exactement les versions du verrou (environ 290 Mo)
@@ -40,7 +80,15 @@ Un seul processus sert l'API et l'interface compilée. Au démarrage, l'outil af
 
 ## 3. Où sont les données
 
-Tout est dans **`DATA_DIR`** (par défaut `./data` à la racine du projet).
+Tout est dans **`DATA_DIR`**. Par défaut : `./data` à la racine du projet depuis les sources ; pour la version prête à l'emploi (§ 2.1), le dossier de données de l'utilisateur, hors du dossier de l'application :
+
+| Système | Dossier par défaut (version prête à l'emploi) |
+|---|---|
+| Windows | `%LOCALAPPDATA%\PubResearcher` |
+| macOS | `~/Library/Application Support/PubResearcher` |
+| Linux | `$XDG_DATA_HOME/pubresearcher`, sinon `~/.local/share/pubresearcher` |
+
+L'outil affiche le dossier retenu au démarrage (« Données : … »).
 
 ```
 DATA_DIR/
@@ -87,7 +135,7 @@ $env:PORT=4100; $env:DATA_DIR="D:\etude-x"; npm start
 
 | Variable | Défaut | Rôle |
 |---|---|---|
-| `DATA_DIR` | `./data` | Dossier des données (base + fichiers) |
+| `DATA_DIR` | `./data` (sources) ; dossier de l'utilisateur (version prête à l'emploi, § 3) | Dossier des données (base + fichiers) |
 | `DB_PATH` | `$DATA_DIR/research-tool.db` | Emplacement de la base, si distinct |
 | `MAX_UPLOAD_BYTES` | 200 Mo | Taille maximale d'un fichier (1 Ko à 100 Go) |
 | `MAX_REQUEST_BYTES` | 2 Go | Taille maximale d'un envoi, tous fichiers confondus |
