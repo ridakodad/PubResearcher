@@ -139,12 +139,31 @@ export interface Evidence {
   rule: string;
 }
 
-/** Origine d'une valeur : règle, modèle de langage, saisie manuelle, ou absente. */
-export type ValueSource = 'auto' | 'llm' | 'manual' | 'empty';
+/**
+ * Justification d'une valeur importée d'un tableau de cohorte : fichier conservé, empreinte, feuille, cellule,
+ * en-tête et contenu brut. Ni extraction, ni relecture.
+ */
+export interface ImportEvidence {
+  kind: 'import';
+  importId: number;
+  fileName: string;
+  sha256: string;
+  sheet: string | null;
+  cell: string;
+  header: string;
+  raw: string;
+}
 
-/** Ce que la machine avait proposé avant la décision d'un relecteur. */
+export function isImportEvidence(evidence: Evidence | ImportEvidence | null | undefined): evidence is ImportEvidence {
+  return evidence !== null && evidence !== undefined && (evidence as ImportEvidence).kind === 'import';
+}
+
+/** Origine d'une valeur : règle, modèle de langage, relecteur, import d'un tableau, ou absente. */
+export type ValueSource = 'auto' | 'llm' | 'manual' | 'import' | 'empty';
+
+/** Ce que la machine (ou un tableau importé) avait proposé avant la décision d'un relecteur. */
 export interface ValueOrigin {
-  source: 'auto' | 'llm';
+  source: 'auto' | 'llm' | 'import';
   value: FieldValue;
 }
 
@@ -153,7 +172,7 @@ export interface RecordValue {
   value: FieldValue;
   source: ValueSource;
   confidence: number | null;
-  evidence: Evidence | null;
+  evidence: Evidence | ImportEvidence | null;
   updatedAt: string;
   origin: ValueOrigin | null;
   reviewedAt: string | null;
@@ -179,7 +198,7 @@ export interface OutOfBounds {
   max: number | string | null;
 }
 
-export type EventAction = 'extract' | 'unset' | 'edit' | 'confirm' | 'clear' | 'release';
+export type EventAction = 'extract' | 'unset' | 'edit' | 'confirm' | 'clear' | 'release' | 'import';
 
 export interface ValueEvent {
   id: number;
@@ -193,6 +212,7 @@ export interface ValueEvent {
   newValue: FieldValue;
   newSource: string | null;
   runId: number | null;
+  importId: number | null;
 }
 
 export interface ExtractionRun {
@@ -274,7 +294,7 @@ export type FieldStats =
 
 export interface CompletenessField {
   key: string; label: string; section: string; required: boolean;
-  auto: number; llm: number; manual: number; empty: number; rate: number;
+  auto: number; llm: number; manual: number; imported: number; empty: number; rate: number;
 }
 
 /** Moteur employé pour une passe d'extraction. */
@@ -404,7 +424,7 @@ export interface ExtractionRow {
   lastExtractionAt: string | null;
   filled: number;
   total: number;
-  bySource: { auto: number; llm: number; manual: number };
+  bySource: { auto: number; llm: number; manual: number; import: number };
   /** Valeurs renseignées sans document justificatif : saisies à la main. */
   sansJustification: number;
   documents: ExtractionDocument[];
@@ -586,4 +606,147 @@ export interface QualityReport {
   patientsReviewed: number;
   overall: QualityCounts;
   fields: FieldQuality[];
+}
+
+/* ───────────────────────── Import de tableaux de cohorte ───────────────── */
+
+export type TableFormat = 'xlsx' | 'csv' | 'tsv';
+
+export interface TableImportOptions {
+  createPatients: boolean;
+  overwriteExtracted: boolean;
+  overwriteManual: boolean;
+}
+
+export interface TableImport {
+  id: number;
+  templateId: number | null;
+  templateName: string | null;
+  filename: string;
+  format: TableFormat;
+  size: number;
+  sha256: string;
+  sheet: string | null;
+  headerRow: number | null;
+  codeColumn: number | null;
+  mapping: { column: number; fieldId: number }[];
+  options: TableImportOptions;
+  status: 'draft' | 'done';
+  createdAt: string;
+  committedAt: string | null;
+  dataRows: number;
+  patientsCreated: number;
+  patientsExisting: number;
+  written: number;
+  unchanged: number;
+  rejected: number;
+  conflicts: number;
+}
+
+export interface TableSheetInfo {
+  name: string;
+  hidden: boolean;
+  rows: number;
+  columns: number;
+  merges: number;
+  formulas: number;
+  formulasWithoutValue: number;
+  error: string | null;
+  suggestedHeaderRow: number;
+  /** Premières lignes, en texte, pour choisir la ligne d'en-tête. */
+  preview: string[][];
+}
+
+export interface TableUploadResponse {
+  import: TableImport;
+  workbook: {
+    format: TableFormat;
+    delimiter: string | null;
+    charset: string | null;
+    date1904: boolean;
+    warnings: string[];
+    sheets: TableSheetInfo[];
+  };
+  previousImports: { id: number; filename: string; committedAt: string | null; written: number }[];
+}
+
+export interface TableColumn {
+  index: number;
+  letter: string;
+  text: string;
+  label: string;
+  unit: string | null;
+  knownUnit: string | null;
+  filled: number;
+  sample: string[];
+  distinct: number;
+}
+
+export interface TableColumnsResponse {
+  template: { id: number; name: string };
+  sheet: string;
+  headerRow: number;
+  dataRows: number;
+  columns: TableColumn[];
+  suggestion: {
+    codeColumn: number | null;
+    mapping: { column: number; fieldId: number; reason: string; unitWarning: string | null }[];
+  };
+}
+
+export interface TableImportRequest {
+  sheet: string | null;
+  headerRow: number;
+  codeColumn: number;
+  mapping: { column: number; fieldId: number }[];
+  options: TableImportOptions;
+  templateId?: number;
+  expectedPlan?: string;
+}
+
+interface TableCellIssue {
+  row: number;
+  cell: string;
+  code: string;
+  fieldId: number;
+  fieldLabel: string;
+  header: string;
+  raw: string;
+}
+
+export interface TableImportReport {
+  templateId: number;
+  sheet: string | null;
+  headerRow: number;
+  codeColumn: number;
+  options: TableImportOptions;
+  dataRows: number;
+  rows: { used: number; empty: number; skipped: number };
+  patients: { created: number; existing: number; createdCodes: string[] };
+  values: {
+    write: number;
+    replaceExtracted: number;
+    replaceManual: number;
+    unchanged: number;
+    empty: number;
+    rejected: number;
+    conflicts: number;
+  };
+  fields: {
+    fieldId: number;
+    fieldLabel: string;
+    column: number;
+    letter: string;
+    header: string;
+    write: number;
+    unchanged: number;
+    empty: number;
+    rejected: number;
+    conflicts: number;
+  }[];
+  rowIssues: { row: number; code: string | null; reason: string }[];
+  rejected: (TableCellIssue & { reason: string })[];
+  conflicts: (TableCellIssue & { incoming: FieldValue; current: FieldValue; currentSource: ValueSource; resolution: 'kept' | 'replaced' })[];
+  truncated: boolean;
+  planHash: string;
 }

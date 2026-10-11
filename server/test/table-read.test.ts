@@ -226,12 +226,12 @@ describe('lecteur .xlsx', () => {
   });
 
   test('archive piégée : taille annoncée au-delà du plafond, refusée avant toute décompression', () => {
-    // 40 Mo de XML répétitif, quelques dizaines de kilo-octets compressés.
-    const rows = '<row><c t="inlineStr"><is><t>xxxxxxxxxxxxxxxxxxxxxxxx</t></is></c></row>'.repeat(600_000);
+    // 3 Mo de XML répétitif, quelques kilo-octets compressés (le plafond est abaissé à 1 Mo pour le test).
+    const rows = '<row><c t="inlineStr"><is><t>xxxxxxxxxxxxxxxxxxxxxxxx</t></is></c></row>'.repeat(45_000);
     const buf = handmadeXlsx({ sheets: [{ name: 'S', xml: sheetXml(rows) }] });
-    assert.ok(buf.length < 2 * 1024 * 1024, `archive compacte (${buf.length} octets)`);
+    assert.ok(buf.length < 100 * 1024, `archive compacte (${buf.length} octets)`);
     const previous = process.env.TABLE_MAX_XML_MB;
-    process.env.TABLE_MAX_XML_MB = '8';
+    process.env.TABLE_MAX_XML_MB = '1';
     try {
       assert.throws(() => readXlsx(buf), /trop volumineux une fois décompressé .*TABLE_MAX_XML_MB/);
     } finally {
@@ -241,7 +241,7 @@ describe('lecteur .xlsx', () => {
   });
 
   test('archive qui ment sur sa taille : la décompression s’arrête à la taille annoncée', () => {
-    const big = sheetXml('<row r="1"><c r="A1"><v>1</v></c></row>' + ' '.repeat(5_000_000));
+    const big = sheetXml('<row r="1"><c r="A1"><v>1</v></c></row>' + ' '.repeat(1_000_000));
     const buf = Buffer.from(handmadeXlsx({ sheets: [{ name: 'S', xml: big }] }));
     // Réécrit la taille décompressée annoncée de la feuille dans l'annuaire central : 100 octets.
     const name = Buffer.from('xl/worksheets/sheet1.xml');

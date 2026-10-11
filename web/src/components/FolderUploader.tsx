@@ -246,7 +246,8 @@ function FolderUploaderBody({ onDone, fixedPatient }: UploaderProps) {
           </button>
         </div>
         <div className="small muted" style={{ marginTop: 10 }}>
-          Formats acceptés : PDF, Word (.docx), images (JPEG, PNG, TIFF) et DICOM.
+          Formats acceptés : PDF, Word (.docx), images (JPEG, PNG, TIFF) et DICOM. Un tableau de cohorte (Excel,
+          CSV) s’importe avec « Importer un tableau », sur la page Dossiers patients.
         </div>
 
         <input

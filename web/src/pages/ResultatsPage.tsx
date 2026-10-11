@@ -152,7 +152,8 @@ export function ResultatsPage() {
                 `${countBySource(rows, 'auto') + countBySource(rows, 'llm')} restent à relire (` +
                 `${countBySource(rows, 'auto')} par règle` +
                 (countBySource(rows, 'llm') > 0 ? `, ${countBySource(rows, 'llm')} par Claude` : '') +
-                ')'
+                ')' +
+                (countBySource(rows, 'import') > 0 ? ` · ${countBySource(rows, 'import')} importées d’un tableau` : '')
               }
             />
           </div>
@@ -194,7 +195,7 @@ export function ResultatsPage() {
   );
 }
 
-function countBySource(rows: DatasetRow[], source: 'manual' | 'auto' | 'llm'): number {
+function countBySource(rows: DatasetRow[], source: 'manual' | 'auto' | 'llm' | 'import'): number {
   return rows.reduce(
     (sum, row) => sum + Object.values(row.sources).filter((s) => s === source).length,
     0,
@@ -276,6 +277,10 @@ function RawTable({ template, rows }: { template: TemplateWithFields; rows: Data
           Proposé par Claude
         </span>
         <span className="row" style={{ gap: 6 }}>
+          <span className="dot" style={{ background: 'var(--good)' }} />
+          Importé d’un tableau
+        </span>
+        <span className="row" style={{ gap: 6 }}>
           <span className="dot" style={{ background: 'var(--source-manual)' }} />
           Vérifié ou saisi à la main
         </span>
@@ -318,6 +323,8 @@ function RawTable({ template, rows }: { template: TemplateWithFields; rows: Data
                       ? { color: 'var(--source-manual)', label: 'Vérifié ou saisi à la main' }
                       : source === 'llm'
                         ? { color: 'var(--source-llm)', label: 'Proposé par Claude' }
+                        : source === 'import'
+                          ? { color: 'var(--good)', label: 'Importé d’un tableau (non relu)' }
                         : source === 'auto'
                           ? { color: 'var(--source-rule)', label: "Règle d’extraction" }
                           : { color: 'var(--source-empty)', label: 'Non renseigné' };
@@ -450,6 +457,7 @@ function CompletenessPanel({
               <th style={{ width: '28%' }}>Taux de remplissage</th>
               <th className="num">Règle</th>
               <th className="num">Claude</th>
+              <th className="num">Importé</th>
               <th className="num">Vérifié</th>
               <th className="num">Vide</th>
             </tr>
@@ -470,11 +478,12 @@ function CompletenessPanel({
                 <td>
                   <Meter value={field.rate} />
                   <div className="small muted" style={{ marginTop: 4 }}>
-                    {field.rate} % ({field.auto + field.llm + field.manual}/{patientCount})
+                    {field.rate} % ({field.auto + field.llm + field.imported + field.manual}/{patientCount})
                   </div>
                 </td>
                 <td className="num">{field.auto}</td>
                 <td className="num">{field.llm || '—'}</td>
+                <td className="num">{field.imported || '—'}</td>
                 <td className="num">{field.manual}</td>
                 <td className="num">{field.empty || '—'}</td>
               </tr>

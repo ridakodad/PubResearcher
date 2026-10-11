@@ -301,6 +301,11 @@ function PatientResult({ row }: { row: ExtractionRow }) {
               <span className="dot" style={{ background: 'var(--source-llm)' }} /> {row.bySource.llm} par Claude
             </span>
           )}
+          {row.bySource.import > 0 && (
+            <span>
+              <span className="dot" style={{ background: 'var(--good)' }} /> {row.bySource.import} importées d’un tableau
+            </span>
+          )}
           {row.bySource.manual > 0 && (
             <span>
               <span className="dot" style={{ background: 'var(--source-manual)' }} /> {row.bySource.manual} à la main

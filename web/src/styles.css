@@ -1067,6 +1067,7 @@ tbody tr:hover .table-sticky-col { background: var(--surface-2); }
 .badge-manual { color: var(--text-primary); border-color: var(--border-strong); }
 .badge-llm { color: var(--series-2); border-color: var(--series-2); }
 .badge-empty { color: var(--text-muted); }
+.badge-import { color: var(--good-text); border-color: var(--good); }
 .badge-error { color: var(--critical); border-color: var(--critical); background: var(--critical-soft); }
 .badge-warn { color: var(--text-primary); border-color: var(--warning); }
 
@@ -1768,4 +1769,29 @@ td strong, td .truncate-wrap { overflow-wrap: anywhere; }
   .key-invite { flex-direction: column; }
   .guide-step { padding: var(--s3) var(--s4); }
   .key-input { flex-wrap: wrap; }
+}
+
+/* --- Import d'un tableau de cohorte ------------------------------------- */
+.stepper { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--s2); }
+.stepper li {
+  display: flex; align-items: center; gap: var(--s2); padding: 4px 12px 4px 4px;
+  border: 1px solid var(--border); border-radius: 999px; font-size: 0.84rem; color: var(--text-muted);
+}
+.stepper li.current { color: var(--text-primary); border-color: var(--brand); background: var(--brand-soft); font-weight: 600; }
+.stepper li.done { color: var(--text-secondary); }
+.stepper-num {
+  display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--surface-2); color: var(--text-secondary); font-size: 0.76rem; font-weight: 600;
+}
+.stepper li.current .stepper-num { background: var(--brand); color: var(--on-brand); }
+.stepper li.done .stepper-num { background: var(--surface-1); color: var(--good-text); border: 1px solid var(--border-strong); }
+.table-preview-set { border: 0; padding: 0; margin: 0; min-width: 0; }
+.table-preview-set legend { padding: 0; margin-bottom: var(--s1); font-size: 0.9rem; font-weight: 600; }
+.table-preview td { white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.table-preview tr.is-header td { background: var(--brand-soft); color: var(--text-primary); }
+.table-preview tr.is-above td { color: var(--text-muted); }
+.report-block > summary { cursor: pointer; padding: var(--s1) 0; }
+.import-evidence {
+  margin-top: 6px; padding: 8px 10px; background: var(--surface-2);
+  border-radius: var(--radius-sm); border-left: 3px solid var(--good);
 }
