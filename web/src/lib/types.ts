@@ -47,6 +47,8 @@ export interface KeywordRule {
   skipWindow?: number;
   emit: FieldValue;
   emitIfNegated?: FieldValue;
+  /** Mentions placées dans les antécédents : comptées (défaut) ou écartées (variable de l'épisode en cours). */
+  history?: 'include' | 'exclude';
   source?: RuleSource;
   docKinds?: DocKind[];
   confidence?: number;
@@ -65,10 +67,14 @@ export interface FieldPostProcess {
   max?: number;
 }
 
+/** Valeur retenue quand plusieurs mentions divergent ; absent : la variable est signalée, sans valeur. */
+export type SelectPolicy = 'first' | 'last' | 'max' | 'min' | 'any';
+
 export interface FieldExtraction {
   enabled: boolean;
   rules: ExtractionRule[];
   postProcess?: FieldPostProcess;
+  select?: SelectPolicy;
 }
 
 export interface TemplateField {
@@ -137,6 +143,10 @@ export interface Evidence {
   start: number;
   end: number;
   rule: string;
+  /** Autres valeurs trouvées par la même règle, quand une règle de sélection a tranché entre des mentions discordantes. */
+  alternatives?: { value: FieldValue; documentId: number; documentName: string; snippet: string }[];
+  /** Comment la valeur a été choisie parmi ces mentions. */
+  selection?: string;
 }
 
 /** Origine d'une valeur : règle, modèle de langage, saisie manuelle, ou absente. */
@@ -338,6 +348,8 @@ export interface Rejection {
   snippet: string;
   reason: string;
   rule: string;
+  /** Mentions discordantes : à trancher à la main, aucune règle de repli n'a été essayée. */
+  conflict?: boolean;
 }
 
 export interface RuleTestResult {
