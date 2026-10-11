@@ -8,7 +8,7 @@ L'interface web n'est qu'un client de cette API : tout ce qu'elle fait se fait a
 
 ## Sommaire
 
-[Conventions](#conventions) · [Accès et garde-fous](#accès-et-garde-fous) · [Santé](#santé) · [Dossiers patients](#dossiers-patients) · [Documents](#documents) · [Fiches d'exploitation](#fiches-dexploitation) · [Fiches remplies et extraction](#fiches-remplies-et-extraction) · [Analyses](#analyses) · [Exports](#exports) · [Revue bibliographique](#revue-bibliographique) · [Clé d'API Anthropic et coût](#clé-dapi-anthropic-et-coût) · [Rédaction assistée](#rédaction-assistée) · [Recettes](#recettes)
+[Conventions](#conventions) · [Accès et garde-fous](#accès-et-garde-fous) · [Santé](#santé) · [Dossiers patients](#dossiers-patients) · [Documents](#documents) · [Import de tableaux de cohorte](#import-de-tableaux-de-cohorte) · [Fiches d'exploitation](#fiches-dexploitation) · [Fiches remplies et extraction](#fiches-remplies-et-extraction) · [Analyses](#analyses) · [Exports](#exports) · [Revue bibliographique](#revue-bibliographique) · [Clé d'API Anthropic et coût](#clé-dapi-anthropic-et-coût) · [Rédaction assistée](#rédaction-assistée) · [Recettes](#recettes)
 
 ---
 
@@ -32,13 +32,13 @@ L'interface web n'est qu'un client de cette API : tout ce qu'elle fait se fait a
 | 401 | Mot de passe requis ou faux | `WWW-Authenticate: Basic realm="PubResearcher", charset="UTF-8"` |
 | 403 | Nom d'hôte non déclaré, ou requête d'écriture venue d'un autre site | `{ "error": "Nom d'hôte non autorisé (…). Pour y accéder sous ce nom, ajoutez-le à ALLOWED_HOSTS." }` |
 | 404 | Ressource ou route inconnue | `{ "error": "Dossier patient introuvable." }` ; `{ "error": "Route inconnue." }` |
-| 409 | Conflit (code déjà pris, recherche déjà en cours, jeton absent) | `{ "error": "…" }` |
+| 409 | Conflit (code déjà pris, recherche déjà en cours, jeton absent, import de tableau déjà confirmé, données changées depuis la simulation) | `{ "error": "…" }` ; `"code": "plan_changed"` pour le dernier cas |
 | 413 | Fichier, envoi ou corps JSON trop volumineux | message avec la limite ; pour un fichier ou un envoi, il nomme `MAX_UPLOAD_BYTES` ou `MAX_REQUEST_BYTES` ; le corps JSON a une limite fixe de 5 Mo |
 | 415 | Encodage non pris en charge : `charset` autre que UTF-8, ou `Content-Encoding` (compression) | `{ "error": "Type de contenu non pris en charge : attendu application/json en UTF-8, sans compression." }`. Un corps qui n'est pas du JSON (`text/plain`) n'est pas lu : la validation répond `400` |
-| 422 | Valeur hors des bornes de plausibilité (voir `PUT …/values`) | `{ "error": "…", "code": "out_of_bounds", "details": [ … ] }` |
+| 422 | Valeur hors des bornes de plausibilité (voir `PUT …/values`) ; tableau ou fichier de références illisible | `{ "error": "…", "code": "out_of_bounds", "details": [ … ] }` ; `"code"` : `table_unreadable`, `import_unreadable`, `import_empty` |
 | 429 | Trop d'essais de mot de passe ; ou Anthropic limite le débit pendant la vérification d'une clé (`PUT /api/llm/key`) | `Retry-After` en secondes (mot de passe) ; `{ "error": "…", "code": "api-key-refused" }` (clé) |
 | 500 | Erreur interne | `{ "error": "Erreur interne du serveur (référence a3f9c2d1). Le journal du serveur en donne le détail." }` — jamais de message SQL ni de chemin disque ; la référence retrouve la pile dans le journal du serveur |
-| 502 | `PUT /api/llm/key` : Anthropic injoignable, la clé n'a pas pu être vérifiée | `{ "error": "…", "code": "api-key-refused" }` |
+| 502 | `PUT /api/llm/key` : Anthropic injoignable, la clé n'a pas pu être vérifiée ; `POST /api/biblio/searches` : toutes les sources ont échoué | `{ "error": "…", "code": "api-key-refused" }` ; `{ "error": "…", "code": "all_sources_failed", "details": { searches, counts, prisma } }` |
 | 503 | `GET /api/health` : base inaccessible | `{ "status": "degraded", … }` |
 
 **Mise en cache.** Les réponses `/api/*` portent `Cache-Control: no-store` : des données de patients ne séjournent ni dans le cache du navigateur ni dans celui d'un intermédiaire. Seule exception, le flux de la rédaction assistée, qui impose `no-cache, no-transform` pour qu'aucun intermédiaire ne le tamponne.
@@ -132,6 +132,7 @@ Réponse `201` :
 - Les fichiers sont reçus **sur disque**, jamais en mémoire, et le dépôt provisoire est vidé quoi qu'il arrive (même sur une erreur 404 ou 400).
 - Le nom de stockage est un identifiant aléatoire suivi de l'extension du nom d'origine (au plus dix caractères alphanumériques) : aucune autre donnée du client ne construit un chemin. Le nom affiché perd toute composante de chemin et les caractères de contrôle ou de sens d'écriture.
 - Les noms de fichier sont lus en UTF-8 (`opératoire`, pas `opÃ©ratoire`).
+- Un tableau (`.xlsx`, `.xlsm`, `.xls`, `.ods`, `.csv`, `.tsv`) donne `status: "error"` avec un message qui renvoie à l'[import de tableau](#import-de-tableaux-de-cohorte) ; un CSV renommé en `.txt` reste un document texte.
 
 ### Autres routes
 
@@ -157,6 +158,40 @@ Réponse `201` :
 ```
 
 `kind` : `pdf`, `docx`, `image`, `dicom`, `text`, `unknown`. `parseStatus` : `ok`, `empty` (aucun texte), `error`, `pending`. `parseError` porte aussi les **avertissements** d'un import réussi (« Texte tronqué : … », « Lecture partielle : N pages non lues … »). `metadata` varie selon le format (`pageCount`, `textLayer`, `ocrApplied`, `ocrConfidence`, `ocrPages`, `ocrSkippedPages`, `width` et `height` d'une image, date EXIF, `pagesRead`, `pagesTruncated`, `truncatedBecause`…).
+
+---
+
+## Import de tableaux de cohorte
+
+Un tableau tenu par l'équipe (`.xlsx`, CSV, TSV ; une ligne par patient, une colonne par variable) verse ses valeurs dans une fiche. Quatre appels : recevoir, décrire les colonnes, simuler, écrire. Tant qu'il n'est pas écrit, l'import est un **brouillon** ; un brouillon de plus d'un jour est effacé au démarrage.
+
+| Méthode | Chemin | Corps | Réponse |
+|---|---|---|---|
+| `POST` | `/api/table-imports` | `multipart/form-data`, champ `file` (un seul ; `MAX_UPLOAD_BYTES`) | `201 { "import", "workbook", "previousImports" }` — le fichier est conservé sous `uploads/imports/` avec son empreinte SHA-256 et lu dans un fil isolé ; `workbook` : `format`, `delimiter`, `charset`, `date1904`, `warnings`, et par feuille `name`, `hidden`, `rows`, `columns`, `merges`, `formulas`, `formulasWithoutValue`, `error`, `suggestedHeaderRow`, `preview` (30 lignes × 40 colonnes, en texte) ; `previousImports` : imports confirmés du même fichier (même empreinte). `422 table_unreadable` : fichier vide, format non pris en charge (`.xls`, `.ods`, classeur chiffré : le message dit quoi faire), plafond `TABLE_MAX_*` atteint, aucune feuille lisible |
+| `GET` | `/api/table-imports[?templateId=:id]` | — | `200 { "imports": [TableImport] }` — imports **confirmés**, du plus récent au plus ancien |
+| `GET` | `/api/table-imports/:id` | — | `200 { "import": TableImport }` |
+| `GET` | `/api/table-imports/:id/file` | — | Le fichier d'origine, toujours en téléchargement (`attachment`, `nosniff`) |
+| `POST` | `/api/table-imports/:id/columns` | `{ "sheet"?, "headerRow", "templateId"? }` | `200 { "template", "sheet", "headerRow", "dataRows", "columns", "suggestion": { "codeColumn", "mapping" } }` — `columns` : par colonne `index`, `letter`, `text` (en-tête), unité lue dans l'en-tête, `filled`, `sample`, `distinct` |
+| `POST` | `/api/table-imports/:id/dry-run` | `TableImportInput` | `200 { "report" }` — **n'écrit rien** |
+| `POST` | `/api/table-imports/:id/commit` | `TableImportInput` + `"expectedPlan"` (le `planHash` de la simulation) | `200 { "import", "report" }` — `409 plan_changed` si ce qui serait écrit diffère de la simulation ; `409` si l'import est déjà confirmé |
+| `DELETE` | `/api/table-imports/:id` | — | `204` — abandonne un brouillon (ligne et fichier) ; `409` pour un import confirmé, qui justifie les valeurs qu'il a posées |
+
+`headerRow` commence à 1 ; `sheet` est absent ou `null` pour un CSV ; sans `templateId`, la fiche active.
+
+```json
+{
+  "sheet": "Cohorte", "headerRow": 1, "codeColumn": 0,
+  "mapping": [ { "column": 2, "fieldId": 5 }, { "column": 3, "fieldId": 12 } ],
+  "options": { "createPatients": true, "overwriteExtracted": false, "overwriteManual": false },
+  "expectedPlan": "3f9c…"
+}
+```
+
+`TableImportInput` : `codeColumn` (indice de la colonne des codes, à partir de 0), `mapping` (une variable par colonne, 2 000 au plus), `options` — `createPatients` (défaut `true` : crée les dossiers absents ; sinon leurs lignes sont écartées), `overwriteExtracted` (remplacer une valeur extraite ou importée différente), `overwriteManual` (remplacer une décision de relecteur) ; tous deux `false` par défaut : la valeur en place est gardée et comptée comme conflit.
+
+`report` : `dataRows`, `rows` (`used`, `empty`, `skipped`), `patients` (`created`, `existing`, `createdCodes`), `values` (`write`, dont `replaceExtracted` et `replaceManual` ; `unchanged`, `empty`, `rejected`, `conflicts`), `fields` (bilan par colonne), `rowIssues` (ligne sans code, code invalide ou en double, dossier inconnu, avec le motif), `rejected` (cellule, valeur brute, motif), `conflicts` (valeur entrante, valeur en place et sa source, `kept` ou `replaced`), `truncated` (listes tronquées à mille entrées ; les compteurs restent exacts), `planHash`. Chaque cellule est convertie comme par l'extraction (décimales, dates, oui/non, options, bornes) ; l'unité de l'en-tête est contrôlée, le facteur `scale` ne s'applique pas.
+
+Une valeur écrite prend la source `import`, avec une justification de cellule (voir [Fiches remplies et extraction](#fiches-remplies-et-extraction)) et un événement `import` dans le journal. Une passe d'extraction ne la retire ni ne la remplace (sauf `overwriteManual`) ; `PUT …/values` peut la confirmer ou la corriger.
 
 ---
 
@@ -196,7 +231,8 @@ Réponse `201` :
       { "kind": "label", "labels": ["Âge", "Age"], "maxLength": 20 },
       { "kind": "regex", "pattern": "patient de (\\d{1,3}) ans" }
     ],
-    "postProcess": { "min": 0, "max": 120 }
+    "postProcess": { "min": 0, "max": 120 },
+    "select": "first"
   }
 }
 ```
@@ -208,6 +244,9 @@ Réponse `201` :
 | `type` | `text`, `number`, `integer`, `date`, `boolean`, `enum`, `multi` |
 | `options` | Obligatoire (≥ 1) pour `enum` et `multi` ; 100 au plus, 120 caractères chacune |
 | `extraction.rules` | 30 au plus. Une fiche importée : 500 variables au plus |
+| `extraction.select` | Valeur retenue quand les mentions divergent : `first`, `last` (ordre d'import des documents, puis du texte), `max`, `min` (nombres, dates), `any` (oui/non : « Oui » dès qu'une mention l'affirme ; choix multiple : réunion des valeurs). Absent : la variable reste vide et la divergence est signalée (texte libre : la première) |
+| `extraction.suggestOnly` | `true` : variable de synthèse — les mentions trouvées sont proposées (valeur écartée, à valider), la variable n'est pas remplie, sauf par une règle DICOM |
+| `extraction.episode` | `"admission"` : les mentions datées plus tard dans le séjour (« à J4 », « au cours du séjour ») sont écartées |
 
 Règles (`kind`) :
 
@@ -215,7 +254,7 @@ Règles (`kind`) :
 |---|---|
 | `label` | `labels` (1 à 50, ≤ 200 caractères chacun), `maxLength` (1–500, défaut 120) |
 | `regex` | `pattern` (≤ 500 caractères, doit être une expression valide), `flags` (`gimsuy`), `group` (0–20, défaut 1) |
-| `keyword` | `any` (1 à 100 termes), `none`, `noneWindow` (0–500, défaut 40), `skip`, `skipWindow`, `emit` (valeur), `emitIfNegated` |
+| `keyword` | `any` (1 à 100 termes), `none`, `noneWindow` (0–500, défaut 40), `skip`, `skipWindow`, `emit` (valeur), `emitIfNegated`, `history` (`include` défaut, `exclude` : mentions placées dans les antécédents écartées ; variables oui/non) |
 | `dicom` | `tag` — mot-clé (`PatientAge`) ou code (`00101010`) |
 
 Communes : `source` (`text` \| `dicom` \| `filename`), `docKinds` (restreint aux natures de document listées), `confidence` (0–1). `postProcess` : `valueMap` (texte → option canonique), `scale` (facteur), `min`, `max` (bornes de plausibilité).
@@ -235,7 +274,7 @@ Les expressions régulières fournies par l'utilisateur sont **surveillées** : 
 }
 ```
 
-Fournir `sampleText` (≤ 200 000 caractères), `patientId`, ou les deux. Si rien n'est retenu, `rejected` liste (3 au plus) les valeurs trouvées puis écartées, avec la raison : seuil (`< 5`), hors bornes, type incompatible, motif trop complexe.
+Fournir `sampleText` (≤ 200 000 caractères), `patientId`, ou les deux. Si rien n'est retenu, `rejected` liste (3 au plus) les valeurs trouvées puis écartées, avec la raison : seuil (`< 5`), hors bornes, type incompatible, motif trop complexe, hypothèse ou mention écartée par un qualificatif, proposition d'une variable `suggestOnly` ; `"conflict": true` marque des **valeurs discordantes**. Quand `select` a tranché, `evidence` porte `selection` (la règle de choix, en clair) et `alternatives` (`[{ value, documentId, documentName, snippet }]`, 4 au plus).
 
 ---
 
@@ -266,10 +305,10 @@ La fiche remplie d'un dossier (la fiche active si `templateId` est omis). `400` 
 
 | Champ | Sens |
 |---|---|
-| `source` | `auto` (règle), `llm` (modèle), `manual` (décision d'un relecteur), `empty` |
+| `source` | `auto` (règle), `llm` (modèle), `import` (tableau de cohorte), `manual` (décision d'un relecteur), `empty` |
 | `confidence` | Indice **relatif**, pas une probabilité (voir le [guide du chercheur](guide-chercheur.md#6-relire)) |
-| `evidence` | Le document, l'extrait et la règle qui justifient une valeur automatique ; `null` pour une saisie |
-| `origin` | Ce que la machine avait proposé avant la décision humaine ; sert aux mesures de fiabilité. `null` si la valeur n'a pas été relue ou a été saisie de zéro |
+| `evidence` | Le document, l'extrait et la règle qui justifient une valeur automatique (`rule` : `Claude (<modèle qui a répondu>)` pour le modèle ; `selection` et `alternatives` quand une règle de sélection a tranché) ; pour une valeur importée, `{ "kind": "import", "importId", "fileName", "sha256", "sheet", "cell", "header", "raw" }` ; `null` pour une saisie |
+| `origin` | Ce que la machine (ou le tableau importé : `"source": "import"`) avait proposé avant la décision humaine ; sert aux mesures de fiabilité, dont les valeurs importées sont exclues. `null` si la valeur n'a pas été relue ou a été saisie de zéro |
 | `reviewedAt` | Date de la décision humaine |
 
 ### `PUT /api/records/:templateId/:patientId/values`
@@ -291,7 +330,7 @@ Enregistre les **décisions d'un relecteur**. Les valeurs sont marquées `manual
 | `mode` | Effet |
 |---|---|
 | `set` (défaut) | Fixe la valeur ; `null` la **vide** (elle reste vide aux passes suivantes) |
-| `confirm` | Valide telle quelle la valeur proposée par la machine (`400` s'il n'y en a pas) |
+| `confirm` | Valide telle quelle la valeur proposée par la machine ou importée d'un tableau (`400` s'il n'y en a pas) |
 | `release` | Retire la décision humaine : la prochaine passe pourra de nouveau remplir la variable |
 
 1 à 1 000 valeurs par appel, **appliquées dans une seule transaction**. Contrôles, par type :
@@ -326,13 +365,13 @@ Les événements d'une fiche, ou d'une seule variable, du plus récent au plus a
 {
   "events": [
     { "id": 508, "recordId": 3, "patientId": 3, "patientCode": "PAT-003", "fieldId": 2, "fieldKey": "age", "fieldLabel": "Âge",
-      "at": "2026-10-09T02:27:36.059Z", "action": "confirm", "oldValue": 22, "oldSource": "auto", "newValue": 22, "newSource": "manual", "runId": null },
+      "at": "2026-10-09T02:27:36.059Z", "action": "confirm", "oldValue": 22, "oldSource": "auto", "newValue": 22, "newSource": "manual", "runId": null, "importId": null },
     { "id": 45, "…": "…", "action": "extract", "oldValue": null, "oldSource": null, "newValue": 22, "newSource": "auto", "runId": 1 }
   ]
 }
 ```
 
-`action` : `extract` (posée par une passe), `unset` (retirée parce que plus trouvée), `edit`, `confirm`, `clear` (vidée), `release`. Le journal est **en ajout seul** : aucune route ne modifie ni ne supprime un événement ; ses lignes disparaissent avec le dossier, la variable ou la fiche concernés.
+`action` : `extract` (posée par une passe), `unset` (retirée parce que plus trouvée), `import` (posée par un import de tableau, `importId`), `edit`, `confirm`, `clear` (vidée), `release`. Le journal est **en ajout seul** : aucune route ne modifie ni ne supprime un événement ; ses lignes disparaissent avec le dossier, la variable ou la fiche concernés.
 
 ### `GET /api/records/runs[?limit=:n]`
 
@@ -350,7 +389,7 @@ Les passes d'extraction, de la plus récente à la plus ancienne (50 par défaut
 }
 ```
 
-`status` : `running`, `done`, `failed`. Une passe restée `running` parce que le serveur s'est arrêté pendant son exécution est marquée `failed` au redémarrage. `templateFingerprint` : SHA-256 de ce qui change le résultat d'une extraction au moment de la passe — clé, libellé, type, unité, caractère obligatoire, options, règles et post-traitements de chaque variable ; ni la section, ni la description, ni la position.
+`status` : `running`, `done`, `failed`. Une passe restée `running` parce que le serveur s'est arrêté pendant son exécution est marquée `failed` au redémarrage. `templateFingerprint` : SHA-256 de ce qui change le résultat d'une extraction au moment de la passe — clé, libellé, type, unité, caractère obligatoire, options, règles, post-traitements et réglages d'extraction (`select`, `suggestOnly`, `episode`) de chaque variable ; ni la section, ni la description, ni la position.
 
 ### `POST /api/records/extraction/run`
 
@@ -376,9 +415,9 @@ Tout est facultatif : sans `templateId`, la fiche active ; sans `patientIds`, to
 }
 ```
 
-- `status` d'un champ : `extracted`, `not-found`, `kept-manual` (déjà relu), `disabled`. `rejected` : la première valeur trouvée puis écartée (seuil, bornes, type), pour une variable restée vide.
-- `unverified` / `invalid` (modes `llm`, `hybrid`) : valeurs proposées par le modèle puis écartées faute de citation retrouvée, ou incompatibles avec la fiche. `usage` : jetons consommés (`inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`) ; `model` : le modèle interrogé ; `costUsd` : leur prix en dollars, facturé sur le compte Anthropic du titulaire de la clé (indicatif, arrondi au centième de cent ; `null` en mode `rules` ou pour un modèle absent du barème) ; `errors` : échecs du modèle par dossier — un échec n'annule ni les règles ni les dossiers suivants.
-- **Ce qu'une passe retire** : une variable qui n'est plus trouvée perd sa valeur automatique (événement `unset`), mais une passe ne retire que ce qu'elle a pu produire — `rules` ne retire que des valeurs `auto`, `llm` et `hybrid` retirent aussi des valeurs `llm` **quand l'appel au modèle a réussi** ; un appel en échec (`errors`) n'efface rien. Les valeurs relues (`manual`) ne sont retirées par aucune passe, sauf `overwriteManual`.
+- `status` d'un champ : `extracted`, `not-found`, `kept-manual` (déjà relu, ou importé d'un tableau), `disabled`. `rejected` : la première valeur trouvée puis écartée (seuil, bornes, type, valeurs discordantes, proposition d'une variable de synthèse), pour une variable restée vide.
+- `unverified` / `invalid` (modes `llm`, `hybrid`) : valeurs proposées par le modèle puis écartées faute de citation retrouvée **ou parce que la citation ne contient pas la valeur** (nombre ou date absents, « oui » appuyé sur une négation, un doute ou un passé), ou incompatibles avec la fiche. `usage` : jetons consommés (`inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`) ; `model` : le modèle **qui a répondu** (le repli côté serveur d'Anthropic peut en désigner un autre que `LLM_MODEL` ; plusieurs, séparés par des virgules, s'ils ont varié d'un dossier à l'autre), aussi par dossier dans `reports[].model` et dans la passe (`GET /api/records/runs`) ; `costUsd` : leur prix en dollars, calculé dossier par dossier au tarif du modèle qui a répondu, facturé sur le compte Anthropic du titulaire de la clé (indicatif, arrondi au centième de cent ; `null` en mode `rules` ou pour un modèle absent du barème) ; `errors` : échecs du modèle par dossier — un échec n'annule ni les règles ni les dossiers suivants.
+- **Ce qu'une passe retire** : une variable qui n'est plus trouvée perd sa valeur automatique (événement `unset`), mais une passe ne retire que ce qu'elle a pu produire — `rules` ne retire que des valeurs `auto`, `llm` et `hybrid` retirent aussi des valeurs `llm` **quand l'appel au modèle a réussi** ; un appel en échec (`errors`) n'efface rien. Les valeurs relues (`manual`) et importées (`import`) ne sont retirées par aucune passe, sauf `overwriteManual`.
 - **Atomicité** : pour chaque dossier, valeurs, journal et date de passe s'écrivent dans **une seule transaction**. Un arrêt brutal (`kill -9`, vérifié sur 25 passes interrompues à des instants aléatoires) au milieu d'une passe laisse chaque fiche exactement dans l'état d'avant ou d'après, jamais à moitié effacée. Une coupure de courant n'a pas été simulée.
 - `400` si le mode demande un modèle indisponible (« Extraction par Claude indisponible : … ») ou s'il n'y a aucun dossier ; `404` pour un `patientId` inconnu.
 
@@ -391,8 +430,8 @@ Toutes acceptent `?templateId=:id` (sinon la fiche active). Elles ne modifient r
 | Chemin | Contenu |
 |---|---|
 | `GET /api/analytics/dataset` | `{ template, rows, summary: { patients, fields, completeness } }` — un objet par dossier : `values`, `sources`, `confidences` indexés par **clé** de variable, `documentCount`, `filled` |
-| `GET /api/analytics/stats` | `{ template, patientCount, stats }` — par variable : `n`, `missing`, et selon le type `chart: "histogram"` (`summary` : n, moyenne, écart type, min, q1, médiane, q3, max ; `bins`), `"categories"` (effectifs ; chronologique pour les dates) ou `"none"` (texte libre : valeurs les plus fréquentes, pour l'écran ; elles ne sont **jamais** transmises à Claude) |
-| `GET /api/analytics/completeness` | `{ patientCount, fields: [{ key, label, section, required, auto, llm, manual, empty, rate }] }` |
+| `GET /api/analytics/stats` | `{ template, patientCount, stats }` — par variable : `n`, `missing`, et selon le type `chart: "histogram"` (`summary` : n, moyenne, écart type, min, q1, médiane, q3, max ; `bins`), `"categories"` (effectifs ; chronologique pour les dates ; `multiple: true` pour un choix multiple, dont les pourcentages portent sur les `n` dossiers renseignés) ou `"none"` (texte libre : valeurs les plus fréquentes, pour l'écran ; elles ne sont **jamais** transmises à Claude) |
+| `GET /api/analytics/completeness` | `{ patientCount, fields: [{ key, label, section, required, auto, llm, manual, imported, empty, rate }] }` |
 | `GET /api/analytics/extraction` | `{ template, rows, summary: { patients, emptyPatients, barrenDocuments, documents } }` — rendement par dossier et par fichier ; `barrenDocuments` : fichiers qui n'ont justifié aucune valeur |
 | `GET /api/analytics/quality` | `{ quality }` — fiabilité mesurée sur les relectures |
 
@@ -434,17 +473,17 @@ Toutes les routes acceptent `?templateId=:id`. Elles répondent en téléchargem
 
 | Chemin | Paramètres | Contenu |
 |---|---|---|
-| `GET /api/export/csv` | `delimiter` (`;` défaut, `,`), `decimal` (`,` ou `.` ; défaut : `,` avec `;`, `.` avec `,`), `booleans` (`numeric` défaut → `1`/`0`, `text` → `Oui`/`Non`), `labels=1` (en-têtes en clair) | Le jeu de données. UTF-8 **avec marque d'ordre des octets** (Excel affiche les accents). Premières colonnes : code dossier, libellé, nombre de documents. Choix multiple : options séparées par `\|`. Les cellules qui commencent par `=`, `+`, `-` ou `@` sont neutralisées pour Excel |
+| `GET /api/export/csv` | `delimiter` (`;` défaut, `,`), `decimal` (`,` ou `.` ; défaut : `,` avec `;`, `.` avec `,`), `booleans` (`numeric` défaut → `1`/`0`, `text` → `Oui`/`Non`), `labels=1` (en-têtes en clair, avec l'unité), `deidentify=1` (sans la colonne du libellé des dossiers) | Le jeu de données. UTF-8 **avec marque d'ordre des octets** (Excel affiche les accents). Premières colonnes : code dossier, libellé (sauf `deidentify=1`), nombre de documents ; en-têtes techniques = clés des variables, **sans unité**. Choix multiple : options séparées par `\|`. Les cellules qui commencent par `=`, `+`, `-` ou `@` sont neutralisées pour Excel |
 | `GET /api/export/dictionary.csv` | `delimiter` | `cle, libelle, section, type, unite, obligatoire, options, description, type_libelle` |
 | `GET /api/export/template.json` | — | La fiche, réimportable (`POST /api/templates/import`) |
-| `GET /api/export/xlsx` | `labels=1` (en-têtes en clair) | Classeur : feuille de données **typée** (dates, nombres), dictionnaire, synthèse de cohorte. Texte borné à 32 000 caractères par cellule |
-| `GET /api/export/pptx` | — | Diaporama de figures (formes natives, modifiables), une par variable à histogramme ou à modalités ayant au moins une valeur ; les variables en texte libre n'ont pas de planche |
+| `GET /api/export/xlsx` | `labels=1` (en-têtes en clair) | Classeur : feuille de données **typée** (dates, nombres), dictionnaire, synthèse de cohorte (mêmes calculs que `/api/analytics/stats` : renseignées, manquantes, moyenne, écart type, médiane, quartiles, extrêmes, effectifs n (%)). Texte borné à 32 000 caractères par cellule |
+| `GET /api/export/pptx` | — | Diaporama de figures (formes natives, modifiables), une par variable à histogramme ou à modalités ayant au moins une valeur ; les variables en texte libre n'ont pas de planche ; un choix multiple porte la mention « plusieurs réponses possibles » |
 | `GET /api/export/methods` | `format` (`md` défaut, `html`, `json`), `lang` (`fr` défaut, `en`) | Rapport « Méthodes et traçabilité » ; la variante HTML est autonome (CSP `default-src 'none'`) |
 | `GET /api/export/audit.csv` | `delimiter` | Le journal des modifications de valeur, du plus ancien au plus récent |
 
-Colonnes de `audit.csv` : `evenement, horodatage, dossier, variable, libelle, action, valeur_avant, origine_avant, valeur_apres, origine_apres, passe`.
+Colonnes de `audit.csv` : `evenement, horodatage, dossier, variable, libelle, action, valeur_avant, origine_avant, valeur_apres, origine_apres, passe, import`.
 
-Clés de la variante `format=json` du rapport : `generatedAt`, `tool`, `template`, `corpus`, `runs` (les 25 plus récentes), `runSummary` (nombre, première et dernière date, modes et modèles de **toutes** les passes), `provenance`, `quality`, `audit`, `llm`.
+Clés de la variante `format=json` du rapport : `generatedAt`, `tool`, `template`, `corpus`, `runs` (les 25 plus récentes), `runSummary` (nombre, première et dernière date, modes et modèles de **toutes** les passes), `provenance` (dont `imported`), `imports` (tableaux importés : fichier, empreinte, feuille, date, lignes, valeurs écrites, dossiers créés, refusées, conflits), `quality`, `audit`, `llm`.
 
 ```bash
 curl -OJ "http://localhost:4000/api/export/csv?delimiter=,&decimal=.&booleans=numeric"
@@ -455,29 +494,38 @@ curl -OJ "http://localhost:4000/api/export/methods?format=html&lang=en"
 
 ## Revue bibliographique
 
-Indépendante des dossiers patients. Chaque passe de recherche est **facturée** par Apify : voir les garde-fous ci-dessous.
+Indépendante des dossiers patients. PubMed passe par les E-utilities du NCBI (gratuites) ; Google Scholar, en option, par un acteur Apify **facturé** au résultat.
 
 | Méthode | Chemin | Corps / paramètres | Réponse |
 |---|---|---|---|
-| `GET` | `/api/biblio/status` | — | `{ configured, maxResults, running, sources: { pubmed, scholar }, exclusionReasons }` — le jeton n'y figure jamais |
+| `GET` | `/api/biblio/status` | — | `{ configured, maxResults, running, pubmed: { service, apiKey, email, maxRecords, window }, sources: { pubmed, scholar }, importSources, importFormats, importMaxBytes, exclusionReasons }` — `configured` : jeton Apify présent (Scholar) ; `apiKey`, `email` : booléens. Ni le jeton ni la clé n'y figurent |
 | `GET` | `/api/biblio/overview` | — | `{ counts, prisma, searches }` |
-| `POST` | `/api/biblio/searches` | `{ "query", "sources", "maxResults"?, "yearFrom"?, "yearTo"?, "sort"? }` | `201 { searches, counts, prisma }` |
-| `GET` | `/api/biblio/refs` | `decision` (`pending`, `include`, `maybe`, `exclude`), `source` (`pubmed`, `scholar`, `both`), `q`, `sort` (`added`, `recent`, `cited`), `limit` (1–1000), `offset` | `{ refs, total }` |
+| `POST` | `/api/biblio/searches` | `{ "query", "sources", "pubmedMax"?, "maxResults"?, "yearFrom"?, "yearTo"?, "sort"? }` | `201 { searches, counts, prisma }` |
+| `POST` | `/api/biblio/imports` | `multipart/form-data` : `file`, `source`, `sourceLabel`?, `format`? | `201 { search, counts, prisma }` |
+| `GET` | `/api/biblio/refs` | `decision` (`pending`, `include`, `maybe`, `exclude`), `source` (une source, ou `both` : trouvées par plusieurs sources), `q`, `sort` (`added`, `recent`, `cited`), `limit` (1–1000), `offset` | `{ refs, total }` |
 | `PATCH` | `/api/biblio/refs/:id` | `{ "decision"?, "exclusionReason"?, "note"? }` | `200 { ref, counts, prisma }` |
 | `GET` | `/api/biblio/export` | `format` (`csv` défaut, `ris`, `bibtex`, `searches`), `decision` (`all` défaut, `pending`, `include`, `maybe`, `exclude`) | Téléchargement, **sans plafond de taille** (toute la bibliothèque) |
 
-**`POST /api/biblio/searches`** : `query` de 2 à 500 caractères, transmise **telle quelle** aux sources ; `sources` : `["pubmed"]`, `["scholar"]` ou les deux (lancées en parallèle, une source en échec n'annule pas l'autre) ; `maxResults` de 1 à `BIBLIO_MAX_RESULTS` (plafond : 100 par défaut ; 20 si `maxResults` est omis) ; `yearFrom`/`yearTo` entre 1800 et 2200 ; `sort` : `relevance` ou `date`.
+**`POST /api/biblio/searches`** : `query` de 2 à 4 000 caractères ; `sources` : `["pubmed"]`, `["scholar"]` ou les deux (lancées en parallèle, une source en échec n'annule pas l'autre) ; `pubmedMax` : absent ou `null` = **toutes les notices** (jusqu'à `BIBLIO_PUBMED_MAX`, 10 000 par défaut ; au-delà de 9 999 résultats, la recherche est découpée par tranches de dates), sinon les N premières (1 à 9 999) ; `maxResults` : Google Scholar seulement, de 1 à `BIBLIO_MAX_RESULTS` (100 par défaut ; 20 si omis) ; `yearFrom`/`yearTo` entre 1800 et 2200 ; `sort` : `relevance` ou `date`. Une passe PubMed est **tout ou rien** : une erreur en cours de récupération ne verse aucune notice. Pour Scholar, les balises de champ PubMed (`[tiab]`, `[MeSH]`…) sont retirées de l'équation, et un avertissement le dit.
+
+Chaque élément de `searches` (le journal de recherche) : `id`, `kind` (`search` ou `import`), `source`, `actor` (« NCBI E-utilities », acteur Apify, ou format du fichier importé), `query`, `sentQuery` (chaîne réellement envoyée, si elle diffère), `queryTranslation` (traduction de l'équation par PubMed), `fileName`, `sourceLabel`, `yearFrom`, `yearTo`, `maxResults`, `sort`, `status` (`running`, `ok`, `error`), `error`, `warnings`, `totalCount` (nombre total annoncé par la source), `returned`, `skipped`, `added`, `duplicates`, `durationMs`, `queriedAt`.
 
 | Statut | Cause |
 |---|---|
-| `400` | `maxResults` au-dessus du plafond ; équation absente ; année de début après l'année de fin |
-| `409` | `APIFY_TOKEN` absent ; **une recherche est déjà en cours** (une seule à la fois : un double clic ne facture pas deux fois) |
+| `201` | Au moins une source a répondu ; une source en échec a son `status: "error"` et son message dans `searches` |
+| `400` | `maxResults` au-dessus du plafond ; `pubmedMax` au-delà de 9 999 ; équation absente ; année de début après l'année de fin |
+| `409` | Scholar demandé sans `APIFY_TOKEN` ; **une recherche est déjà en cours** (une seule à la fois) |
+| `502` | **Toutes** les sources ont échoué (`code: "all_sources_failed"`) : le message donne le détail de chacune, `details` porte `{ searches, counts, prisma }` ; les passes restent consignées dans le journal |
+
+**`POST /api/biblio/imports`** : export d'une autre base. `source` : `pubmed`, `embase`, `central`, `scopus`, `wos`, `lissa`, `cinahl`, `psycinfo`, `clinicaltrials`, `ictrp`, `other_db`, `other` (ou `scholar`) — elle range les notices dans la colonne PRISMA (base de données, registre, autres méthodes) ; `sourceLabel` : nom libre (120 caractères) ; `format` : `ris`, `nbib`, `bibtex`, `csv` ou `auto` (défaut). UTF-8, UTF-16 ou Windows-1252, fins de ligne Windows tolérées. `413` au-delà de `BIBLIO_IMPORT_MAX_MB` (50 Mo) ; `422` (`import_unreadable`, `import_empty`) pour un fichier illisible, de plus de 50 000 notices, ou sans aucune notice lisible — rien n'est alors consigné. L'import est consigné comme une recherche (`kind: "import"`) et passe par le même dédoublonnage.
 
 **`GET /api/biblio/refs?q=`** : recherche en plusieurs mots, **sans égard aux accents ni à la casse**, dans le titre, les auteurs, la revue, le résumé, les mots-clés, les termes MeSH et les identifiants ; tous les mots doivent figurer, dans n'importe quel ordre ; une expression entre guillemets se cherche telle quelle ; 12 termes au plus.
 
-**`PATCH /api/biblio/refs/:id`** : `decision` ∈ `pending|include|maybe|exclude`. Une exclusion **exige** son `exclusionReason` (`population`, `intervention`, `outcome`, `design`, `language`, `no_fulltext`, `duplicate_report`, `other`) : c'est lui que le diagramme de flux compte. Rien ne se supprime.
+**`PATCH /api/biblio/refs/:id`** : `decision` ∈ `pending|include|maybe|exclude`. `exclusionReason` (`population`, `intervention`, `outcome`, `design`, `language`, `no_fulltext`, `duplicate_report`, `other`) est **facultatif** au tri sur titre et résumé : une exclusion sans motif est comptée « motif non précisé » (`unspecified`) dans le diagramme de flux. Rien ne se supprime.
 
-Noms de fichier des exports : `references-toutes-AAAA-MM-JJ.ris`, `references-retenues-…`, `references-a-voir-…`, `references-exclues-…`, `references-a-trier-…`, `strategies-de-recherche-….csv`.
+**`prisma`** : `identified` et `bySource` (notices **distinctes** rendues par les recherches et imports réussis de chaque source : relancer une équation ne les gonfle pas), `identifiedDatabases`, `identifiedRegisters`, `identifiedOther`, `duplicatesRemoved` (= identifiées − références uniques), `screened`, `excluded`, `excludedByReason`, `maybe`, `pending`, `included`.
+
+Exports : le RIS porte le type de référence (`JOUR`, `CONF`, `BOOK`, `CHAP`…) et le PMCID (`C2`) ; le BibTeX, le type correspondant (`@article`, `@inproceedings`, `@book`, `@incollection`…) ; `format=searches` donne le journal de recherche (date, type, source, équation, équation envoyée, traduction par PubMed, fichier importé, résultats annoncés, notices récupérées, avertissements…). Noms de fichier : `references-toutes-AAAA-MM-JJ.ris`, `references-retenues-…`, `references-a-voir-…`, `references-exclues-…`, `references-a-trier-…`, `strategies-de-recherche-….csv`.
 
 ---
 

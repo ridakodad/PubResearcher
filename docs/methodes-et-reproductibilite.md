@@ -13,12 +13,13 @@ Comment décrire, dans un article ou un dossier d'éthique, ce que l'outil a fai
 | **Paragraphe « Méthodes »** | Un texte prêt à adapter, avec les chiffres de votre base | Toutes les sections ci-dessous |
 | **Corpus** | Dossiers, documents par nature (PDF, Word, DICOM, image, texte), documents sans texte exploitable, lus par OCR, **lus partiellement** | `documents` |
 | **Fiche d'exploitation** | Les variables (clé, type, unité, bornes, nombre de règles de chaque famille) et l'**empreinte SHA-256** des règles | `fields` |
-| **Passes d'extraction** | Le nombre de passes, leurs dates extrêmes, leurs modes et leurs modèles (toutes les passes de la fiche), puis le détail des **25 plus récentes** : date, mode, modèle éventuel, empreinte de la fiche, effectifs, état | `extraction_runs` |
-| **Origine des valeurs** | Part des cellules du tableau venue des règles, du modèle, d'une décision de relecteur | `record_values` |
-| **Fiabilité** | Valeurs relues, confirmées, corrigées, écartées, ajoutées ; **concordance et rappel avec intervalle de confiance de Wilson à 95 %** pour l'ensemble ; par variable, les effectifs et la concordance (l'intervalle et le rappel par variable sont dans le JSON) | Les gestes de relecture |
+| **Passes d'extraction** | Le nombre de passes, leurs dates extrêmes, leurs modes et leurs modèles (toutes les passes de la fiche), puis le détail des **25 plus récentes** : date, mode, modèle éventuel — celui **qui a réellement répondu** —, empreinte de la fiche, effectifs, état | `extraction_runs` |
+| **Origine des valeurs** | Part des cellules du tableau venue des règles, du modèle, d'un import de tableau, d'une décision de relecteur | `record_values` |
+| **Tableaux importés** (s'il y en a) | Pour chaque import : date, fichier, feuille, empreinte SHA-256, lignes, valeurs écrites, dossiers créés, cellules refusées, valeurs gardées en conflit ; une phrase du paragraphe « Méthodes » et une limite les mentionnent | `table_imports` |
+| **Fiabilité** | Valeurs relues, confirmées, corrigées, écartées, ajoutées (les valeurs importées n'y entrent pas) ; **concordance et rappel avec intervalle de confiance de Wilson à 95 %** pour l'ensemble ; par variable, les effectifs et la concordance (l'intervalle et le rappel par variable sont dans le JSON) | Les gestes de relecture |
 | **Journal des modifications** | Nombre de changements par type ; le journal complet s'exporte en CSV | `value_events` |
 | **Environnement logiciel** | Versions : outil, schéma, Node.js, système, pdf.js, mammoth, tesseract.js, exifr, dicom-parser, SDK d'Anthropic | Le processus en cours |
-| **Limites à signaler** | Quatre limites génériques à reprendre dans la discussion | Texte fixe |
+| **Limites à signaler** | Quatre limites génériques à reprendre dans la discussion (une de plus si des tableaux ont été importés) | Texte fixe |
 
 Un extrait réel (24 dossiers de démonstration, relecture scriptée de 8 dossiers pour l'exemple — **ces chiffres ne mesurent pas l'outil**) :
 
@@ -46,9 +47,9 @@ Le rapport génère le paragraphe avec vos chiffres. Voici les variantes, pour l
 
 ### 2.2 Règles, puis modèle de langage pour les variables restées vides
 
-> Pour les variables que les règles n'avaient pas renseignées, un modèle de langage ([identifiant du modèle], niveau de raisonnement [high]) a été interrogé sur le texte des documents. Une valeur proposée par le modèle n'était retenue que si l'extrait qu'il avait recopié du document — ou, à défaut, la valeur elle-même — était **retrouvé** dans le texte du document, et si elle respectait le type, les options et les bornes de plausibilité de la fiche ; [n] valeurs proposées ont été écartées pour ces motifs. Toutes les valeurs d'origine « modèle » ont été relues par [un investigateur]. [Les documents ont été pseudonymisés avant transmission ; le transfert a été autorisé par … le …]
+> Pour les variables que les règles n'avaient pas renseignées, un modèle de langage ([identifiant du modèle qui a répondu], niveau de raisonnement [high]) a été interrogé sur le texte des documents, pseudonymisé localement avant l'envoi (noms annoncés par une civilité, dates de naissance, numéros d'identification, coordonnées remplacés par des étiquettes). Une valeur proposée par le modèle n'était retenue que si l'extrait qu'il avait recopié du document — ou, à défaut, la valeur elle-même — était **retrouvé** dans le texte du document, si cet extrait contenait la valeur (nombre, date, ou affirmation non niée), et si elle respectait le type, les options et les bornes de plausibilité de la fiche ; [n] valeurs proposées ont été écartées pour ces motifs. Toutes les valeurs d'origine « modèle » ont été relues par [un investigateur]. [Les documents avaient été pseudonymisés avant l'import ; le transfert a été autorisé par … le …]
 
-*À préciser* : retrouver la valeur seule (confiance plus basse dans l'outil) ne prouve pas qu'elle a été lue à cet endroit ; c'est une raison de plus de relire les valeurs « modèle ». Le modèle ne reçoit ni le code du dossier ni les noms de fichiers, mais bien le texte. *À joindre* : l'identifiant exact du modèle (le rapport le consigne), la date des passes, et l'autorisation de transfert. Une extraction par modèle **n'est pas strictement reproductible** (versions de modèle retirées, variabilité des réponses) : archivez les valeurs, pas seulement la méthode.
+*À préciser* : retrouver la valeur seule (confiance plus basse dans l'outil) ne prouve pas qu'elle a été lue à cet endroit ; c'est une raison de plus de relire les valeurs « modèle ». Le contrôle « l'extrait contient la valeur » porte sur les nombres, les dates et les « oui » ; le texte libre et les options n'y passent pas. Le modèle ne reçoit ni le code du dossier ni les noms de fichiers, mais bien le texte, pseudonymisé par l'outil — **pas anonymisé** : ne présentez pas ce masquage comme une anonymisation dans le dossier réglementaire. *À joindre* : l'identifiant exact du modèle (le rapport consigne celui qui a **réellement répondu**, qui peut différer de celui demandé quand Anthropic bascule sur un autre modèle), la date des passes, et l'autorisation de transfert. Une extraction par modèle **n'est pas strictement reproductible** (versions de modèle retirées, variabilité des réponses) : archivez les valeurs, pas seulement la méthode.
 
 ### 2.3 Documents scannés
 
@@ -56,7 +57,19 @@ Le rapport génère le paragraphe avec vos chiffres. Voici les variantes, pour l
 
 Le rapport donne le nombre de documents lus par OCR et la confiance moyenne. Rappelez dans la discussion que l'OCR confond des caractères (la lettre O et le zéro) et peut perdre une négation.
 
-### 2.4 Sans relecture (à éviter)
+### 2.4 Variables de l'épisode et mentions discordantes
+
+> Les mentions placées dans les antécédents ont été écartées pour les variables décrivant l'épisode en cours ([fièvre, complications]) ; les variables d'admission ([température, bilan biologique d'entrée]) ne retenaient que les mentions de l'arrivée. Une mention exprimant une hypothèse, un épisode passé ou une donnée non renseignée n'a pas été lue comme une présence. Lorsque plusieurs mentions d'une même variable divergeaient, [aucune valeur n'était retenue et la variable était tranchée par un relecteur / la règle suivante était appliquée : …]. Les variables de synthèse ([examens réalisés, traitements reçus]) ont été proposées par l'outil et validées par un relecteur.
+
+Le rapport ne devine pas ces réglages : reprenez-les de la fiche (JSON) — `history`, `episode`, `select`, `suggestOnly` — et dites quelle règle de sélection s'appliquait à quelle variable. « Premier » et « dernier » s'entendent **dans l'ordre d'import des documents**, pas dans la chronologie clinique.
+
+### 2.5 Tableau de cohorte importé
+
+> [n] valeurs ont été importées du tableau [« fichier »] tenu par [l'équipe] (empreinte SHA-256 [xxxx…]) ; l'outil en a contrôlé le format (type, options, unité, bornes), pas l'exactitude par rapport au dossier source. [Un échantillon de … a été vérifié contre les dossiers.]
+
+Le rapport donne cette phrase et la table des imports. Les valeurs importées ne comptent pas dans la concordance ni le rappel : ce ne sont pas des propositions de l'extraction.
+
+### 2.6 Sans relecture (à éviter)
 
 Si aucune valeur n'a été relue, le rapport l'écrit : « la fiabilité de l'extraction n'est pas estimée ». N'en déduisez pas qu'elle est bonne.
 
@@ -103,11 +116,13 @@ En mode **« Règles seules »**, deux passes de même empreinte de fiche sur le
 
 | Ce qui peut faire varier le résultat | Comment le contrôler |
 |---|---|
-| La fiche (règles, bornes, options, facteurs) | L'**empreinte** de chaque passe ; la fiche JSON archivée |
+| La fiche (règles, bornes, options, facteurs, réglages de sélection, de synthèse et d'épisode) | L'**empreinte** de chaque passe ; la fiche JSON archivée |
 | Les documents | Les empreintes SHA-256 de chaque fichier (base) ; la sauvegarde |
 | La version de l'outil et de ses bibliothèques de lecture (pdf.js, mammoth, tesseract.js…) | Le rapport « Méthodes » consigne les versions ; archivez `package-lock.json` |
 | L'OCR (version du moteur, langue, qualité d'image) | Idem ; l'OCR n'est pas strictement reproductible d'une version à l'autre |
-| Un modèle de langage | **Non reproductible strictement** : archivez les valeurs et l'identifiant du modèle |
+| L'ordre d'import des documents | Il décide de « premier » et « dernier » d'une règle de sélection : réimporter les documents dans un autre ordre peut changer ces valeurs (pas les autres) |
+| Un modèle de langage | **Non reproductible strictement** : archivez les valeurs et l'identifiant du modèle qui a répondu (consigné par passe) ; la pseudonymisation, elle, est déterministe |
+| Un tableau importé | Le fichier est conservé avec son empreinte ; chaque valeur cite sa cellule ; le journal la rattache à l'import |
 | Les décisions des relecteurs | Le journal des modifications (CSV) : quelle valeur, avant/après, quand, quelle origine, quelle passe — **pas qui** : l'outil n'a pas de comptes individuels |
 
 ### 4.2 Que conserver avec une publication
