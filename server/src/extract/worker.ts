@@ -8,7 +8,9 @@
 import { parentPort } from 'node:worker_threads';
 import { parseDocument } from './index.js';
 import { useRemoteOcr } from './ocr.js';
-import { PARSE_ENV_KEYS, type FromWorker, type ParseRequest, type ToWorker } from './protocol.js';
+import { PARSE_ENV_KEYS, type FromWorker, type ParseRequest, type TableRequest, type ToWorker } from './protocol.js';
+import { readTable } from '../table/read.js';
+import { TableReadError } from '../table/types.js';
 
 const port = parentPort;
 if (!port) throw new Error('Ce fichier s’exécute dans un fil d’analyse, pas seul.');
@@ -31,7 +33,7 @@ useRemoteOcr({
   run: (image) => ask((id) => ({ type: 'ocr-run', id, image: new Uint8Array(image) })),
 });
 
-async function handle(job: ParseRequest): Promise<void> {
+async function handle(job: ParseRequest | TableRequest): Promise<void> {
   try {
     for (const key of PARSE_ENV_KEYS) {
       const value = job.env[key];
@@ -39,6 +41,15 @@ async function handle(job: ParseRequest): Promise<void> {
       else process.env[key] = value;
     }
     const buffer = Buffer.from(job.buffer.buffer, job.buffer.byteOffset, job.buffer.byteLength);
+    if (job.type === 'table') {
+      try {
+        send({ type: 'result', id: job.id, result: { ok: true, workbook: readTable(buffer, job.filename) } });
+      } catch (error) {
+        if (!(error instanceof TableReadError)) throw error;
+        send({ type: 'result', id: job.id, result: { ok: false, message: error.message } });
+      }
+      return;
+    }
     send({ type: 'result', id: job.id, result: await parseDocument(buffer, job.filename, job.mime) });
   } catch (error) {
     send({ type: 'failure', id: job.id, message: error instanceof Error ? error.message : String(error) });

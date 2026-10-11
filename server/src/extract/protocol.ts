@@ -1,3 +1,4 @@
+import type { TableWorkbook } from '../table/types.js';
 import type { ParseResult } from './index.js';
 import type { OcrResult } from './ocr.js';
 
@@ -21,6 +22,11 @@ export const PARSE_ENV_KEYS = [
   'IMAGE_MAX_MEGAPIXELS',
   'OCR_MAX_PAGES',
   'OCR_PDF_SCALE',
+  'TABLE_MAX_ROWS',
+  'TABLE_MAX_COLUMNS',
+  'TABLE_MAX_CELLS',
+  'TABLE_MAX_XML_MB',
+  'TABLE_MAX_TOTAL_MB',
 ] as const;
 
 export interface ParseRequest {
@@ -32,18 +38,30 @@ export interface ParseRequest {
   env: Record<string, string | undefined>;
 }
 
+/** Lecture d'un tableau de cohorte (classeur, CSV) : même isolation que les documents, autre lecteur. */
+export interface TableRequest {
+  type: 'table';
+  id: number;
+  buffer: Uint8Array;
+  filename: string;
+  env: Record<string, string | undefined>;
+}
+
+/** Issue d'une lecture de tableau : le classeur, ou le refus motivé (format, plafond) à montrer au chercheur. */
+export type TableOutcome = { ok: true; workbook: TableWorkbook } | { ok: false; message: string };
+
 export interface OcrReply {
   type: 'ocr-reply';
   id: number;
   value: unknown;
 }
 
-export type ToWorker = ParseRequest | OcrReply;
+export type ToWorker = ParseRequest | TableRequest | OcrReply;
 
 export type FromWorker =
   /** Le fil a fini de démarrer : il écoute. Un fil qui s'arrête avant cela n'a pas pu démarrer — ce n'est pas la faute du fichier. */
   | { type: 'ready' }
-  | { type: 'result'; id: number; result: ParseResult }
+  | { type: 'result'; id: number; result: ParseResult | TableOutcome }
   | { type: 'failure'; id: number; message: string }
   | { type: 'ocr-status'; id: number }
   | { type: 'ocr-run'; id: number; image: Uint8Array };

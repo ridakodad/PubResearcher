@@ -2,8 +2,10 @@ import { Worker, type WorkerOptions } from 'node:worker_threads';
 import { limits } from './limits.js';
 import { ocrStatus, runOcr, type OcrBackend } from './ocr.js';
 import { parseDocument, type ParseResult } from './index.js';
-import { PARSE_ENV_KEYS, type FromWorker, type ParseRequest, type ToWorker } from './protocol.js';
+import { PARSE_ENV_KEYS, type FromWorker, type ParseRequest, type TableOutcome, type TableRequest, type ToWorker } from './protocol.js';
 import { detectKind, looksLikeDicom } from './types.js';
+import { readTable } from '../table/read.js';
+import { TableReadError, type TableWorkbook } from '../table/types.js';
 
 /**
  * Analyse des fichiers dans des fils séparés.
@@ -81,15 +83,17 @@ export interface ParseHost {
    * d'autres données — il est alors recopié, et reste intact.
    */
   parse(buffer: Buffer, filename: string, mime: string, options?: { transfer?: boolean }): Promise<ParseResult>;
+  /** Lecture d'un tableau de cohorte (classeur, CSV), sous les mêmes protections. */
+  readTable(buffer: Buffer, filename: string, options?: { transfer?: boolean }): Promise<TableOutcome>;
   shutdown(): Promise<void>;
   stats(): HostStats;
 }
 
 interface Job {
   id: number;
-  request: ParseRequest;
+  request: ParseRequest | TableRequest;
   transfer: ArrayBuffer[];
-  resolve(result: ParseResult): void;
+  resolve(result: ParseResult | TableOutcome): void;
   reject(error: Error): void;
 }
 
@@ -344,27 +348,39 @@ export function createParseHost(options: ParseHostOptions): ParseHost {
     }
   }
 
+  function enqueue(
+    buffer: Buffer,
+    transfer: boolean,
+    build: (id: number, view: Uint8Array, env: ParseRequest['env']) => ParseRequest | TableRequest,
+  ): Promise<ParseResult | TableOutcome> {
+    if (closed) return Promise.reject(new Error("Le service d'analyse est arrêté."));
+    const ownsItsMemory =
+      buffer.buffer instanceof ArrayBuffer && buffer.byteOffset === 0 && buffer.byteLength === buffer.buffer.byteLength;
+    const moved = transfer && ownsItsMemory;
+    const view = moved ? new Uint8Array(buffer.buffer as ArrayBuffer, 0, buffer.byteLength) : new Uint8Array(buffer);
+    const env: ParseRequest['env'] = {};
+    for (const key of PARSE_ENV_KEYS) env[key] = process.env[key];
+
+    return new Promise<ParseResult | TableOutcome>((resolve, reject) => {
+      const id = nextId++;
+      queue.push({
+        id,
+        request: build(id, view, env),
+        transfer: moved ? [view.buffer as ArrayBuffer] : [],
+        resolve,
+        reject,
+      });
+      pump();
+    });
+  }
+
   return {
     parse(buffer, filename, mime, { transfer = false } = {}) {
-      if (closed) return Promise.reject(new Error("Le service d'analyse est arrêté."));
-      const ownsItsMemory =
-        buffer.buffer instanceof ArrayBuffer && buffer.byteOffset === 0 && buffer.byteLength === buffer.buffer.byteLength;
-      const moved = transfer && ownsItsMemory;
-      const view = moved ? new Uint8Array(buffer.buffer as ArrayBuffer, 0, buffer.byteLength) : new Uint8Array(buffer);
-      const env: ParseRequest['env'] = {};
-      for (const key of PARSE_ENV_KEYS) env[key] = process.env[key];
+      return enqueue(buffer, transfer, (id, view, env) => ({ type: 'parse', id, buffer: view, filename, mime, env })) as Promise<ParseResult>;
+    },
 
-      return new Promise<ParseResult>((resolve, reject) => {
-        const id = nextId++;
-        queue.push({
-          id,
-          request: { type: 'parse', id, buffer: view, filename, mime, env },
-          transfer: moved ? [view.buffer as ArrayBuffer] : [],
-          resolve,
-          reject,
-        });
-        pump();
-      });
+    readTable(buffer, filename, { transfer = false } = {}) {
+      return enqueue(buffer, transfer, (id, view, env) => ({ type: 'table', id, buffer: view, filename, env })) as Promise<TableOutcome>;
     },
 
     async shutdown() {
@@ -445,6 +461,43 @@ export async function parseIsolated(
       status: 'error',
       error: (error instanceof Error ? error.message : String(error)).slice(0, 500),
     };
+  }
+}
+
+/**
+ * Lit un tableau de cohorte dans un fil d'analyse : un classeur piégé (archive qui se gonfle, XML démesuré) arrête ce
+ * fil, pas le serveur. Rend le classeur, ou lève `TableReadError` avec le motif à montrer au chercheur.
+ */
+export async function readTableIsolated(buffer: Buffer, filename: string): Promise<TableWorkbook> {
+  let outcome: TableOutcome;
+  if (unavailable || !limits.parseIsolation()) {
+    outcome = readTableInline(buffer, filename);
+  } else {
+    try {
+      outcome = await sharedHost().readTable(buffer, filename);
+    } catch (error) {
+      if (error instanceof ParseIsolationError && error.reason === 'unavailable') {
+        unavailable = true;
+        console.warn(`[analyse] ${error.message} — les fichiers seront lus sans isolation.`);
+        outcome = readTableInline(buffer, filename);
+      } else if (error instanceof ParseIsolationError) {
+        console.warn(`[analyse] tableau de ${buffer.byteLength} octets interrompu : ${error.reason}`);
+        throw new TableReadError(error.message.replace(/ Le document est conservé : saisissez ses valeurs à la main, ou réimportez une version saine\.$/, ' Vérifiez le fichier, ou enregistrez-le à nouveau depuis le tableur.'));
+      } else {
+        throw error;
+      }
+    }
+  }
+  if (!outcome.ok) throw new TableReadError(outcome.message);
+  return outcome.workbook;
+}
+
+function readTableInline(buffer: Buffer, filename: string): TableOutcome {
+  try {
+    return { ok: true, workbook: readTable(buffer, filename) };
+  } catch (error) {
+    if (error instanceof TableReadError) return { ok: false, message: error.message };
+    throw error;
   }
 }
 

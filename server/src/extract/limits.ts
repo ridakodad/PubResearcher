@@ -52,6 +52,16 @@ export const limits = {
    * ancienne est arrêtée. Par défaut 3 Go, ou 40 % de la mémoire de la machine si elle est plus petite.
    */
   parseMaxGrowthMb: () => envNumber('PARSE_MAX_GROWTH_MB', Math.min(3072, Math.floor((os.totalmem() / MB) * 0.4)), 64),
+  /** Tableau de cohorte : lignes lues par feuille (un patient par ligne). */
+  tableMaxRows: () => envNumber('TABLE_MAX_ROWS', 50_000),
+  /** Tableau de cohorte : colonnes lues par feuille. */
+  tableMaxColumns: () => envNumber('TABLE_MAX_COLUMNS', 2_000),
+  /** Tableau de cohorte : cellules non vides lues dans tout le classeur. */
+  tableMaxCells: () => envNumber('TABLE_MAX_CELLS', 2_000_000),
+  /** Classeur : taille décompressée d'une partie XML (une feuille, la table des chaînes). */
+  tableMaxXmlBytes: () => envNumber('TABLE_MAX_XML_MB', 64) * MB,
+  /** Classeur : taille décompressée de l'ensemble de l'archive. */
+  tableMaxTotalBytes: () => envNumber('TABLE_MAX_TOTAL_MB', 256) * MB,
   /** `PARSE_ISOLATION=0` : les fichiers sont lus dans le fil principal, sans isolation (diagnostic). */
   parseIsolation: () => process.env.PARSE_ISOLATION !== '0',
 };
