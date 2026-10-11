@@ -151,6 +151,19 @@ export interface FieldExtraction {
   postProcess?: FieldPostProcess;
   /** Valeur retenue quand les mentions divergent ; absent : la variable est signalée, sans valeur. */
   select?: SelectPolicy;
+  /**
+   * Variable de synthèse (« traitements reçus », « examens réalisés pendant le séjour ») : les règles en proposent les
+   * mentions sans remplir la variable, qui reste à valider. Nommer un examen ne dit pas qu'il a été fait pendant cet
+   * épisode (« IRM de contrôle dans 6 mois », « scanner réalisé en ville »). Une valeur lue dans un fichier DICOM, elle,
+   * est retenue.
+   */
+  suggestOnly?: boolean;
+  /**
+   * `admission` : la variable décrit l'arrivée du patient (fièvre, température, bilan d'entrée). Les mentions datées
+   * plus tard dans le séjour — « à J4 », « en postopératoire », « pic fébrile le 18/04 », « au cours du séjour » — sont
+   * écartées : elles décrivent une complication, pas l'état initial.
+   */
+  episode?: 'admission';
 }
 
 export interface TemplateField {

@@ -22,7 +22,7 @@ const PROCHES = [
 /** Négations qui précèdent un terme dans un compte rendu (« non diabétique », « ni HTA »). */
 const NEGATIONS = ['pas de', 'absence de', 'sans', 'aucun', 'aucune', 'non', 'ni', 'jamais'];
 
-const DEFAULT_FIELDS: FieldInput[] = [
+export const DEFAULT_FIELDS: FieldInput[] = [
   // ---------------------------------------------------------------- Identité
   {
     key: 'numero_dossier',
@@ -33,7 +33,12 @@ const DEFAULT_FIELDS: FieldInput[] = [
     extraction: {
       enabled: true,
       rules: [
-        { kind: 'label', labels: ['N° dossier', 'Numéro de dossier', 'Dossier n°', 'IPP'], maxLength: 30 },
+        // Un identifiant est un seul mot qui contient au moins un chiffre : « (N° dossier V-2024-00813) » donne
+        // V-2024-00813, sans la parenthèse ni ce qu'une lecture optique aurait collé derrière.
+        {
+          kind: 'regex',
+          pattern: String.raw`(?:n[°o]\.?\s*(?:de\s+)?dossier|numero\s+de\s+dossier|dossier\s+n[°o]|ipp)\s*[:.]?\s*((?=[a-z0-9/-]*\d)[a-z0-9](?:[a-z0-9/-]{0,28}[a-z0-9])?)(?![a-z0-9])`,
+        },
         { kind: 'dicom', tag: 'PatientID' },
       ],
     },
@@ -166,6 +171,8 @@ const DEFAULT_FIELDS: FieldInput[] = [
           emitIfNegated: false,
         },
       ],
+      // « Tabac : ancien » décrit un ancien fumeur (pour une maladie, « ancienne » voudrait dire « de longue date »).
+      postProcess: { valueMap: { ancien: 'non', ancienne: 'non', anciens: 'non' } },
     },
   },
   {
@@ -213,6 +220,7 @@ const DEFAULT_FIELDS: FieldInput[] = [
     label: 'Fièvre',
     type: 'boolean',
     section: 'Clinique',
+    description: "À l'arrivée : température ≥ 38 °C mesurée, ou fièvre rapportée pour l'épisode en cours.",
     extraction: {
       enabled: true,
       rules: [
@@ -227,8 +235,10 @@ const DEFAULT_FIELDS: FieldInput[] = [
           emitIfNegated: false,
         },
       ],
-      // Une fièvre notée à un moment du séjour suffit, même si un autre compte rendu la dit absente.
+      // Fièvre à l'arrivée : une mention qui l'affirme suffit, même si un autre compte rendu la dit absente ; une
+      // fièvre apparue plus tard dans le séjour (« à J4 ») est une complication, pas l'état initial.
       select: 'any',
+      episode: 'admission',
     },
   },
   {
@@ -243,6 +253,7 @@ const DEFAULT_FIELDS: FieldInput[] = [
         { kind: 'label', labels: ['Température', 'Temperature', 'Temp.', 'Temp', 'T°', 'TC', 'T'], maxLength: 20 },
         { kind: 'regex', pattern: '(\\d{2}[.,]\\d)\\s*°?\\s*c\\b' },
       ],
+      episode: 'admission',
       postProcess: { min: 30, max: 45 },
     },
   },
@@ -259,6 +270,7 @@ const DEFAULT_FIELDS: FieldInput[] = [
       rules: [
         { kind: 'label', labels: ['Hémoglobine', 'Hemoglobine', 'Hb', 'HGB'], maxLength: 25 },
       ],
+      episode: 'admission',
       postProcess: { min: 1, max: 25 },
     },
   },
@@ -273,6 +285,7 @@ const DEFAULT_FIELDS: FieldInput[] = [
       rules: [
         { kind: 'label', labels: ['Globules blancs', 'GB', 'Leucocytes', 'WBC'], maxLength: 25 },
       ],
+      episode: 'admission',
       postProcess: { min: 0, max: 200 },
     },
   },
@@ -287,6 +300,7 @@ const DEFAULT_FIELDS: FieldInput[] = [
       rules: [
         { kind: 'label', labels: ['CRP', 'C-réactive', 'Protéine C réactive'], maxLength: 25 },
       ],
+      episode: 'admission',
       postProcess: { min: 0, max: 600 },
     },
   },
@@ -299,6 +313,7 @@ const DEFAULT_FIELDS: FieldInput[] = [
     extraction: {
       enabled: true,
       rules: [{ kind: 'label', labels: ['Créatinine', 'Creatinine', 'Créat'], maxLength: 25 }],
+      episode: 'admission',
       postProcess: { min: 0, max: 200 },
     },
   },
@@ -317,6 +332,9 @@ const DEFAULT_FIELDS: FieldInput[] = [
         { kind: 'keyword', any: ['scanner', 'tdm', 'tomodensitometrie'], emit: 'Scanner' },
         { kind: 'keyword', any: ['irm', 'imagerie par resonance'], emit: 'IRM' },
         { kind: 'keyword', any: ['echographie', 'echo-doppler'], emit: 'Échographie' },
+        { kind: 'keyword', any: ['radiographie', 'radiographies', 'radio de', 'cliche', 'cliches'], emit: 'Radiographie' },
+        { kind: 'keyword', any: ['tep-scanner', 'tep scanner', 'tep-tdm', 'pet-scan'], emit: 'TEP' },
+        { kind: 'keyword', any: ['scintigraphie'], emit: 'Scintigraphie' },
       ],
       postProcess: {
         // Codes de modalité DICOM vers libellés de la fiche.
@@ -329,6 +347,9 @@ const DEFAULT_FIELDS: FieldInput[] = [
       },
       // Plusieurs examens de modalités différentes : toutes sont retenues.
       select: 'any',
+      // Nommer un examen ne dit pas qu'il a été fait pendant le séjour (« IRM de contrôle dans 6 mois ») : les mentions
+      // sont proposées à la relecture ; seules les modalités lues dans les fichiers DICOM remplissent la variable.
+      suggestOnly: true,
     },
   },
   {
@@ -367,6 +388,8 @@ const DEFAULT_FIELDS: FieldInput[] = [
         },
         { kind: 'keyword', any: ['chimiotherapie'], emit: 'Chimiothérapie' },
         { kind: 'keyword', any: ['radiotherapie'], emit: 'Radiothérapie' },
+        { kind: 'keyword', any: ['endoscopie', 'endoscopique', 'cpre', 'fibroscopie', 'coloscopie'], emit: 'Endoscopique' },
+        { kind: 'keyword', any: ['antibiotherapie', 'anticoagulation', 'traitement medical'], emit: 'Médical' },
       ],
       postProcess: {
         valueMap: {
@@ -379,6 +402,8 @@ const DEFAULT_FIELDS: FieldInput[] = [
       },
       // Traitements cités dans plusieurs documents : ils s'additionnent.
       select: 'any',
+      // Variable de synthèse : les traitements cités sont proposés à la relecture, la catégorie reste un jugement.
+      suggestOnly: true,
     },
   },
   {
@@ -390,7 +415,7 @@ const DEFAULT_FIELDS: FieldInput[] = [
     extraction: {
       enabled: true,
       rules: [
-        { kind: 'label', labels: ["Durée d'hospitalisation", 'Durée de séjour', 'Séjour'], maxLength: 30 },
+        { kind: 'label', labels: ["Durée d'hospitalisation", 'Durée de séjour', 'Séjour'], maxLength: 70 },
         { kind: 'regex', pattern: 'hospitalis[ée]{1,2}\\s+pendant\\s+(\\d+)\\s*jours?' },
       ],
       postProcess: { min: 0, max: 400 },

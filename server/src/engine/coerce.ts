@@ -178,8 +178,9 @@ function matchOption(raw: string, options: string[]): string | null {
   for (const opt of options) {
     if (fold(opt) === s) return opt;
   }
-  // Correspondance partielle : l'option est citée dans le texte capturé.
-  for (const opt of options) {
+  // Correspondance partielle : l'option est citée dans le texte capturé, la plus longue d'abord (« Défavorable »
+  // avant « Favorable », qu'elle contient).
+  for (const opt of [...options].sort((a, b) => fold(b).length - fold(a).length)) {
     const f = fold(opt);
     if (f.length >= 3 && s.includes(f)) return opt;
   }
@@ -219,7 +220,9 @@ function applyValueMap(raw: string, map: Record<string, string> | undefined): st
   for (const [from, to] of Object.entries(map)) {
     if (fold(from) === s) return to;
   }
-  for (const [from, to] of Object.entries(map)) {
+  // La clé la plus longue d'abord : « défavorable » ne doit pas se lire « favorable », qu'il contient. (Une clé peut
+  // être une fin de mot, « ectomie » dans « cholécystectomie » : la recherche reste une inclusion.)
+  for (const [from, to] of Object.entries(map).sort((a, b) => fold(b[0]).length - fold(a[0]).length)) {
     const f = fold(from);
     if (f.length >= 3 && s.includes(f)) return to;
   }
@@ -332,8 +335,22 @@ function unitMismatch(text: string, unit: string | null | undefined): string | n
   for (let c = COMPOUND_UNIT.exec(folded); c !== null; c = COMPOUND_UNIT.exec(folded)) {
     const found = UNIT_BY_FORM.get(normalizeUnit(c[1]!));
     if (found) return found !== wanted ? found : null;
+    // Une unité à barre que l'outil ne connaît pas (« Hmol/L », un µ mal lu par l'OCR) n'est pas celle de la fiche :
+    // la valeur est signalée plutôt que lue dans une unité qu'on ignore.
+    if (c[1]!.includes('/')) return c[1]!.trim();
   }
   return null;
+}
+
+/**
+ * Unité écrite juste après une valeur, dans la cellule suivante d'un tableau (« Créatinine : 168 : µmol/L »,
+ * « CRP | 58 | mg/L ») : la règle s'arrête au séparateur, mais l'unité de la ligne vaut pour la valeur. Cherchée dans
+ * le texte replié, à partir de la fin de la valeur, à travers un seul séparateur. `null` s'il n'y en a pas.
+ */
+export function unitFollowing(folded: string, end: number): string | null {
+  // Une cellule de tableau Word arrive sur sa propre ligne (« 168\n: µmol/L ») : le saut de ligne compte comme espace.
+  const m = /^\s*[:|;]\s*((?:[a-zµμ]+\s*\/\s*[a-zµμ0-9³]+)|°\s?[cf]\b|%|mmhg\b)/u.exec(folded.slice(end, end + 40));
+  return m ? m[1]! : null;
 }
 
 /** Caractères que l'OCR confond avec un chiffre : O/o pour 0, l/I pour 1 (la barre « | » sépare souvent des cellules). */
@@ -517,6 +534,56 @@ export function coerce(
   }
 }
 
+/** Une borne de période : jour, mois et année quand ils sont écrits (« 14/01/2024 », « 11 octobre », « 11 »). */
+interface SpanEnd {
+  day: number;
+  month: number | null;
+  year: number | null;
+}
+
+const SPAN_END = String.raw`(\d{1,2})(?:er)?(?:[/.-](\d{1,2})(?:[/.-](\d{2,4}))?|\s+([a-z]{3,9})\.?(?:\s+(\d{4}))?)?`;
+const DATE_SPAN = new RegExp(String.raw`^(?:du\s+)?${SPAN_END}\s*(?:\([^)]{0,60}\)\s*)?(?:au|a|jusqu'au|[-\u2013\u2014])\s*${SPAN_END}`);
+
+function spanEnd(m: RegExpExecArray, offset: number): SpanEnd | null {
+  const [day, monthNumber, yearOfNumber, monthName, yearOfName] = [1, 2, 3, 4, 5].map((i) => m[offset + i]);
+  const month = monthNumber ? Number(monthNumber) : monthName ? (MONTHS_FR[monthName] ?? null) : null;
+  if (monthName && month === null) return null;
+  const yearText = yearOfNumber ?? yearOfName;
+  return { day: Number(day), month, year: yearText ? expandYear(Number(yearText)) : null };
+}
+
+/**
+ * Nombre de jours d'une période écrite par ses dates : « du 14/01/2024 au 21/01/2024 », « 12/04/2024 – 26/04/2024 »,
+ * « du 11 au 25 octobre 2024 ». Le mois et l'année manquants au début sont repris de la fin. C'est la différence des
+ * deux dates (sept nuits du 14 au 21), la convention d'une durée de séjour. `null` si le texte n'est pas une période
+ * complète et cohérente.
+ */
+export function dateSpanDays(text: string): number | null {
+  const m = DATE_SPAN.exec(fold(cleanText(text)));
+  if (!m) return null;
+  const from = spanEnd(m, 0);
+  const to = spanEnd(m, 5);
+  if (!from || !to || to.month === null || to.year === null) return null;
+  const start = buildDate(from.year ?? to.year, from.month ?? to.month, from.day);
+  const end = buildDate(to.year, to.month, to.day);
+  if (!start || !end) return null;
+  const days = Math.round((Date.parse(end) - Date.parse(start)) / 86_400_000);
+  return days >= 0 ? days : null;
+}
+
+/** Le texte commence-t-il par une date (« 14/01/2024 », « du 11 octobre ») ? Ce n'est alors pas un nombre à lire. */
+function startsWithDate(text: string): boolean {
+  const s = fold(cleanText(text));
+  return (
+    // « 14/01 » est une date ; « 11.2 » ou « 3-5 » sont des nombres : avec un point ou un tiret, l'année est exigée.
+    /^(?:du\s+|le\s+)?\d{1,2}(?:\/\d{1,2}(?:\/\d{2,4})?|[.-]\d{1,2}[.-]\d{2,4})(?![\d.,])/.test(s) ||
+    /^(?:du\s+|le\s+)?\d{1,2}(?:er)?\s+(?:janv|fevr|mars|avr|mai|juin|juil|aout|sept|oct|nov|dec)/.test(s) ||
+    /^(?:du\s+|le\s+)?\d{4}-\d{2}-\d{2}/.test(s)
+  );
+}
+
+const DAY_UNITS = new Set(['j', 'jour', 'jours', 'nuit', 'nuits']);
+
 /** Lecture d'un nombre, une fois écartés les caractères ambigus de l'OCR. */
 function coerceNumber(
   text: string,
@@ -524,6 +591,11 @@ function coerceNumber(
   post: FieldPostProcess | undefined,
   unit: string | null | undefined,
 ): CoerceResult {
+  // « Séjour du 14/01/2024 au 21/01/2024 » : pour une durée en jours, la période donne la valeur. Toute autre date
+  // n'est pas un nombre : la lire donnerait le jour du mois (14) pour une durée.
+  const days = unit && DAY_UNITS.has(fold(unit).trim()) ? dateSpanDays(text) : null;
+  if (days !== null) text = String(days);
+  else if (startsWithDate(text)) return { ok: false, reason: `« ${text} » est une date, pas une valeur numérique` };
   // « < 5 » dit seulement que la valeur est sous le seuil de détection :
   // la lire « 5 » biaiserait toute moyenne. On la laisse à la saisie humaine.
   if (/^[(\s]*(?:[<>]=?|[\u2264\u2265])\s*-?\d/.test(text)) {

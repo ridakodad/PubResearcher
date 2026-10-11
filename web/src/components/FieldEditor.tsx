@@ -515,6 +515,39 @@ function PostProcessEditor({
             trace des autres.
           </div>
         </div>
+
+        <label className="checkbox" style={{ marginTop: 12 }}>
+          <input
+            type="checkbox"
+            checked={draft.extraction.suggestOnly === true}
+            onChange={(e) =>
+              onChange({ extraction: { ...draft.extraction, suggestOnly: e.target.checked ? true : undefined } })
+            }
+          />
+          <span>Proposer sans remplir (variable de synthèse, à valider)</span>
+        </label>
+        <div className="field-hint">
+          Pour les variables qui résument un séjour — examens réalisés, traitements reçus : un examen nommé dans un
+          compte rendu n’a pas forcément été fait pendant cet épisode (« IRM de contrôle dans six mois »). Les
+          mentions trouvées apparaissent parmi les valeurs à trancher ; une valeur lue dans un fichier DICOM est
+          retenue.
+        </div>
+
+        <label className="checkbox" style={{ marginTop: 12 }}>
+          <input
+            type="checkbox"
+            checked={draft.extraction.episode === 'admission'}
+            onChange={(e) =>
+              onChange({ extraction: { ...draft.extraction, episode: e.target.checked ? 'admission' : undefined } })
+            }
+          />
+          <span>Valeur à l’arrivée seulement</span>
+        </label>
+        <div className="field-hint">
+          Pour une température, une fièvre ou un bilan d’entrée : les mentions datées plus tard dans le séjour
+          (« à J4 », « en postopératoire », « au cours du séjour ») sont écartées, car elles décrivent une
+          complication et non l’état initial.
+        </div>
       </div>
     </details>
   );

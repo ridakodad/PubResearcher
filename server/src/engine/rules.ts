@@ -12,8 +12,8 @@ import type {
   Rejection,
   TemplateField,
 } from '../domain/types.js';
-import { coerce, ocrSuspect } from './coerce.js';
-import { describeStatus, qualifyMention, type MentionStatus } from './qualifiers.js';
+import { coerce, ocrSuspect, unitFollowing } from './coerce.js';
+import { describeStatus, laterInStay, qualifyMention, type MentionStatus } from './qualifiers.js';
 import {
   escapeRegex,
   findTerm,
@@ -74,6 +74,16 @@ interface RuleMatch {
 
 /** Nombre maximal de mentions lues par règle et par document : borne le travail sur un texte démesuré. */
 const MAX_MENTIONS_PER_DOC = 50;
+
+/**
+ * Valeur numérique lue dans un tableau : l'unité de la cellule suivante (« 168 : µmol/L ») lui est rattachée, pour que
+ * le contrôle d'unité s'applique comme si elle était écrite à côté du nombre.
+ */
+function withTableUnit(match: RuleMatch, numeric: boolean): FieldValue {
+  if (!numeric || typeof match.raw !== 'string' || !match.haystack) return match.raw;
+  const unit = unitFollowing(match.haystack.folded, match.end);
+  return unit ? `${match.raw} ${unit}` : match.raw;
+}
 
 /** Restitue le fragment d'origine correspondant à un intervalle replié. */
 function originalSlice(ft: FoldedText, start: number, end: number): string {
@@ -324,6 +334,25 @@ const TRAILING_NEGATION =
  * et le saut de ligne ferment la portée. Se tromper dans ce sens fait perdre une
  * valeur (le chercheur la saisit) plutôt que d'en inventer une.
  */
+/**
+ * Tranche du texte replié où les retours à la ligne de mise en page (une ligne de PDF coupée au milieu d'une phrase :
+ * « Pas de⏎diabète ») deviennent des espaces. Un retour à la ligne n'est une coupure de mise en page que si la ligne
+ * suivante commence, dans le texte d'origine, par une minuscule : « Pas de tabac⏎Diabète » reste deux lignes d'une liste.
+ */
+function softWrapped(ft: FoldedText, from: number, to: number): string {
+  const slice = ft.folded.slice(from, to);
+  if (!slice.includes('\n')) return slice;
+  let out = '';
+  for (let i = 0; i < slice.length; i++) {
+    const ch = slice[i]!;
+    if (ch === '\n' && i + 1 < slice.length + (to < ft.folded.length ? 1 : 0)) {
+      const next = ft.original[ft.map[from + i + 1] ?? -1] ?? '';
+      out += /\p{Ll}/u.test(next) ? ' ' : ch;
+    } else out += ch;
+  }
+  return out;
+}
+
 function sentenceContext(window: string): string {
   const parts = window.split(/[.!?\n\r•|]/);
   return parts[parts.length - 1] ?? '';
@@ -388,9 +417,7 @@ function applyKeywordRule(rule: KeywordRule, doc: SourceDoc, yesNo: boolean): Ke
       }
 
       // Contexte précédant l'occurrence, pour détecter « pas de », « absence de »…
-      const before = normalizeElision(
-        negationContext(ft.folded.slice(Math.max(0, idx - window), idx)),
-      );
+      const before = normalizeElision(negationContext(softWrapped(ft, Math.max(0, idx - window), idx)));
       // Ce qui suit se lit après la fin du mot : le terme « complication » trouvé dans « Complications : aucune »
       // doit voir « : aucune », pas « s : aucune ».
       const wordEnd = end + (WORD_TAIL.exec(ft.folded.slice(end, end + 30))?.[0].length ?? 0);
@@ -669,7 +696,8 @@ export function extractFieldDetailed(field: TemplateField, docs: SourceDoc[]): F
    * dans un autre se contredisent, même lus par deux règles différentes : les mentions de toutes les règles sont
    * mises en commun avant d'être tranchées. Pour les autres types, les règles suivantes restent des replis.
    */
-  const pooled = field.type === 'boolean';
+  // Choix multiple dont les valeurs se réunissent : chaque règle apporte ses options (scanner, IRM…), aucune n'est un repli.
+  const pooled = field.type === 'boolean' || (field.type === 'multi' && extraction.select === 'any');
   const pool: Candidate[] = [];
   /**
    * Étendues déjà lues par une règle à libellé ou à motif, par document : « Complications : aucune » est une réponse,
@@ -737,6 +765,14 @@ export function extractFieldDetailed(field: TemplateField, docs: SourceDoc[]): F
         continue;
       }
 
+      // Variable de l'arrivée : une mention datée plus tard dans le séjour (« à J4 », « postopératoire ») est écartée.
+      if (extraction.episode === 'admission') {
+        const later = (m: { start: number; end: number; haystack: FoldedText | null }) =>
+          m.haystack !== null && laterInStay(m.haystack.folded, m.start, m.end);
+        groups = groups.map((g) => g.filter((m) => !later(m)));
+        flagged = flagged.filter((f) => !later(f));
+      }
+
       if (pooled && rule.kind === 'keyword') {
         groups = groups.map((g) => g.filter((m) => !isCovered(docIndex, m.start, m.end)));
         flagged = flagged.filter((f) => !isCovered(docIndex, f.start, f.end));
@@ -762,7 +798,7 @@ export function extractFieldDetailed(field: TemplateField, docs: SourceDoc[]): F
                 ok: false,
                 reason: `caractère ambigu « ${ocr} » autour de la valeur capturée (lecture optique probable) : à vérifier puis saisir à la main`,
               } as const)
-            : coerce(match.raw, field.type, field.options, extraction.postProcess, field.unit);
+            : coerce(withTableUnit(match, numeric), field.type, field.options, extraction.postProcess, field.unit);
           if (!typed.ok) {
             const rejection: Rejection = {
               documentId: doc.id,
@@ -809,9 +845,31 @@ export function extractFieldDetailed(field: TemplateField, docs: SourceDoc[]): F
 
 /** Tranche entre les mentions retenues et construit la valeur, sa confiance et sa justification. */
 function settle(field: TemplateField, candidates: Candidate[], rejected: Rejection[]): FieldExtraction {
+  // Variable de synthèse : ce que disent les fichiers DICOM (la modalité de l'examen réellement acquis) fait foi ; le
+  // texte, lui, ne fait que proposer.
+  if (field.extraction.suggestOnly) {
+    const dicom = candidates.filter((c) => c.rule.kind === 'dicom');
+    if (dicom.length > 0) candidates = dicom;
+  }
   const resolved = resolveMentions(field, candidates);
   if (resolved.kind === 'conflict') {
     return { hit: null, rejected: [resolved.rejection, ...rejected].slice(0, MAX_REJECTED) };
+  }
+
+  // Variable de synthèse : les mentions trouvées sont proposées, la variable reste à valider (sauf DICOM).
+  if (field.extraction.suggestOnly && candidates.some((c) => c.rule.kind !== 'dicom')) {
+    const first = resolved.chosen;
+    const sources = [...new Set(candidates.map((c) => c.doc.name))].slice(0, MAX_ALTERNATIVES).join(', ');
+    const suggestion: Rejection = {
+      documentId: first.doc.id,
+      documentName: first.doc.name,
+      snippet: first.evidence.snippet,
+      reason:
+        `mentions trouvées : ${formatValue(resolved.value)} (${sources}) — variable de synthèse, à valider : ` +
+        'une mention ne dit pas que l’examen ou le traitement a eu lieu pendant ce séjour',
+      rule: describeRule(first.rule),
+    };
+    return { hit: null, rejected: [suggestion, ...rejected].slice(0, MAX_REJECTED) };
   }
 
   const { chosen } = resolved;

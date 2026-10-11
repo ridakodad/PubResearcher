@@ -54,8 +54,15 @@ interface Case {
 
 const doc = (text: string) => ({ id: 1, name: 'cr.pdf', kind: 'pdf' as const, text, dicomTags: {} });
 
+/**
+ * Le banc mesure ce que les règles détectent. Pour une variable de synthèse (`suggestOnly` : examens, traitements),
+ * la fiche livrée propose ces mentions sans remplir la variable ; le banc lit la détection elle-même, et un test à
+ * part vérifie la proposition.
+ */
 function run(c: Case): { got: unknown; rejected: number } {
-  const result = extractFieldDetailed(fields.get(c.key)!, [doc(c.text)]);
+  const field = fields.get(c.key)!;
+  const detecting = { ...field, extraction: { ...field.extraction, suggestOnly: undefined } };
+  const result = extractFieldDetailed(detecting, [doc(c.text)]);
   return { got: result.hit ? result.hit.value : null, rejected: result.rejected.length };
 }
 
@@ -279,5 +286,20 @@ describe('valeurs trouvées puis écartées', () => {
     const result = extractFieldDetailed(fields.get('age')!, [doc('Âge : NR. Patient âgé de 61 ans.')]);
     assert.equal(result.hit?.value, 61);
     assert.deepEqual(result.rejected, []);
+  });
+});
+
+describe('variables de synthèse de la fiche livrée', () => {
+  test('les examens nommés sont proposés à la relecture, sans remplir la variable', () => {
+    const result = extractFieldDetailed(fields.get('modalite_imagerie')!, [doc('Scanner abdominal le 12/03. IRM de contrôle dans six mois.')]);
+    assert.equal(result.hit, null);
+    assert.match(result.rejected[0]!.reason, /mentions trouvées : Scanner, IRM .*à valider/);
+  });
+
+  test('les traitements cités sont réunis dans la proposition', () => {
+    const result = extractFieldDetailed(fields.get('traitement')!, [doc('Antibiothérapie par ceftriaxone. CPRE le 07/03 avec extraction des calculs.')]);
+    assert.equal(result.hit, null);
+    assert.match(result.rejected[0]!.reason, /Médical/);
+    assert.match(result.rejected[0]!.reason, /Endoscopique/);
   });
 });

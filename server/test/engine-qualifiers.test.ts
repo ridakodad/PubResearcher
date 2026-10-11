@@ -39,7 +39,9 @@ const yesNo = (terms: string[], extra: Partial<ExtractionRule> = {}, extraction:
     },
   });
 const diabete = yesNo(['diabète', 'diabétique']);
-const tabac = yesNo(['tabagisme', 'fumeur', 'fumeuse']);
+// Comme dans la fiche livrée : « Tabac : ancien » se traduit par « non » (pour une maladie, « ancienne » voudrait dire
+// « de longue date », d'où l'absence de règle générale).
+const tabac = yesNo(['tabagisme', 'fumeur', 'fumeuse'], {}, { postProcess: { valueMap: { ancien: 'non', ancienne: 'non' } } });
 const value = (f: TemplateField, ...texts: string[]) =>
   extractField(f, texts.map((t, i) => doc(t, i + 1, `doc${i + 1}.txt`)))?.value ?? null;
 

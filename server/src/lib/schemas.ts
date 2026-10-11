@@ -99,6 +99,8 @@ export const fieldExtractionSchema = z.object({
     })
     .optional(),
   select: z.enum(SELECT_POLICIES as [SelectPolicy, ...SelectPolicy[]]).optional(),
+  suggestOnly: z.boolean().optional(),
+  episode: z.enum(['admission']).optional(),
 });
 
 /** La clé sert d'en-tête de colonne CSV : on impose un identifiant simple. */

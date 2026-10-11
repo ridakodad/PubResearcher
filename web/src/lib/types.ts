@@ -75,6 +75,10 @@ export interface FieldExtraction {
   rules: ExtractionRule[];
   postProcess?: FieldPostProcess;
   select?: SelectPolicy;
+  /** Variable de synthèse : les règles proposent, sans remplir (sauf valeur lue dans un fichier DICOM). */
+  suggestOnly?: boolean;
+  /** `admission` : seules les mentions de l'arrivée comptent (les mentions « à J4 », « postopératoire » sont écartées). */
+  episode?: 'admission';
 }
 
 export interface TemplateField {

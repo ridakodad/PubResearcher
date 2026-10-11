@@ -204,7 +204,9 @@ export function qualifyAnswer(foldedAnswer: string): Exclude<MentionStatus, 'aff
   }
   // « Ancien » seul répond à la question (« Tabac : ancien », « ancien fumeur ») ; suivi d'autre chose, il peut aussi
   // qualifier une maladie de longue date (« HTA ancienne, sous bithérapie ») : ambigu.
-  if (/^(?:anciens?|anciennes?)(?:\s+(?:fumeur|fumeuse|fumeurs|fumeuses))?[\s.;,]*$/.test(s)) return 'ruled-out';
+  // « Ancien fumeur » est un ancien fumeur ; « ancien(ne) » seul dépend de la variable — « Tabac : ancien » (sevré)
+  // mais « HTA ancienne » (de longue date) — : ambigu ici, la fiche le traduit au besoin (`valueMap` du tabagisme).
+  if (/^(?:anciens?|anciennes?)\s+(?:fumeur|fumeuse|fumeurs|fumeuses)[\s.;,]*$/.test(s)) return 'ruled-out';
   if (/^(?:anciens?|anciennes?)\b/.test(s)) return 'uncertain';
   if (/^(?:non|pas|aucun|aucune|absence|sans|neant|negatif|negative|ras)\b/.test(s) && CONTRADICTION.test(s)) {
     return 'contradicted';
@@ -230,4 +232,28 @@ export function describeStatus(status: MentionStatus): string {
     case 'affirmed':
       return 'mention affirmée';
   }
+}
+
+/**
+ * Indices d'une mention datée après l'arrivée : jour d'hospitalisation (« J4 », « (J2) »), suites opératoires,
+ * « au cours du séjour », « secondairement », « pic fébrile ». Une date seule ne suffit pas : l'entrée aussi est datée.
+ */
+const LATER_IN_STAY =
+  /(?:\bj\s?[1-9]\d?\b|\bpost-?op|\bpostoperatoire|\bapres (?:l'intervention|l'operation|la chirurgie)|\bau cours (?:du sejour|de l'hospitalisation|de son sejour)|\bpendant (?:le sejour|l'hospitalisation|son sejour)|\ben cours de sejour|\bdurant (?:le|son) sejour|\bsecondairement|\bpic febrile|\bdans les suites)/;
+
+/**
+ * La mention `[start, end)` décrit-elle un moment postérieur à l'arrivée ? La phrase qui la précède et la proposition
+ * qui la suit sont lues : « Le 13/09 (J4), pneumopathie : fièvre à 38,7 °C » comme « fièvre à 38,7 °C à J4 ».
+ */
+export function laterInStay(folded: string, start: number, end: number): boolean {
+  // La mention elle-même fait partie de l'indice : « pic fébrile » se lit à cheval sur le terme « fébrile ». Une
+  // valeur longue (« 11 g/dL puis 9,5 g/dL à J3 », lue après un libellé) ne compte que par son début : c'est sa
+  // première valeur qui est retenue, et elle date de l'arrivée.
+  const mention = folded.slice(start, end);
+  // Après une valeur chiffrée, la suite ne la concerne que jusqu'au nombre suivant : dans « 11 g/dL puis 9,5 g/dL à
+  // J3 », « à J3 » date la seconde valeur, pas la première.
+  let after = clauseAfter(folded, end);
+  if (/^\d/.test(mention)) after = after.slice(0, after.search(/\d/) === -1 ? after.length : after.search(/\d/));
+  const own = mention.length <= 25 ? mention + after : mention.slice(0, 12);
+  return LATER_IN_STAY.test(sentenceBefore(folded, start) + own);
 }
