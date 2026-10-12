@@ -1,4 +1,4 @@
-# Page d'accueil publiée sur GitHub Pages (branche gh-pages), sous https://ridakodad.github.io/pubresearcher/.
+# Page d'accueil publiée sur GitHub Pages (branche gh-pages), sous https://ridakodad.github.io/PubResearcher/.
 # Vercel reste possible (landing/vercel.json) ; cette publication-ci ne demande aucun jeton.
 name: Page d'accueil
 
@@ -30,10 +30,10 @@ jobs:
           cache-dependency-path: landing/package-lock.json
       - run: npm ci --no-audit --no-fund
       - run: npx tsc -b --noEmit
-      - name: Compilation sous /pubresearcher/
+      - name: Compilation sous /PubResearcher/
         env:
-          VITE_SITE_URL: https://ridakodad.github.io/pubresearcher
-        run: npx vite build --base /pubresearcher/
+          VITE_SITE_URL: https://ridakodad.github.io/PubResearcher
+        run: npx vite build --base /PubResearcher/
       - name: Routes de l'application (GitHub Pages n'a pas de réécriture)
         run: |
           cp dist/index.html dist/404.html

@@ -30,7 +30,7 @@ import { pageUrl } from './urls';
  * tourne sur le poste de l'utilisateur, avec ses propres protections (docs/securite-et-donnees.md).
  */
 
-/** Adresse du site, sous-dossier compris (GitHub Pages publie sous /pubresearcher/). */
+/** Adresse du site, sous-dossier compris (GitHub Pages publie sous /PubResearcher/). */
 const siteOrigin = () => window.location.origin + import.meta.env.BASE_URL.replace(/\/$/, '');
 
 export type Provider = 'google' | 'email' | 'preview';
