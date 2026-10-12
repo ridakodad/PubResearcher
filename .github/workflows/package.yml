@@ -69,3 +69,25 @@ jobs:
             dist-packages/PubResearcher-*
           if-no-files-found: error
           retention-days: 30
+
+  # Les archives essayées sont jointes à la version publiée (v<version de package.json>) : le bouton « Télécharger »
+  # de la page d'accueil pointe vers elles. La version est créée si elle n'existe pas ; les fichiers sont remplacés.
+  release:
+    needs: package
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - name: Joindre les archives à la version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v$(node -p "require('./package.json').version")"
+          ls -la out
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "PubResearcher ${tag#v}" --notes "Archives prêtes à l'emploi (non signées)." --target "$GITHUB_SHA"
+          gh release upload "$tag" out/PubResearcher-* --clobber

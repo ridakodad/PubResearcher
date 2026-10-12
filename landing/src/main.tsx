@@ -9,7 +9,7 @@ if (!root) throw new Error('Élément #root introuvable.');
 
 createRoot(root).render(
   <StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '') || '/'}>
       <App />
     </BrowserRouter>
   </StrictMode>,

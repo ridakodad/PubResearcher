@@ -30,6 +30,9 @@ import { pageUrl } from './urls';
  * tourne sur le poste de l'utilisateur, avec ses propres protections (docs/securite-et-donnees.md).
  */
 
+/** Adresse du site, sous-dossier compris (GitHub Pages publie sous /pubresearcher/). */
+const siteOrigin = () => window.location.origin + import.meta.env.BASE_URL.replace(/\/$/, '');
+
 export type Provider = 'google' | 'email' | 'preview';
 
 export interface AppUser {
@@ -235,7 +238,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { data, error } = await client.auth.signUp({
           email: email.trim(),
           password,
-          options: { data: { full_name: fullName.trim() }, emailRedirectTo: pageUrl(window.location.origin, '/bienvenue') },
+          options: { data: { full_name: fullName.trim() }, emailRedirectTo: pageUrl(siteOrigin(), '/bienvenue') },
         });
         if (error) throw error;
         // Avec la confirmation par e-mail, aucune session n'est ouverte avant le clic sur le lien.
@@ -263,7 +266,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!googleEnabled) throw Object.assign(new Error('provider_disabled'), { code: 'provider_disabled' });
         const { error } = await client.auth.signInWithOAuth({
           provider: 'google',
-          options: { redirectTo: pageUrl(window.location.origin, '/bienvenue'), queryParams: { prompt: 'select_account' } },
+          options: { redirectTo: pageUrl(siteOrigin(), '/bienvenue'), queryParams: { prompt: 'select_account' } },
         });
         if (error) throw error;
         // Sans erreur, le navigateur part vers Google : la suite se passe au retour, sur /bienvenue.
@@ -286,7 +289,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (preview) return;
         const client = await supabase();
         const { error } = await client.auth.resetPasswordForEmail(email.trim(), {
-          redirectTo: pageUrl(window.location.origin, '/mot-de-passe'),
+          redirectTo: pageUrl(siteOrigin(), '/mot-de-passe'),
         });
         if (error) throw error;
       },
@@ -305,7 +308,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { error } = await client.auth.resend({
           type: 'signup',
           email: email.trim(),
-          options: { emailRedirectTo: pageUrl(window.location.origin, '/bienvenue') },
+          options: { emailRedirectTo: pageUrl(siteOrigin(), '/bienvenue') },
         });
         if (error) throw error;
       },

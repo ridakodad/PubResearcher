@@ -6,13 +6,13 @@
  * texte, pour qui ne la regarde pas (WCAG 1.2.1).
  */
 export const INTRO_VIDEO = {
-  src: '/video/presentation-pubresearcher.mp4',
+  src: `${import.meta.env.BASE_URL}video/presentation-pubresearcher.mp4`,
   /** H.264 High, niveau 4.0 : annoncé avec son codec, pour qu'un navigateur qui ne le lit pas passe à la version WebM. */
   type: 'video/mp4; codecs="avc1.640028"',
   /** VP9 : pour les navigateurs sans H.264 (Chromium libre, certains Firefox sous Linux). */
-  webm: '/video/presentation-pubresearcher.webm',
+  webm: `${import.meta.env.BASE_URL}video/presentation-pubresearcher.webm`,
   webmType: 'video/webm; codecs="vp9"',
-  poster: '/video/presentation-pubresearcher-affiche.jpg',
+  poster: `${import.meta.env.BASE_URL}video/presentation-pubresearcher-affiche.jpg`,
   duration: '1 min 35',
   size: '3,9 Mo',
   width: 1280,

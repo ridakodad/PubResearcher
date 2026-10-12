@@ -1134,3 +1134,9 @@ th { font-weight: 600; color: var(--text-secondary); font-size: 0.75rem; text-tr
 .guide-help { display: flex; flex-direction: column; gap: var(--s2); margin-top: var(--s3); }
 .guide-help h2 { font-size: 1.15rem; margin-bottom: var(--s1); }
 @media (max-width: 560px) { .guide-step { padding: var(--s4); } }
+
+/* Téléchargement en un clic */
+.download { display: grid; gap: 10px; justify-items: start; margin-bottom: 28px; }
+.download-steps { margin: 4px 0 0; padding-left: 1.2em; display: grid; gap: 4px; }
+.install-more { margin-top: 8px; }
+.install-more > summary { cursor: pointer; font-weight: 600; margin-bottom: 16px; }

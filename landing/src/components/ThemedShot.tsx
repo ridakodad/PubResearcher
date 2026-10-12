@@ -6,8 +6,8 @@
 export function ThemedShot({ name, width, height, alt }: { name: string; width: number; height: number; alt: string }) {
   return (
     <>
-      <img className="shot-light" src={`/img/${name}-light.webp`} width={width} height={height} alt={alt} loading="lazy" decoding="async" />
-      <img className="shot-dark" src={`/img/${name}-dark.webp`} width={width} height={height} alt={alt} loading="lazy" decoding="async" />
+      <img className="shot-light" src={`${import.meta.env.BASE_URL}img/${name}-light.webp`} width={width} height={height} alt={alt} loading="lazy" decoding="async" />
+      <img className="shot-dark" src={`${import.meta.env.BASE_URL}img/${name}-dark.webp`} width={width} height={height} alt={alt} loading="lazy" decoding="async" />
     </>
   );
 }

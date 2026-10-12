@@ -1,3 +1,4 @@
+import { DownloadButtons } from '../components/DownloadButtons';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { CodeBlock } from '../components/CodeBlock';
@@ -441,10 +442,14 @@ export function LandingPage() {
             <h2 id="install-title">Deux minutes pour le premier lancement.</h2>
             <p className="lead">
               L’application n’est pas un site : elle tourne chez vous, avec vos données, et n’écoute que sur votre poste.
-              Il faut <strong>Node.js 22.13</strong> ou plus récent.
+              Rien à installer : téléchargez, dézippez, double-cliquez sur <strong>PubResearcher</strong> (PubResearcher.cmd sous Windows).
             </p>
           </div>
 
+          <DownloadButtons />
+
+          <details className="install-more">
+            <summary>Autres façons d’installer (développeurs)</summary>
           <div className="install-grid">
             <div>
               <h3 className="install-title">
@@ -455,20 +460,14 @@ export function LandingPage() {
                 lines={[`git clone ${config.repoUrl}.git`, 'cd PubResearcher', 'npm ci', 'npm start']}
               />
               <p className="small muted">
-                Le navigateur s’ouvre ensuite sur <code>http://localhost:4000</code>. Laissez la fenêtre du terminal
-                ouverte tant que vous travaillez.
+                Il faut Node.js 22.13 ou plus récent. Le navigateur s’ouvre ensuite sur <code>http://localhost:4000</code>.
               </p>
             </div>
             <div>
-              <h3 className="install-title">Sans terminal</h3>
-              <p>
-                Téléchargez le projet (<em>Code › Download ZIP</em> sur GitHub), décompressez-le, puis double-cliquez sur{' '}
-                <code>lancer.bat</code> (Windows) ou <code>lancer.command</code> (macOS).
-              </p>
               <h3 className="install-title">Pour essayer sans données réelles</h3>
-              <CodeBlock label="Commande des dossiers fictifs" lines={['npm run demo -- --upload']} />
-              <p className="small muted">
-                24 dossiers fictifs, importés directement. Le{' '}
+              <p className="small">
+                Chaque archive contient le dossier <strong>Dossiers fictifs (démonstration)</strong> : 24 patients
+                inventés à importer d’un clic. Le{' '}
                 <a href={`${docs}/guide-administrateur.md`} target="_blank" rel="noopener noreferrer">
                   guide de l’administrateur
                 </a>{' '}
@@ -476,6 +475,7 @@ export function LandingPage() {
               </p>
             </div>
           </div>
+          </details>
         </div>
       </section>
 
