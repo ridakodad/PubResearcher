@@ -1,3 +1,4 @@
+import { BulkBar, SelectAllBox } from '../components/BulkBar';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
@@ -92,6 +93,31 @@ export function DossiersPage() {
       toast.error(err instanceof ApiError ? err.message : String(err));
     } finally {
       setRunning(false);
+    }
+  }
+
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const toggle = (id: number) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  async function removeSelected() {
+    const ids = [...selected];
+    setBulkBusy(true);
+    try {
+      const { deleted } = await api.bulkDeletePatients(ids);
+      toast.success(`${plural(deleted, 'dossier')} supprimé${deleted > 1 ? 's' : ''}.`);
+      setSelected(new Set());
+      await load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBulkBusy(false);
     }
   }
 
@@ -333,6 +359,15 @@ export function DossiersPage() {
           />
         }
       >
+        <BulkBar
+          count={selected.size}
+          total={filtered.length}
+          noun="dossiers"
+          busy={bulkBusy}
+          onSelectAll={() => setSelected(new Set(filtered.map((p) => p.id)))}
+          onClear={() => setSelected(new Set())}
+          onDelete={() => void removeSelected()}
+        />
 
         {patients.length === 0 ? (
           <EmptyState
@@ -361,6 +396,24 @@ export function DossiersPage() {
             <table>
               <thead>
                 <tr>
+                  <th className="check-col">
+                    <SelectAllBox
+                      label="Sélectionner les dossiers de cette page"
+                      checked={shown.length > 0 && shown.every((p) => selected.has(p.id))}
+                      partial={shown.some((p) => selected.has(p.id))}
+                      onChange={() =>
+                        setSelected((prev) => {
+                          const next = new Set(prev);
+                          const all = shown.every((p) => next.has(p.id));
+                          for (const p of shown) {
+                            if (all) next.delete(p.id);
+                            else next.add(p.id);
+                          }
+                          return next;
+                        })
+                      }
+                    />
+                  </th>
                   <th>Code</th>
                   <th>Libellé</th>
                   <th className="num">Documents</th>
@@ -371,7 +424,16 @@ export function DossiersPage() {
               </thead>
               <tbody>
                 {shown.map((patient) => (
-                  <tr key={patient.id}>
+                  <tr key={patient.id} className={selected.has(patient.id) ? 'is-selected' : undefined}>
+                    <td className="check-col">
+                      <input
+                        type="checkbox"
+                        className="row-check"
+                        aria-label={`Sélectionner le dossier ${patient.code}`}
+                        checked={selected.has(patient.id)}
+                        onChange={() => toggle(patient.id)}
+                      />
+                    </td>
                     <td>
                       <Link to={`/dossiers/${patient.id}`} style={{ fontWeight: 600 }}>
                         {patient.code}

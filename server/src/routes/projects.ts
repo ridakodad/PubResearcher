@@ -24,7 +24,10 @@ const nameSchema = z.string().trim().min(1, 'Donnez un nom au projet.').max(120,
 const createSchema = z.object({
   name: nameSchema,
   description: z.string().max(2000).nullish(),
-  /** Reprendre la fiche d'exploitation active d'un autre projet, au lieu de la fiche générale par défaut. */
+  /**
+   * Fiche de départ : vide par défaut (`null`), `"generale"` pour la trame générale fournie, ou l'identifiant d'un
+   * projet dont la fiche active est reprise.
+   */
   copyTemplateFrom: z.string().nullish(),
 });
 const updateSchema = z.object({ name: nameSchema.optional(), description: z.string().max(2000).nullish() });
@@ -53,7 +56,8 @@ projectsRouter.post(
   asyncHandler(async (req, res) => {
     const input = createSchema.parse(req.body);
     let source: ReturnType<typeof getActiveTemplate> = null;
-    if (input.copyTemplateFrom) {
+    const general = input.copyTemplateFrom === 'generale';
+    if (input.copyTemplateFrom && !general) {
       const from = getProject(input.copyTemplateFrom);
       if (!from) throw badRequest('Projet source introuvable pour la copie de la fiche.');
       source = inProject(from, () => getActiveTemplate());
@@ -82,6 +86,14 @@ projectsRouter.post(
         })(),
       );
     }
+    if (!source && !general) {
+      // Fiche vide : le projet démarre sans aucune variable, à construire selon le protocole de l'étude.
+      inProject(context, () => {
+        const empty = createTemplate({ name: "Fiche d'exploitation", description: null });
+        setActiveTemplate(empty.id);
+      });
+    }
+    // La mise en route ajoute la fiche générale seulement si aucune fiche n'existe (choix « generale »).
     initializeProject(context);
     res.status(201).json({ ...info, isMain: false, stats: summary(info.id) });
   }),

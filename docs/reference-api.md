@@ -91,7 +91,7 @@ Un identifiant inconnu donne `404 { "code": "PROJECT_NOT_FOUND" }`. La requête 
 | Méthode | Route | Rôle |
 |---|---|---|
 | GET | `/api/projects` | Liste des projets : `id`, `name`, `description`, `createdAt`, `isMain`, et `stats` (patients, documents, références, fiche active) |
-| POST | `/api/projects` | `{ name, description?, copyTemplateFrom? }` crée un projet (201). `copyTemplateFrom` reprend la fiche active d'un autre projet ; sinon le projet reçoit la fiche générale par défaut. |
+| POST | `/api/projects` | `{ name, description?, copyTemplateFrom? }` crée un projet (201) avec une fiche vide. `copyTemplateFrom: "generale"` donne la trame générale fournie ; l'identifiant d'un projet reprend sa fiche active. |
 | PATCH | `/api/projects/:id` | `{ name?, description? }` |
 | DELETE | `/api/projects/:id` | `{ confirmName }` doit être le nom exact du projet. Supprime la base et les fichiers (204). Le projet principal ne peut pas être supprimé (400). |
 

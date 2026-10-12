@@ -8,7 +8,7 @@ L'espace de travail d'une étude rétrospective, sur votre poste. D'un côté, c
 
 Pensée pour un travail de thèse ou une étude rétrospective : on part d'une pile de dossiers, on obtient un tableau exploitable dans Excel, R ou SPSS — sans ressaisir chaque variable à la main, et sans perdre la trace de l'origine de chaque valeur.
 
-**Version 1.7.0** · Node.js ≥ 22.13 · un seul processus, aucun module natif à compiler · 1 050 tests
+**Version 1.7.0** · Node.js ≥ 22.13 · un seul processus, aucun module natif à compiler · 1 052 tests
 
 > **Données de santé.** Par défaut l'outil n'écoute que sur le poste et n'envoie **rien** hors de la machine. Il n'anonymise pas : importez des documents pseudonymisés (avant un envoi à Claude, il masque en plus, sur le poste, les noms précédés d'une civilité, téléphones, dates de naissance et identifiants annoncés — une pseudonymisation de secours, pas une anonymisation). Avant tout import, l'application demande de **confirmer une charte d'anonymisation** (cinq engagements, rappelés à chaque nouvelle version du texte). Lisez [Sécurité et données](docs/securite-et-donnees.md) avant la première étude.
 

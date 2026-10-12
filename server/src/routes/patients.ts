@@ -12,6 +12,8 @@ import {
 } from '../repo/patients.js';
 import { listDocuments } from '../repo/documents.js';
 
+import { bulkIdsSchema } from '../lib/bulk.js';
+
 export const patientsRouter = Router();
 
 patientsRouter.get(
@@ -67,6 +69,17 @@ patientsRouter.patch(
     const patient = updatePatient(id, input);
     if (!patient) throw notFound('Dossier patient introuvable.');
     res.json({ patient });
+  }),
+);
+
+/** Suppression groupée (sélection multiple) : `{ ids: number[] }`, au plus 5 000 à la fois. */
+patientsRouter.post(
+  '/bulk-delete',
+  asyncHandler(async (req, res) => {
+    const { ids } = bulkIdsSchema.parse(req.body);
+    let deleted = 0;
+    for (const id of new Set(ids)) if (deletePatient(id)) deleted++;
+    res.json({ deleted });
   }),
 );
 

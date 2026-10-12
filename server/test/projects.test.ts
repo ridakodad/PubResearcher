@@ -62,9 +62,20 @@ describe('projets de recherche', () => {
     assert.equal(del.status, 400);
   });
 
-  test('créer un projet : base séparée, fiche générale par défaut', async () => {
+  test('créer un projet : fiche vide par défaut, sans aucun dossier', async () => {
+    const { data } = await api<any>('POST', '/api/projects', { name: 'Vide' });
+    const tpl = await api<any>('GET', '/api/templates', undefined, data.id);
+    assert.equal(tpl.data.templates.length, 1);
+    assert.equal(tpl.data.active.fields.length, 0, 'aucune variable');
+    assert.equal(data.stats.patients, 0);
+    const generale = await api<any>('POST', '/api/projects', { name: 'Avec trame', copyTemplateFrom: 'generale' });
+    const tpl2 = await api<any>('GET', '/api/templates', undefined, generale.data.id);
+    assert.ok(tpl2.data.active.fields.length > 10, 'trame générale sur demande');
+  });
+
+  test('créer un projet : base séparée', async () => {
     await api('POST', '/api/patients', { code: 'P-PRINCIPAL' });
-    const { status, data } = await api<any>('POST', '/api/projects', { name: 'Pneumopathies 2024', description: 'Étude rétrospective' });
+    const { status, data } = await api<any>('POST', '/api/projects', { name: 'Pneumopathies 2024', description: 'Étude rétrospective', copyTemplateFrom: 'generale' });
     assert.equal(status, 201);
     assert.equal(data.id, 'pneumopathies-2024');
     assert.equal(data.stats.patients, 0);
@@ -108,6 +119,25 @@ describe('projets de recherche', () => {
     const copied = await api<any>('GET', '/api/templates', undefined, data.id);
     assert.equal(copied.data.active.fields.length, fieldCount);
     assert.equal(copied.data.templates.length, 1, 'pas de seconde fiche par défaut ajoutée à la copie');
+  });
+
+  test('suppression groupée : dossiers et variables, dans le seul projet visé', async () => {
+    const ids: number[] = [];
+    for (const code of ['B-1', 'B-2', 'B-3']) ids.push((await api<any>('POST', '/api/patients', { code }, second)).data.patient.id);
+    const res = await api<any>('POST', '/api/patients/bulk-delete', { ids: ids.slice(0, 2) }, second);
+    assert.equal(res.data.deleted, 2);
+    const left = JSON.stringify((await api<any>('GET', '/api/patients', undefined, second)).data);
+    assert.ok(left.includes('B-3') && !left.includes('B-1') && !left.includes('B-2'));
+    assert.equal((await api('POST', '/api/patients/bulk-delete', { ids: [] }, second)).status, 400);
+
+    const tpl = (await api<any>('GET', '/api/templates', undefined, second)).data.active;
+    const before = tpl.fields.length;
+    const del = await api<any>('POST', '/api/templates/fields/bulk-delete', { ids: tpl.fields.slice(0, 3).map((f: any) => f.id) }, second);
+    assert.equal(del.data.deleted, 3);
+    assert.equal((await api<any>('GET', '/api/templates', undefined, second)).data.active.fields.length, before - 3);
+    // Le projet principal garde sa fiche intacte.
+    const main = (await api<any>('GET', '/api/templates')).data.active.fields.length;
+    assert.ok(main >= before);
   });
 
   test('projet inconnu : refus explicite, pas de repli silencieux sur le principal', async () => {

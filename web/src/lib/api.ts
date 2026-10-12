@@ -209,6 +209,8 @@ export interface ProjectSummary {
 }
 
 export const api = {
+  bulkDeletePatients: (ids: number[]) => post<{ deleted: number }>('/patients/bulk-delete', { ids }, { timeoutMs: 0 }),
+  bulkDeleteFields: (ids: number[]) => post<{ deleted: number }>('/templates/fields/bulk-delete', { ids }),
   // ------------------------------------------------------------------ projets
   listProjects: () => get<ProjectSummary[]>('/projects'),
   createProject: (body: { name: string; description?: string | null; copyTemplateFrom?: string | null }) =>

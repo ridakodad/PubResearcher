@@ -8,7 +8,8 @@ Le format suit l'ordre des versions, de la plus récente à la plus ancienne ; l
 
 - **Sélecteur de projet** dans la barre du haut : le nom de l'étude ouverte est toujours visible, et un menu permet d'en changer ou d'en créer une. Tous les onglets ouverts suivent le même projet.
 - **Page « Projets de recherche »** (`/projets`) : créer (nom, description, fiche de départ), ouvrir, renommer et supprimer un projet. Pour supprimer, il faut recopier son nom : le projet est effacé avec tout son contenu, sans corbeille.
-- **Reprendre une fiche** : un nouveau projet peut partir de la fiche d'exploitation d'un projet existant (variables et règles), sans ses dossiers ni ses références.
+- **Projet neuf, vraiment vide** : aucun dossier, et une fiche d'exploitation sans aucune variable, à construire selon le protocole. Deux autres choix à la création : la trame générale fournie (22 variables), ou la fiche d'un projet existant (variables et règles, sans les valeurs).
+- **Sélection multiple** : des cases à cocher dans la liste des dossiers et dans la fiche (par ligne, par page ou par section, ou « Tout sélectionner »), puis « Supprimer la sélection » avec confirmation. Routes `POST /api/patients/bulk-delete` et `POST /api/templates/fields/bulk-delete` (`{ ids }`, 5 000 au plus).
 - **Données existantes** : elles deviennent le projet « Étude principale », au même emplacement. Rien n'est déplacé ni converti, et ce projet ne peut pas être supprimé.
 - **Rangement** : chaque nouveau projet vit dans `projects/<identifiant>/` du dossier de données (sa base `research-tool.db` et son dossier `uploads/`). Le registre des projets est `projects.json`.
 - **Sauvegarde** : `npm run backup` sauvegarde tous les projets, chacun vérifié. `npm run restore -- <dossier> --project <identifiant>` restaure un projet donné.

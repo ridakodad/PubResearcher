@@ -31,6 +31,8 @@ import { db } from '../db/index.js';
 import { extractFieldDetailed, type SourceDoc } from '../engine/rules.js';
 import type { TemplateField } from '../domain/types.js';
 
+import { bulkIdsSchema } from '../lib/bulk.js';
+
 export const templatesRouter = Router();
 
 templatesRouter.get(
@@ -157,6 +159,19 @@ templatesRouter.patch(
     const input = fieldUpdateSchema.parse(req.body) as Partial<FieldInput>;
     validateOptions({ ...current, ...input } as FieldInput);
     res.json({ field: updateField(fieldId, input) });
+  }),
+);
+
+/** Suppression groupée de variables (sélection multiple) : `{ ids: number[] }`. */
+templatesRouter.post(
+  '/fields/bulk-delete',
+  asyncHandler(async (req, res) => {
+    const { ids } = bulkIdsSchema.parse(req.body);
+    let deleted = 0;
+    db.transaction(() => {
+      for (const id of new Set(ids)) if (deleteField(id)) deleted++;
+    })();
+    res.json({ deleted });
   }),
 );
 

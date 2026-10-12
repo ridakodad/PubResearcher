@@ -13,7 +13,8 @@ Ce guide s'adresse à qui doit construire un jeu de données à partir de dossie
 
 Le nom de l'étude ouverte s'affiche en haut de l'écran, à côté du logo. Chaque projet garde ses propres dossiers patients, sa fiche d'exploitation, ses résultats, sa bibliographie et sa rédaction : rien ne passe d'un projet à l'autre.
 
-- **Créer un projet** : cliquez sur le nom du projet, puis « + Nouveau projet ». Donnez un nom, une description si vous le souhaitez, et choisissez la fiche de départ : la fiche générale, ou celle d'un projet existant (pratique pour une seconde cohorte ou une étude de suivi). Le nouveau projet s'ouvre aussitôt, vide.
+- **Créer un projet** : cliquez sur le nom du projet, puis « + Nouveau projet ». Donnez un nom, et une description si vous le souhaitez. Le nouveau projet s'ouvre aussitôt, sans aucun dossier et avec une fiche vide. Si vous préférez partir d'une base, choisissez à la création la trame générale fournie, ou la fiche d'un projet existant (pratique pour une seconde cohorte ou une étude de suivi).
+- **Supprimer plusieurs éléments d'un coup** : cochez des dossiers (liste des dossiers) ou des variables (fiche d'exploitation). La case d'en-tête coche toute la page ou toute la section, et « Tout sélectionner » étend la sélection à toute la liste. Cliquez ensuite sur « Supprimer la sélection », puis une seconde fois pour confirmer.
 - **Changer de projet** : cliquez sur le nom du projet et choisissez-en un autre. L'application revient au plan de travail, et tous les onglets ouverts changent avec elle.
 - **Gérer les projets** : la page « Projets de recherche » permet de renommer un projet ou de le supprimer. Supprimer efface tout le contenu du projet, sans corbeille : faites d'abord une sauvegarde.
 

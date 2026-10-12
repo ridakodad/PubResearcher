@@ -1,3 +1,4 @@
+import { BulkBar, SelectAllBox } from '../components/BulkBar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '../lib/api';
 import { plural } from '../lib/format';
@@ -110,6 +111,32 @@ export function FichePage() {
       await load();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+
+  const [checked, setChecked] = useState<Set<number>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  // Changer de fiche vide la sélection : on ne supprime jamais des variables qu'on ne voit plus.
+  useEffect(() => setChecked(new Set()), [selectedId]);
+  const toggleField = (id: number) =>
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  async function removeCheckedFields() {
+    setBulkBusy(true);
+    try {
+      const { deleted } = await api.bulkDeleteFields([...checked]);
+      toast.success(`${plural(deleted, 'variable')} supprimée${deleted > 1 ? 's' : ''}.`);
+      setChecked(new Set());
+      if (selectedId) await loadTemplate(selectedId);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBulkBusy(false);
     }
   }
 
@@ -295,6 +322,16 @@ export function FichePage() {
             </EmptyState>
           ) : (
             <div className="card-body stack">
+              <BulkBar
+                count={checked.size}
+                total={template.fields.length}
+                noun="variables"
+                feminine
+                busy={bulkBusy}
+                onSelectAll={() => setChecked(new Set(template.fields.map((f) => f.id)))}
+                onClear={() => setChecked(new Set())}
+                onDelete={() => void removeCheckedFields()}
+              />
               {sections.map(([section, fields]) => (
                 <details className="section" key={section} open>
                   <summary>
@@ -307,6 +344,24 @@ export function FichePage() {
                     <table>
                       <thead>
                         <tr>
+                          <th className="check-col">
+                            <SelectAllBox
+                              label={`Sélectionner les variables de la section ${section}`}
+                              checked={fields.every((f) => checked.has(f.id))}
+                              partial={fields.some((f) => checked.has(f.id))}
+                              onChange={() =>
+                                setChecked((prev) => {
+                                  const next = new Set(prev);
+                                  const all = fields.every((f) => next.has(f.id));
+                                  for (const f of fields) {
+                                    if (all) next.delete(f.id);
+                                    else next.add(f.id);
+                                  }
+                                  return next;
+                                })
+                              }
+                            />
+                          </th>
                           <th>Libellé</th>
                           <th>Clé</th>
                           <th>Type</th>
@@ -316,7 +371,16 @@ export function FichePage() {
                       </thead>
                       <tbody>
                         {fields.map((field, index) => (
-                          <tr key={field.id}>
+                          <tr key={field.id} className={checked.has(field.id) ? 'is-selected' : undefined}>
+                            <td className="check-col">
+                              <input
+                                type="checkbox"
+                                className="row-check"
+                                aria-label={`Sélectionner la variable ${field.label}`}
+                                checked={checked.has(field.id)}
+                                onChange={() => toggleField(field.id)}
+                              />
+                            </td>
                             <td>
                               <strong>{field.label}</strong>
                               {field.unit && <span className="muted"> ({field.unit})</span>}

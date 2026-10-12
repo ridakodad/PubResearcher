@@ -196,7 +196,8 @@ function CreateProjectModal({ projects, onClose }: { projects: ProjectSummary[];
         <div className="field">
           <label htmlFor="project-copy">Fiche d’exploitation de départ</label>
           <select id="project-copy" value={copyFrom} onChange={(e) => setCopyFrom(e.target.value)}>
-            <option value="">Fiche générale par défaut</option>
+            <option value="">Fiche vide (à construire)</option>
+            <option value="generale">Trame générale fournie (22 variables)</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
                 Reprendre la fiche de « {p.name} »{p.stats?.template ? ` (${p.stats.template})` : ''}
@@ -204,7 +205,7 @@ function CreateProjectModal({ projects, onClose }: { projects: ProjectSummary[];
             ))}
           </select>
           <p className="small muted">
-            Seule la fiche est reprise (variables et règles) : le nouveau projet démarre sans dossier ni référence.
+            Le projet démarre sans dossier ni référence. Une fiche reprise garde ses variables et ses règles, pas les valeurs.
           </p>
         </div>
         {error && (
