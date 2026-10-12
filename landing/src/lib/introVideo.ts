@@ -5,14 +5,17 @@
  * d'accueil et la page d'accès). Vidéo sans son, aux sous-titres incrustés : le déroulé ci-dessous en est l'équivalent
  * texte, pour qui ne la regarde pas (WCAG 1.2.1).
  */
+/** Dossier de publication du site (« / » sur Vercel, « /PubResearcher/ » sur GitHub Pages). */
+const BASE = import.meta.env?.BASE_URL ?? '/';
+
 export const INTRO_VIDEO = {
-  src: `${import.meta.env.BASE_URL}video/presentation-pubresearcher.mp4`,
+  src: `${BASE}video/presentation-pubresearcher.mp4`,
   /** H.264 High, niveau 4.0 : annoncé avec son codec, pour qu'un navigateur qui ne le lit pas passe à la version WebM. */
   type: 'video/mp4; codecs="avc1.640028"',
   /** VP9 : pour les navigateurs sans H.264 (Chromium libre, certains Firefox sous Linux). */
-  webm: `${import.meta.env.BASE_URL}video/presentation-pubresearcher.webm`,
+  webm: `${BASE}video/presentation-pubresearcher.webm`,
   webmType: 'video/webm; codecs="vp9"',
-  poster: `${import.meta.env.BASE_URL}video/presentation-pubresearcher-affiche.jpg`,
+  poster: `${BASE}video/presentation-pubresearcher-affiche.jpg`,
   duration: '1 min 35',
   size: '3,9 Mo',
   width: 1280,
