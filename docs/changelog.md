@@ -2,6 +2,18 @@
 
 Le format suit l'ordre des versions, de la plus récente à la plus ancienne ; l'historique git de ce dépôt commence à la 1.2.0, les versions antérieures n'y sont décrites qu'ici. Les numéros de version sont ceux de `package.json` ; le rapport « Méthodes et traçabilité » consigne la version qui a produit un jeu de données.
 
+## 1.7.0 — 12 octobre 2026
+
+**Plusieurs études, sans les mélanger.** Chaque projet de recherche a désormais sa propre base : dossiers patients, fiche d'exploitation, extraction, résultats, bibliographie et rédaction.
+
+- **Sélecteur de projet** dans la barre du haut : le nom de l'étude ouverte est toujours visible, et un menu permet d'en changer ou d'en créer une. Tous les onglets ouverts suivent le même projet.
+- **Page « Projets de recherche »** (`/projets`) : créer (nom, description, fiche de départ), ouvrir, renommer et supprimer un projet. Pour supprimer, il faut recopier son nom : le projet est effacé avec tout son contenu, sans corbeille.
+- **Reprendre une fiche** : un nouveau projet peut partir de la fiche d'exploitation d'un projet existant (variables et règles), sans ses dossiers ni ses références.
+- **Données existantes** : elles deviennent le projet « Étude principale », au même emplacement. Rien n'est déplacé ni converti, et ce projet ne peut pas être supprimé.
+- **Rangement** : chaque nouveau projet vit dans `projects/<identifiant>/` du dossier de données (sa base `research-tool.db` et son dossier `uploads/`). Le registre des projets est `projects.json`.
+- **Sauvegarde** : `npm run backup` sauvegarde tous les projets, chacun vérifié. `npm run restore -- <dossier> --project <identifiant>` restaure un projet donné.
+- **API** : routes `/api/projects`. Toutes les autres routes visent le projet indiqué par l'en-tête `X-Project`, à défaut par `?project=` ou par le témoin `pubresearcher_project`, sinon le projet principal. Un projet inconnu est refusé (404, `PROJECT_NOT_FOUND`) : la requête n'est jamais redirigée en silence vers le principal.
+
 ## 1.6.0 — 11 octobre 2026
 
 **Des valeurs plus sûres, sans rien installer.** Le moteur ne lit plus « oui » dans une hypothèse ni dans un antécédent, ne départage plus au hasard deux valeurs discordantes ; le tableau que l'équipe tenait déjà s'importe ; PubMed fonctionne sans réglage ; une archive par système s'ouvre d'un double-clic, sans Node.js ni connexion.

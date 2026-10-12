@@ -1,4 +1,5 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
+import { inProject } from '../db/index.js';
 import multer from 'multer';
 import { z } from 'zod';
 import { HttpError, asyncHandler, badRequest, conflict, intParam, notFound, unprocessable } from '../lib/http.js';
@@ -291,7 +292,9 @@ function receiveFile(req: Request, res: Response, next: NextFunction): void {
   multer({ storage: multer.memoryStorage(), limits: { fileSize: limit, files: 1, fields: 10 } }).single('file')(
     req,
     res,
-    (error: unknown) => {
+    (error: unknown) => (req.project ? inProject(req.project, () => afterFile(error)) : afterFile(error)),
+  );
+  function afterFile(error: unknown): void {
       if (error instanceof multer.MulterError) {
         if (error.code === 'LIMIT_FILE_SIZE') {
           next(
@@ -306,8 +309,7 @@ function receiveFile(req: Request, res: Response, next: NextFunction): void {
         return;
       }
       next(error as Error | undefined);
-    },
-  );
+  }
 }
 
 /** Nom affiché d'un fichier : sans chemin, sans caractère de contrôle ni marque de sens d'écriture. */

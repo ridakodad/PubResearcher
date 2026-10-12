@@ -1800,3 +1800,59 @@ td strong, td .truncate-wrap { overflow-wrap: anywhere; }
   margin-top: 6px; padding: 8px 10px; background: var(--surface-2);
   border-radius: var(--radius-sm); border-left: 3px solid var(--good);
 }
+
+/* --- projets de recherche ----------------------------------------------- */
+
+.project-switcher { position: relative; min-width: 0; }
+.project-button {
+  display: flex; align-items: center; gap: var(--s2); max-width: 280px; min-height: 40px;
+  padding: 4px 10px 4px 12px; border-radius: var(--radius-sm);
+  background: var(--surface-1); border: 1px solid var(--border); box-shadow: var(--shadow-1); color: var(--text-primary);
+}
+.project-button:hover { background: var(--surface-2); }
+.project-button > svg:first-child { color: var(--brand); flex: none; }
+.project-button > svg:last-child { flex: none; transform: rotate(90deg); color: var(--text-secondary); }
+.project-button-text { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; line-height: 1.15; }
+.project-eyebrow { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-secondary); }
+.project-name { font-weight: 600; font-size: 0.9rem; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.project-menu {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 40; width: min(340px, calc(100vw - 32px));
+  display: grid; gap: 2px; padding: 6px; border-radius: var(--radius-sm);
+  background: var(--surface-1); border: 1px solid var(--border); box-shadow: var(--shadow-2);
+}
+.project-menu-item {
+  display: flex; align-items: center; gap: var(--s2); width: 100%; text-align: left; min-height: 44px;
+  padding: 6px 10px; border: 0; border-radius: 8px; background: transparent; box-shadow: none;
+  color: var(--text-primary); font: inherit; text-decoration: none; cursor: pointer;
+}
+.project-menu-item:hover, .project-menu-item:focus-visible { background: var(--surface-2); }
+.project-menu-check { width: 16px; flex: none; color: var(--brand); display: inline-flex; }
+.project-menu-text { display: flex; flex-direction: column; min-width: 0; }
+.project-menu-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.project-menu-meta { font-size: 0.78rem; color: var(--text-secondary); }
+.project-menu-link { color: var(--brand); font-weight: 600; }
+.project-menu-sep { height: 1px; background: var(--border); margin: 4px 2px; }
+
+.project-cards { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s4); grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); }
+.project-card.is-current { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand), var(--shadow-1); }
+.project-card .card-body { display: grid; gap: var(--s3); }
+.project-card-head { display: flex; align-items: center; gap: var(--s2); }
+.project-card-title { font-size: 1.1rem; margin: 0; text-wrap: balance; }
+.project-card-desc { margin: 0; color: var(--text-secondary); }
+.project-card-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s2); margin: 0; }
+.project-card-stats div { background: var(--surface-2); border-radius: 10px; padding: 8px 10px; }
+.project-card-stats dt { font-size: 0.72rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.06em; }
+.project-card-stats dd { margin: 0; font-size: 1.25rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.project-card-actions { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.project-delete { color: var(--critical); }
+
+@media (max-width: 640px) {
+  .project-eyebrow { display: none; }
+  .project-button { max-width: 160px; }
+}
+@media (max-width: 640px) {
+  /* Sur téléphone, le logo seul : la place va au nom du projet ouvert. */
+  .topbar .brand-text { display: none; }
+  .project-switcher { flex: 1 1 auto; }
+  .project-button { max-width: 100%; }
+}

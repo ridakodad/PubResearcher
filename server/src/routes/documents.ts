@@ -3,7 +3,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import multer from 'multer';
-import { incomingDir, maxRequestBytes, maxUploadBytes, uploadsDir } from '../config.js';
+import { maxRequestBytes, maxUploadBytes } from '../config.js';
+import { keepProject, projectOf } from '../lib/project-scope.js';
 import { parseIsolated } from '../extract/isolation.js';
 import { TABLE_EXTENSIONS, TABLE_IMPORT_HINT } from '../extract/index.js';
 import { ocrStatus } from '../extract/ocr.js';
@@ -39,7 +40,7 @@ export const documentsRouter = Router();
  */
 const upload = multer({
   storage: multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, incomingDir),
+    destination: (req, _file, cb) => cb(null, projectOf(req).incomingDir),
     filename: (_req, _file, cb) => cb(null, crypto.randomUUID()),
   }),
   limits: { fileSize: maxUploadBytes, files: 200 },
@@ -99,7 +100,7 @@ interface UploadOutcome {
 documentsRouter.post(
   '/patients/:patientId/documents',
   limitRequestSize,
-  upload.array('files'),
+  keepProject(upload.array('files')),
   asyncHandler(async (req, res) => {
     const files = (req.files as Express.Multer.File[] | undefined) ?? [];
     let payload: Record<string, unknown>;
@@ -109,7 +110,7 @@ documentsRouter.post(
       if (!patient) throw notFound('Dossier patient introuvable.');
       if (files.length === 0) throw badRequest('Aucun fichier reçu.');
 
-      const patientDir = path.join(uploadsDir, String(patientId));
+      const patientDir = path.join(projectOf(req).uploadsDir, String(patientId));
       await fs.mkdir(patientDir, { recursive: true });
 
       const results: UploadOutcome[] = [];

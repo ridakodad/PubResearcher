@@ -1,3 +1,4 @@
+import { readSetting, writeSetting } from './storage';
 import type {
   ApiKeyStatus,
   CostEstimate,
@@ -91,6 +92,42 @@ function notifyWrite(path: string, method: string): void {
   for (const listener of writeListeners) listener();
 }
 
+// ------------------------------------------------------------------ projet en cours
+/**
+ * Projet de recherche choisi (une étude = un projet, avec sa base). Il vaut pour tous les onglets : l'en-tête
+ * `X-Project` le porte dans chaque appel, et un témoin le porte dans les liens de téléchargement.
+ */
+const PROJECT_KEY = 'pubresearcher.project';
+export const MAIN_PROJECT = 'principal';
+
+export function currentProjectId(): string {
+  const stored = readSetting(PROJECT_KEY);
+  return stored && /^[a-z0-9][a-z0-9-]{0,62}$/.test(stored) ? stored : MAIN_PROJECT;
+}
+
+function syncProjectCookie(id: string): void {
+  try {
+    document.cookie = `pubresearcher_project=${id}; path=/; SameSite=Strict; max-age=31536000`;
+  } catch {
+    /* sans témoin, les téléchargements visent le projet principal ; l'interface le reste */
+  }
+}
+syncProjectCookie(currentProjectId());
+
+/** Change de projet : l'application repart de l'accueil, dans tous les onglets ouverts. */
+export function switchProject(id: string): void {
+  writeSetting(PROJECT_KEY, id);
+  syncProjectCookie(id);
+  window.location.assign('/');
+}
+
+// Un autre onglet a changé de projet : celui-ci suit, plutôt que de mélanger deux études.
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (event) => {
+    if (event.key === PROJECT_KEY) window.location.assign('/');
+  });
+}
+
 async function request<T>(path: string, init?: RequestInit, options: RequestOptions = {}): Promise<T> {
   let res: Response;
   const method = (init?.method ?? 'GET').toUpperCase();
@@ -100,7 +137,9 @@ async function request<T>(path: string, init?: RequestInit, options: RequestOpti
     res = await fetch(`/api${path}`, {
       ...init,
       ...(timeoutMs > 0 && !init?.signal ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
-      headers: upload ? init.headers : { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+      headers: upload
+        ? { 'X-Project': currentProjectId(), ...(init?.headers ?? {}) }
+        : { 'Content-Type': 'application/json', 'X-Project': currentProjectId(), ...(init?.headers ?? {}) },
     });
   } catch (error) {
     // Sans délai, un serveur qui accepte la connexion et ne répond jamais laisserait « Enregistrement… » à l'écran sans fin.
@@ -127,6 +166,8 @@ async function request<T>(path: string, init?: RequestInit, options: RequestOpti
     const payload = data as { error?: string; details?: unknown; code?: string } | null;
     // Les détails d'une validation (champ : message) complètent le message ; ceux d'un code
     // métier (valeur hors bornes) sont déjà dits dans le message et servent à l'interface.
+    // Le projet choisi a été supprimé (dans un autre onglet, par exemple) : retour au projet principal.
+    if (payload?.code === 'PROJECT_NOT_FOUND' && currentProjectId() !== MAIN_PROJECT) switchProject(MAIN_PROJECT);
     const detailText = payload?.code ? '' : formatDetails(payload?.details);
     throw new ApiError(
       res.status,
@@ -158,7 +199,25 @@ const put = <T>(path: string, body: unknown) =>
   request<T>(path, { method: 'PUT', body: JSON.stringify(body) });
 const del = (path: string) => request<void>(path, { method: 'DELETE' });
 
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  createdAt: string;
+  isMain: boolean;
+  stats: { patients: number; documents: number; references: number; template: string | null } | null;
+}
+
 export const api = {
+  // ------------------------------------------------------------------ projets
+  listProjects: () => get<ProjectSummary[]>('/projects'),
+  createProject: (body: { name: string; description?: string | null; copyTemplateFrom?: string | null }) =>
+    post<ProjectSummary>('/projects', body),
+  updateProject: (id: string, body: { name?: string; description?: string | null }) =>
+    patch<ProjectSummary>(`/projects/${encodeURIComponent(id)}`, body),
+  deleteProject: (id: string, confirmName: string) =>
+    request<void>(`/projects/${encodeURIComponent(id)}`, { method: 'DELETE', body: JSON.stringify({ confirmName }) }),
+
   // ---------------------------------------------------------------- dossiers
   listPatients: () => get<{ patients: PatientSummary[] }>('/patients'),
   getPatient: (id: number) =>
@@ -284,7 +343,7 @@ export const api = {
   ): Promise<void> => {
     const res = await fetch('/api/redaction/message', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Project': currentProjectId() },
       body: JSON.stringify({ messages }),
       signal,
     });

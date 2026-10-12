@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { db, nowIso, parseJson } from '../db/index.js';
-import { incomingDir, uploadsDir } from '../config.js';
+import { db, nowIso, parseJson, currentProject } from '../db/index.js';
 import type { DocKind, DocumentMeta } from '../domain/types.js';
 import type { SourceDoc } from '../engine/rules.js';
 import { resolveServedType } from '../lib/mime.js';
@@ -42,7 +41,7 @@ function toDocument(row: DocumentRow): DocumentMeta {
 
 /** Chemin sur disque du fichier d'origine. */
 export function storedPath(patientId: number, storedName: string): string {
-  return path.join(uploadsDir, String(patientId), storedName);
+  return path.join(currentProject().uploadsDir, String(patientId), storedName);
 }
 
 export function listDocuments(patientId: number): DocumentMeta[] {
@@ -184,6 +183,7 @@ export function loadSourceDocs(patientId: number): SourceDoc[] {
  * patients qui n'appartiennent à aucun dossier. Appelée au démarrage.
  */
 export function purgeIncoming(): number {
+  const { incomingDir } = currentProject();
   fs.mkdirSync(incomingDir, { recursive: true });
   const leftovers = fs.readdirSync(incomingDir);
   for (const name of leftovers) fs.rmSync(path.join(incomingDir, name), { recursive: true, force: true });

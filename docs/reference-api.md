@@ -70,12 +70,30 @@ Sans HTTPS, le mot de passe circule en clair : placez l'outil derrière un proxy
 Interroge réellement la base : un serveur qui répond mais ne peut plus lire ses données n'est pas « en bonne santé ». Aucune donnée de patient ni chemin dans la réponse.
 
 ```json
-{ "status": "ok", "version": "1.6.0", "schemaVersion": 3, "uptimeSeconds": 80, "time": "2026-10-09T02:28:49.188Z" }
+{ "status": "ok", "version": "1.7.0", "schemaVersion": 3, "uptimeSeconds": 80, "time": "2026-10-09T02:28:49.188Z" }
 ```
 
-`503 { "status": "degraded", "version": "1.6.0", "error": "Base de données inaccessible." }` si la base ne répond pas. Accessible sans mot de passe.
+`503 { "status": "degraded", "version": "1.7.0", "error": "Base de données inaccessible." }` si la base ne répond pas. Accessible sans mot de passe.
 
 ---
+
+## Projets de recherche
+
+Une étude correspond à un projet, avec sa propre base. Toutes les routes ci-dessous (sauf `/api/health` et `/api/projects`) visent le projet indiqué, dans cet ordre :
+
+1. l'en-tête `X-Project: <identifiant>` ;
+2. à défaut, le paramètre `?project=<identifiant>` ;
+3. à défaut, le témoin `pubresearcher_project`, posé par l'interface pour que les liens de téléchargement suivent le projet ouvert ;
+4. sinon, le projet principal (`principal`).
+
+Un identifiant inconnu donne `404 { "code": "PROJECT_NOT_FOUND" }`. La requête n'est jamais redirigée en silence vers un autre projet.
+
+| Méthode | Route | Rôle |
+|---|---|---|
+| GET | `/api/projects` | Liste des projets : `id`, `name`, `description`, `createdAt`, `isMain`, et `stats` (patients, documents, références, fiche active) |
+| POST | `/api/projects` | `{ name, description?, copyTemplateFrom? }` crée un projet (201). `copyTemplateFrom` reprend la fiche active d'un autre projet ; sinon le projet reçoit la fiche générale par défaut. |
+| PATCH | `/api/projects/:id` | `{ name?, description? }` |
+| DELETE | `/api/projects/:id` | `{ confirmName }` doit être le nom exact du projet. Supprime la base et les fichiers (204). Le projet principal ne peut pas être supprimé (400). |
 
 ## Dossiers patients
 

@@ -17,6 +17,8 @@ import { redactionRouter } from './routes/redaction.js';
 import { biblioRouter } from './routes/biblio.js';
 import { llmRouter } from './routes/llm.js';
 import { importsRouter } from './routes/imports.js';
+import { projectsRouter } from './routes/projects.js';
+import { projectScope } from './lib/project-scope.js';
 
 export interface AppOptions {
   /** Mot de passe d'accès ; par défaut `APP_PASSWORD`. `null` supprime tout contrôle d'accès. */
@@ -78,6 +80,9 @@ export function createApp(options: AppOptions = {}): Express {
     }
   });
 
+  app.use('/api/projects', projectsRouter);
+  // Tout le reste de l'API travaille dans le projet de la requête (en-tête X-Project).
+  app.use('/api', projectScope);
   app.use('/api/patients', patientsRouter);
   app.use('/api', documentsRouter);
   app.use('/api/table-imports', importsRouter);

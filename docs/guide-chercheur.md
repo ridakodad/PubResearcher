@@ -9,6 +9,16 @@ Ce guide s'adresse à qui doit construire un jeu de données à partir de dossie
 
 ---
 
+## 0. Une étude = un projet
+
+Le nom de l'étude ouverte s'affiche en haut de l'écran, à côté du logo. Chaque projet garde ses propres dossiers patients, sa fiche d'exploitation, ses résultats, sa bibliographie et sa rédaction : rien ne passe d'un projet à l'autre.
+
+- **Créer un projet** : cliquez sur le nom du projet, puis « + Nouveau projet ». Donnez un nom, une description si vous le souhaitez, et choisissez la fiche de départ : la fiche générale, ou celle d'un projet existant (pratique pour une seconde cohorte ou une étude de suivi). Le nouveau projet s'ouvre aussitôt, vide.
+- **Changer de projet** : cliquez sur le nom du projet et choisissez-en un autre. L'application revient au plan de travail, et tous les onglets ouverts changent avec elle.
+- **Gérer les projets** : la page « Projets de recherche » permet de renommer un projet ou de le supprimer. Supprimer efface tout le contenu du projet, sans corbeille : faites d'abord une sauvegarde.
+
+Vos données d'avant la version 1.7 forment le projet « Étude principale » : elles n'ont pas bougé.
+
 ## 1. Le parcours en sept étapes
 
 | # | Étape | Où | Ce que vous obtenez |

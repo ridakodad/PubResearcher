@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { importsDir } from '../config.js';
-import { db, nowIso, parseJson } from '../db/index.js';
+import { db, nowIso, parseJson, currentProject } from '../db/index.js';
 import type { TableFormat } from '../table/types.js';
 import { appVersion } from '../version.js';
 
@@ -117,7 +116,7 @@ function toImport(row: ImportRow): TableImport {
 }
 
 export function importFilePath(storedName: string): string {
-  return path.join(importsDir, storedName);
+  return path.join(currentProject().importsDir, storedName);
 }
 
 export function createImportDraft(input: {

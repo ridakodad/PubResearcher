@@ -45,7 +45,7 @@ Le lanceur démarre le Node.js fourni (celui du poste, s'il existe, n'est pas ut
 ```bash
 npm ci                                       # dépendances complètes : la compilation en a besoin
 npm run package -- --target linux-x64        # ou win-x64, mac-arm64, mac-x64, all (séparées par des virgules)
-node scripts/package/smoke-test.mjs dist-packages/PubResearcher-1.6.0-linux-x64.tar.gz   # essai, sur le système de l'archive
+node scripts/package/smoke-test.mjs dist-packages/PubResearcher-1.7.0-linux-x64.tar.gz   # essai, sur le système de l'archive
 ```
 
 Le script (`scripts/package.mjs`) compile, télécharge Node.js (`--node-version`, 22.23.3 par défaut ; gardé dans `.package-cache/`, revérifié à chaque usage), installe les dépendances de production dans une copie de travail avec `npm ci --omit=dev --workspace server --os=… --cpu=…` (npm 10 ou plus : c'est ce qui place le module natif **de la cible** même depuis un autre système), retire ce qui ne sert pas à l'exécution (cartes de sources, déclarations TypeScript, constructions de pdf.js pour navigateur), puis écrit l'archive et son `.sha256` dans `dist-packages/` (`--out-dir`). L'archive est reproductible : fichiers triés, dates fixées à celle du dernier commit (`SOURCE_DATE_EPOCH` sinon), droits fixés (le `.command` reste exécutable). Toutes les cibles se construisent depuis un seul système ; l'essai, lui, demande le système de l'archive.

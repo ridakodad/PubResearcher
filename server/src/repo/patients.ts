@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { uploadsDir } from '../config.js';
-import { db, nowIso } from '../db/index.js';
+import { db, nowIso, currentProject } from '../db/index.js';
 import type { Patient } from '../domain/types.js';
 
 interface PatientRow {
@@ -117,7 +116,7 @@ export function updatePatient(
 export function deletePatient(id: number): boolean {
   const removed = db.prepare('DELETE FROM patients WHERE id = ?').run(id).changes > 0;
   if (removed) {
-    fs.rmSync(path.join(uploadsDir, String(id)), { recursive: true, force: true });
+    fs.rmSync(path.join(currentProject().uploadsDir, String(id)), { recursive: true, force: true });
   }
   return removed;
 }

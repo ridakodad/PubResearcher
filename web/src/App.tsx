@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { ThemeToggle } from './components/ui';
 import { Brand } from './components/Brand';
+import { ProjectSwitcher } from './components/ProjectSwitcher';
+import { ProjetsPage } from './pages/ProjetsPage';
 import {
   IconBook,
   IconChart,
@@ -219,6 +221,7 @@ const TITLES: [prefix: string, title: string][] = [
   ['/extraction', 'Extraction'],
   ['/redaction', 'Rédaction assistée'],
   ['/claude', 'Activer Claude'],
+  ['/projets', 'Projets de recherche'],
   ['/resultats', 'Résultats'],
 ];
 
@@ -297,6 +300,7 @@ export function App() {
             <IconSidebar size={18} />
           </button>
           <Brand />
+          <ProjectSwitcher />
           <div className="topbar-end">
             <ThemeToggle />
           </div>
@@ -318,6 +322,7 @@ export function App() {
                 <Route path="/extraction" element={<ExtractionPage />} />
                 <Route path="/redaction" element={<RedactionPage />} />
                 <Route path="/claude" element={<ClaudePage />} />
+                <Route path="/projets" element={<ProjetsPage />} />
                 <Route path="/resultats" element={<ResultatsPage />} />
                 <Route path="/index.html" element={<Navigate to="/" replace />} />
                 <Route

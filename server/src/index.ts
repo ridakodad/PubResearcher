@@ -4,6 +4,7 @@ import { appPassword, dataDir, ensureDataDirs, host, packageInfo, port, webDistD
 import { launchHints } from './lib/data-dir.js';
 import { seedIfEmpty } from './db/seed.js';
 import { createApp } from './app.js';
+import { openAllProjects, setProjectInitializer } from './projects.js';
 import { shutdownParsers } from './extract/isolation.js';
 import { shutdownOcr } from './extract/ocr.js';
 import { recoverInterruptedSearches } from './repo/biblio.js';
@@ -16,11 +17,16 @@ import { applyHttpTimeouts } from './lib/http-timeouts.js';
 import { appVersion } from './version.js';
 
 ensureDataDirs();
-purgeIncoming();
-seedIfEmpty();
-recoverInterruptedSearches();
-recoverInterruptedRuns();
-purgeStaleImportDrafts();
+// Chaque base de projet est remise en état à son ouverture : dépôt provisoire vidé, fiche par défaut, reprise des
+// passes et recherches interrompues par un arrêt brutal.
+setProjectInitializer(() => {
+  purgeIncoming();
+  seedIfEmpty();
+  recoverInterruptedSearches();
+  recoverInterruptedRuns();
+  purgeStaleImportDrafts();
+});
+for (const problem of openAllProjects()) console.warn(`  Projet illisible, ignoré : ${problem}`);
 
 const server = createApp().listen(port, host, () => {
   const shown = isLoopback(host) ? 'localhost' : host;

@@ -3,7 +3,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import multer from 'multer';
-import { importsDir, incomingDir, maxUploadBytes } from '../config.js';
+import { maxUploadBytes } from '../config.js';
+import { keepProject, projectOf } from '../lib/project-scope.js';
 import { db } from '../db/index.js';
 import type { TemplateWithFields } from '../domain/types.js';
 import { readTableIsolated } from '../extract/isolation.js';
@@ -53,7 +54,7 @@ const readSlot = createLimiter(limits.parseConcurrency);
 
 const upload = multer({
   storage: multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, incomingDir),
+    destination: (req, _file, cb) => cb(null, projectOf(req).incomingDir),
     filename: (_req, _file, cb) => cb(null, crypto.randomUUID()),
   }),
   limits: { fileSize: maxUploadBytes, files: 1 },
@@ -133,7 +134,7 @@ function describeWorkbook(workbook: TableWorkbook) {
 /** Réception du fichier : conservé dans `uploads/imports/`, lu dans un fil isolé, décrit feuille par feuille. */
 importsRouter.post(
   '/',
-  (req: Request, res: Response, next: NextFunction) => upload.single('file')(req, res, next),
+  keepProject((req: Request, res: Response, next: NextFunction) => upload.single('file')(req, res, next)),
   asyncHandler(async (req, res) => {
     const file = req.file;
     if (!file) throw badRequest('Aucun fichier reçu (champ « file »).');
@@ -155,7 +156,7 @@ importsRouter.post(
       }
 
       const sha256 = crypto.createHash('sha256').update(buffer).digest('hex');
-      await fs.mkdir(importsDir, { recursive: true });
+      await fs.mkdir(projectOf(req).importsDir, { recursive: true });
       const storedName = `${crypto.randomUUID()}.${format === 'xlsx' ? 'xlsx' : format}`;
       kept = importFilePath(storedName);
       await fs.rename(file.path, kept);
