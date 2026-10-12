@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { NumberTicker } from './NumberTicker';
 
 /**
  * Tuile de synthèse : une valeur, son libellé, un complément facultatif.
@@ -20,7 +21,9 @@ export function StatTile({
 }) {
   return (
     <div className="stat">
-      <div className={accent ? 'stat-value accent' : 'stat-value'}>{value}</div>
+      <div className={accent ? 'stat-value accent' : 'stat-value'}>
+        {typeof value === 'number' ? <NumberTicker value={value} /> : value}
+      </div>
       <div className="stat-label">{label}</div>
       {hint && <div className="stat-hint">{hint}</div>}
     </div>

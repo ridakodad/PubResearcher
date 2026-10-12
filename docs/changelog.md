@@ -13,6 +13,14 @@ Le format suit l'ordre des versions, de la plus récente à la plus ancienne ; l
 - **Données existantes** : elles deviennent le projet « Étude principale », au même emplacement. Rien n'est déplacé ni converti, et ce projet ne peut pas être supprimé.
 - **Rangement** : chaque nouveau projet vit dans `projects/<identifiant>/` du dossier de données (sa base `research-tool.db` et son dossier `uploads/`). Le registre des projets est `projects.json`.
 - **Sauvegarde** : `npm run backup` sauvegarde tous les projets, chacun vérifié. `npm run restore -- <dossier> --project <identifiant>` restaure un projet donné.
+- **Graphiques** (adaptés de la bibliothèque beui, licence MIT, et animés avec `motion`) :
+  - **Mosaïque** pour les variables à modalités : l'aire de chaque tuile est proportionnelle à l'effectif. Elle remplace les barres horizontales.
+  - **Calendrier de chaleur** pour les dates (par jour sur quatre mois au plus, par mois au-delà).
+  - **Barre d'états** en tête de la complétude : une pastille par variable, colorée selon son taux de remplissage.
+  - **Entonnoir** du flux de sélection dans la revue bibliographique : identifiées → triées → retenues ou à voir → retenues.
+  - **Chiffres animés** dans les tuiles de synthèse.
+
+  Tous se lisent au clavier (flèches ou Tabulation, avec une infobulle), dans les deux thèmes, sans mouvement si le système le demande. Leurs données restent accessibles aux lecteurs d'écran.
 - **API** : routes `/api/projects`. Toutes les autres routes visent le projet indiqué par l'en-tête `X-Project`, à défaut par `?project=` ou par le témoin `pubresearcher_project`, sinon le projet principal. Un projet inconnu est refusé (404, `PROJECT_NOT_FOUND`) : la requête n'est jamais redirigée en silence vers le principal.
 
 ## 1.6.0 — 11 octobre 2026

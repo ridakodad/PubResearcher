@@ -4,7 +4,9 @@ import { api, ApiError } from '../lib/api';
 import { displayValue, foldForSearch, formatNumber, plural } from '../lib/format';
 import { EmptyState, ErrorPanel, LoadingPanel, Pager, clampPage, onTabKeyDown } from '../components/ui';
 import { Meter, StatTile } from '../components/charts/StatTile';
-import { CategoryBars } from '../components/charts/CategoryBars';
+import { Treemap } from '../components/charts/Treemap';
+import { HeatCalendar } from '../components/charts/HeatCalendar';
+import { StatusBar } from '../components/charts/StatusBar';
 import { Histogram } from '../components/charts/Histogram';
 import { ChartHeader } from '../components/charts/primitives';
 import type {
@@ -181,7 +183,7 @@ export function ResultatsPage() {
 
             <div className="card-body" role="tabpanel" id="resultats-panneau" aria-labelledby={`resultats-onglet-${tab}`}>
               {tab === 'table' && <RawTable template={template} rows={rows} />}
-              {tab === 'charts' && <ChartsPanel stats={stats} patientCount={rows.length} />}
+              {tab === 'charts' && <ChartsPanel stats={stats} patientCount={rows.length} rows={rows} />}
               {tab === 'completeness' && (
                 <CompletenessPanel fields={completeness} patientCount={rows.length} />
               )}
@@ -371,8 +373,9 @@ function missingShare(stat: FieldStats): number {
   return total > 0 ? stat.missing / total : 0;
 }
 
-function ChartsPanel({ stats, patientCount }: { stats: FieldStats[]; patientCount: number }) {
-  const plottable = stats.filter((s) => s.chart !== 'none');
+function ChartsPanel({ stats, patientCount, rows }: { stats: FieldStats[]; patientCount: number; rows: DatasetRow[] }) {
+  // Les dates se lisent dans le temps (calendrier) : on les représente même quand le serveur n'en fait pas d'histogramme.
+  const plottable = stats.filter((s) => s.chart !== 'none' || (s.type === 'date' && s.n > 0));
 
   if (plottable.length === 0) {
     return (
@@ -399,6 +402,10 @@ function ChartsPanel({ stats, patientCount }: { stats: FieldStats[]; patientCoun
 
             {stat.n === 0 ? (
               <p className="small muted">Aucune valeur renseignée pour cette variable.</p>
+            ) : stat.type === 'date' ? (
+              <HeatCalendar
+                values={rows.map((row) => row.values[stat.key]).filter((v): v is string => typeof v === 'string')}
+              />
             ) : stat.chart === 'histogram' ? (
               <>
                 <Histogram bins={stat.bins} unit={stat.unit} />
@@ -421,9 +428,9 @@ function ChartsPanel({ stats, patientCount }: { stats: FieldStats[]; patientCoun
                   </div>
                 )}
               </>
-            ) : (
+            ) : stat.chart === 'categories' ? (
               <>
-                <CategoryBars data={stat.categories} total={stat.n} />
+                <Treemap data={stat.categories} total={stat.n} multiple={stat.multiple} />
                 {stat.multiple && (
                   <p className="small muted" style={{ marginTop: 8 }}>
                     Plusieurs réponses possibles : chaque pourcentage porte sur les {stat.n} dossiers renseignés, et
@@ -431,7 +438,7 @@ function ChartsPanel({ stats, patientCount }: { stats: FieldStats[]; patientCoun
                   </p>
                 )}
               </>
-            )}
+            ) : null}
             {stat.n > 0 && missingShare(stat) > 0.2 && (
               <div className="notice notice-warn small" role="note" style={{ marginTop: 10 }}>
                 <div>
@@ -462,9 +469,34 @@ function CompletenessPanel({
   patientCount: number;
 }) {
   const sorted = [...fields].sort((a, b) => a.rate - b.rate);
+  const bucket = (rate: number) => (rate >= 100 ? 'full' : rate >= 80 ? 'good' : rate >= 50 ? 'mid' : rate > 0 ? 'low' : 'none');
 
   return (
     <div className="stack">
+      {fields.length > 0 && patientCount > 0 && (
+        <div className="card">
+          <div className="card-body">
+            <StatusBar
+              label="Complétude de chaque variable, dans l’ordre de la fiche"
+              startLabel={fields[0]!.label}
+              endLabel={fields[fields.length - 1]!.label}
+              statuses={[
+                { id: 'full', label: 'Complète', color: 'var(--status-full)' },
+                { id: 'good', label: '80 à 99 %', color: 'var(--status-good)' },
+                { id: 'mid', label: '50 à 79 %', color: 'var(--status-mid)' },
+                { id: 'low', label: 'Moins de 50 %', color: 'var(--status-low)' },
+                { id: 'none', label: 'Jamais renseignée', color: 'var(--status-none)' },
+              ]}
+              items={fields.map((f) => ({
+                id: f.key,
+                label: `${f.label} · ${f.section}`,
+                status: bucket(f.rate),
+                description: `${f.rate} % des dossiers (${f.auto + f.llm + f.imported + f.manual}/${patientCount}) · règle ${f.auto}, Claude ${f.llm}, importé ${f.imported}, vérifié ${f.manual}`,
+              }))}
+            />
+          </div>
+        </div>
+      )}
       <p className="small secondary">
         Part des dossiers pour lesquels chaque variable est renseignée. Les variables en tête de
         liste sont celles qui demandent le plus de relecture — soit la règle d’extraction est à

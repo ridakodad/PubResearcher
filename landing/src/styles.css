@@ -99,6 +99,13 @@
   --series-1-strong: #2f4299;
   --series-2: #7a5a06;       /* or : valeurs proposées par le modèle           */
 
+  /* Palette catégorielle (mosaïque, entonnoir) : six teintes sous texte blanc ≥ 4,5:1 */
+  --cat-1: #3d55c0; --cat-2: #6d3fc9; --cat-3: #0f766e; --cat-4: #a4500c; --cat-5: #be123c; --cat-6: #475569;
+  --funnel-1: #6d3fc9; --funnel-2: #5a4fd6; --funnel-3: #3d6fd0; --funnel-4: #1f7f9e; --funnel-5: #0f766e;
+  --heat-empty: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  /* États de complétude */
+  --status-full: #0f7a55; --status-good: #3d8f6a; --status-mid: #b7791f; --status-low: #c2410c; --status-none: #b3262f;
+
   /*
    * Origine d'une valeur. Quatre repères qui doivent rester distinguables
    * entre eux dans les deux thèmes — d'où l'encre pour la relecture humaine
@@ -191,6 +198,8 @@
     --series-1-soft: #232b60;
     --series-1-strong: #aebfff;
     --series-2: #e8cf8a;
+    --heat-empty: color-mix(in srgb, #ffffff 8%, transparent);
+    --status-full: #34c48b; --status-good: #6ee0b0; --status-mid: #e8cf8a; --status-low: #f0a070; --status-none: #ff909b;
 
     --good: #6ee0b0;
     --good-text: #86ecc0;
@@ -241,6 +250,8 @@
   --series-1-soft: #232b60;
   --series-1-strong: #aebfff;
   --series-2: #e8cf8a;
+  --heat-empty: color-mix(in srgb, #ffffff 8%, transparent);
+  --status-full: #34c48b; --status-good: #6ee0b0; --status-mid: #e8cf8a; --status-low: #f0a070; --status-none: #ff909b;
 
   --good: #6ee0b0;
   --good-text: #86ecc0;

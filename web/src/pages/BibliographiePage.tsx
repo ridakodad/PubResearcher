@@ -4,6 +4,7 @@ import { plural } from '../lib/format';
 import { EmptyState, ErrorPanel, LoadingPanel, useToast } from '../components/ui';
 import { Panel } from '../components/Panel';
 import { StatTile } from '../components/charts/StatTile';
+import { FunnelChart } from '../components/charts/FunnelChart';
 import { IconAlert } from '../components/icons';
 import { PrismaFlow } from '../components/biblio/PrismaFlow';
 import { RefCard, type DecidePatch } from '../components/biblio/RefCard';
@@ -318,6 +319,26 @@ export function BibliographiePage() {
         <StatTile label="À voir" value={counts.maybe} hint="mises de côté" />
         <StatTile label="Exclues" value={counts.exclude} hint="motif facultatif à ce stade" />
       </div>
+
+      {counts.total > 0 && (
+        <section className="card">
+          <div className="card-head">
+            <h2 style={{ fontSize: '1.05rem' }}>Flux de sélection</h2>
+            <span className="sub">De l’identification à l’inclusion, au fil du tri : chaque étape garde une part de la précédente.</span>
+          </div>
+          <div className="card-body">
+            <FunnelChart
+              label="Flux de sélection des références"
+              stages={[
+                { id: 'identifiees', label: 'Identifiées', value: counts.total, hint: 'Références uniques, doublons fusionnés.' },
+                { id: 'triees', label: 'Triées', value: counts.total - counts.pending, hint: 'Titre et résumé lus.' },
+                { id: 'gardees', label: 'Retenues ou à voir', value: counts.include + counts.maybe, hint: 'Non exclues à ce stade.' },
+                { id: 'retenues', label: 'Retenues', value: counts.include, hint: 'À lire en texte intégral.' },
+              ]}
+            />
+          </div>
+        </section>
+      )}
 
       <section className="card" id="biblio-form">
         <div className="card-head">
