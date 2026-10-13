@@ -11,7 +11,7 @@ Le format suit l'ordre des versions, de la plus récente à la plus ancienne ; l
 - **Une seule zone de dépôt**, sur la page Dossiers patients, sans fenêtre à ouvrir. Elle reçoit un dossier par patient, toute une cohorte, des fichiers isolés, ou un tableau Excel/CSV, qui part seul vers l'import de tableau.
 - **Extraction aussitôt après l'import** : la case « Remplir la fiche aussitôt après l'import » est cochée par défaut et mémorisée. Le bouton devient « Importer et extraire », et les dossiers arrivent remplis.
 - **Charte d'anonymisation en une case** : les cinq engagements restent affichés, une seule case les confirme.
-- **En-tête allégé** : « Ajouter des dossiers » et « Nouveau dossier vide ». L'aperçu avant import montre six dossiers, puis « Voir les N dossiers ». La liste vide n'est plus affichée avant le premier import.
+- **En-tête allégé** : « Ajouter des dossiers » et « + Ajouter un patient à la main ». Ce second bouton ouvre aussitôt le dossier créé, prêt à la saisie. L'aperçu avant import montre six dossiers, puis « Voir les N dossiers ». La liste vide n'est plus affichée avant le premier import.
 
 ## 1.7.0 — 12 octobre 2026
 

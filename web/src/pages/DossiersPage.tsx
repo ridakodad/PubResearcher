@@ -1,6 +1,6 @@
 import { BulkBar, SelectAllBox } from '../components/BulkBar';
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { foldForSearch, formatDateTime, formatUsd, modelLabel, plural } from '../lib/format';
 import { FolderUploader } from '../components/FolderUploader';
@@ -31,6 +31,7 @@ import type {
 const PAGE_SIZE = 200;
 
 export function DossiersPage() {
+  const navigate = useNavigate();
   const toast = useToast();
   const { hash } = useLocation();
   const [patients, setPatients] = useState<PatientSummary[] | null>(null);
@@ -160,7 +161,7 @@ export function DossiersPage() {
         </div>
         <div className="page-head-actions">
           <PanelGroupControls keys={['corpus.extraction', 'corpus.liste']} />
-          <button className="btn-quiet" onClick={() => setShowCreate(true)}>Nouveau dossier vide</button>
+          <button className={patients.length === 0 ? '' : 'btn-quiet'} onClick={() => setShowCreate(true)}>+ Ajouter un patient à la main</button>
           {patients.length > 0 && (
             <button className={showImport ? '' : 'btn-primary'} onClick={() => setShowImport((v) => !v)} aria-expanded={showImport}>
               {showImport ? 'Fermer l’import' : 'Ajouter des dossiers'}
@@ -490,9 +491,10 @@ export function DossiersPage() {
       {showCreate && (
         <CreatePatientModal
           onClose={() => setShowCreate(false)}
-          onCreated={() => {
+          onCreated={(id) => {
+            // Le dossier s'ouvre aussitôt : on y saisit les valeurs à la main, ou on y dépose ses documents.
             setShowCreate(false);
-            void load();
+            navigate(`/dossiers/${id}`);
           }}
         />
       )}
@@ -505,7 +507,7 @@ function CreatePatientModal({
   onCreated,
 }: {
   onClose: () => void;
-  onCreated: () => void;
+  onCreated: (id: number) => void;
 }) {
   const toast = useToast();
   const [code, setCode] = useState('');
@@ -519,9 +521,9 @@ function CreatePatientModal({
     setBusy(true);
     setCodeError(null);
     try {
-      await api.createPatient({ code: code.trim(), label: label.trim() || null });
+      const created = await api.createPatient({ code: code.trim(), label: label.trim() || null });
       toast.success(`Dossier ${code.trim()} créé.`);
-      onCreated();
+      onCreated(created.patient.id);
     } catch (err) {
       const message = err instanceof ApiError ? err.message : String(err);
       // Un refus de validation concerne le code ; une panne, elle, n'a pas de champ à désigner.
@@ -534,7 +536,7 @@ function CreatePatientModal({
 
   return (
     <Modal
-      title="Nouveau dossier patient"
+      title="Ajouter un patient à la main"
       onClose={onClose}
       width={480}
       footer={
