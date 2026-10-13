@@ -5,6 +5,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import multer from 'multer';
 import { maxUploadBytes } from '../config.js';
 import { keepProject, projectOf } from '../lib/project-scope.js';
+import { currentProject } from '../db/index.js';
 import { db } from '../db/index.js';
 import type { TemplateWithFields } from '../domain/types.js';
 import { readTableIsolated } from '../extract/isolation.js';
@@ -68,17 +69,20 @@ function displayName(filename: string): string {
 }
 
 /** Les derniers classeurs lus, gardés en mémoire le temps du parcours : chaque étape n'a pas à relire le fichier. */
-const cache = new Map<number, { sha256: string; workbook: TableWorkbook }>();
+// Clé « projet:identifiant » : les numéros d'import repartent de 1 dans chaque projet.
+const cache = new Map<string, { sha256: string; workbook: TableWorkbook }>();
 const CACHE_SIZE = 4;
 
+const cacheKey = (id: number) => `${currentProject().id}:${id}`;
+
 function remember(id: number, sha256: string, workbook: TableWorkbook): void {
-  cache.delete(id);
-  cache.set(id, { sha256, workbook });
+  cache.delete(cacheKey(id));
+  cache.set(cacheKey(id), { sha256, workbook });
   while (cache.size > CACHE_SIZE) cache.delete(cache.keys().next().value!);
 }
 
 async function loadWorkbook(item: TableImport): Promise<TableWorkbook> {
-  const hit = cache.get(item.id);
+  const hit = cache.get(cacheKey(item.id));
   if (hit && hit.sha256 === item.sha256) return hit.workbook;
   const file = getImportFile(item.id);
   const buffer = file ? await fs.readFile(file.path).catch(() => null) : null;
@@ -326,7 +330,7 @@ importsRouter.post(
       return report;
     })();
 
-    cache.delete(id);
+    cache.delete(cacheKey(id));
     res.json({ import: getImport(id), report });
   }),
 );
@@ -339,7 +343,7 @@ importsRouter.delete(
     const item = draftOr404(id);
     if (item.status !== 'draft') throw conflict('Un import confirmé ne se supprime pas : il justifie les valeurs qu’il a posées.');
     deleteImportDraft(id);
-    cache.delete(id);
+    cache.delete(cacheKey(id));
     res.status(204).end();
   }),
 );

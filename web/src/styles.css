@@ -1948,3 +1948,11 @@ tr.is-selected td { background: var(--brand-soft); }
 @media (prefers-reduced-motion: reduce) {
   .chart-legend li { transition: none; }
 }
+
+/* Charte : les engagements se lisent en liste, une seule case les confirme. */
+.charter-points { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; font-size: 0.88rem; color: var(--text-secondary); max-width: 80ch; }
+.charter-attest {
+  display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: var(--radius-sm);
+  background: var(--brand-soft); border: 1px solid var(--border); cursor: pointer;
+}
+.charter-attest input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--brand); flex: none; }

@@ -41,6 +41,7 @@ export function DossiersPage() {
   const [page, setPage] = useState(0);
   const [showImport, setShowImport] = useState(false);
   const [showTable, setShowTable] = useState(false);
+  const [tableFile, setTableFile] = useState<File | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [running, setRunning] = useState(false);
   const [lastRun, setLastRun] = useState<ExtractionRunResult | null>(null);
@@ -153,23 +154,18 @@ export function DossiersPage() {
         <div>
           <h1>Dossiers patients</h1>
           <p className="sub">
-            Importez les dossiers, puis lancez l’extraction pour remplir automatiquement la fiche
-            d’exploitation à partir des documents.
+            Déposez les dossiers de vos patients : ils sont importés, puis la fiche d’exploitation se remplit
+            d’elle-même à partir des documents.
           </p>
         </div>
         <div className="page-head-actions">
           <PanelGroupControls keys={['corpus.extraction', 'corpus.liste']} />
-          <button className="btn-quiet" onClick={() => setShowCreate(true)}>Nouveau dossier</button>
-          <button
-            onClick={() => setShowTable(true)}
-            disabled={!template}
-            title="Un tableau tenu par l’équipe (une ligne par patient, une colonne par variable) : ses valeurs remplissent la fiche active"
-          >
-            Importer un tableau (Excel, CSV)
-          </button>
-          <button className="btn-primary" onClick={() => setShowImport(true)}>
-            Importer des dossiers
-          </button>
+          <button className="btn-quiet" onClick={() => setShowCreate(true)}>Nouveau dossier vide</button>
+          {patients.length > 0 && (
+            <button className={showImport ? '' : 'btn-primary'} onClick={() => setShowImport((v) => !v)} aria-expanded={showImport}>
+              {showImport ? 'Fermer l’import' : 'Ajouter des dossiers'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -187,6 +183,21 @@ export function DossiersPage() {
             )}
           </div>
         </div>
+      )}
+
+      {(showImport || patients.length === 0) && (
+        <section className="card import-card" aria-label="Ajouter des dossiers">
+          <div className="card-body">
+            <FolderUploader
+              canExtract={(template?.fields.length ?? 0) > 0}
+              onTableFile={(file) => {
+                setTableFile(file);
+                setShowTable(true);
+              }}
+              onDone={() => void load()}
+            />
+          </div>
+        </section>
       )}
 
       {patients.length > 0 && (
@@ -340,6 +351,7 @@ export function DossiersPage() {
         </div>
       )}
 
+      {patients.length > 0 && (
       <Panel
         id="corpus.liste"
         title="Liste des dossiers"
@@ -370,22 +382,8 @@ export function DossiersPage() {
         />
 
         {patients.length === 0 ? (
-          <EmptyState
-            title="Aucun dossier pour l’instant"
-            action={
-              <div className="row" style={{ justifyContent: 'center', gap: 8 }}>
-                <button className="btn-primary" onClick={() => setShowImport(true)}>
-                  Importer des dossiers
-                </button>
-                <button onClick={() => setShowTable(true)} disabled={!template}>
-                  Importer un tableau (Excel, CSV)
-                </button>
-              </div>
-            }
-          >
-            Déposez une arborescence de dossiers patients : chaque sous-dossier devient un dossier,
-            ses fichiers sont analysés à l’import. Votre équipe tient déjà un tableau de la cohorte ? Importez-le :
-            chaque ligne devient un dossier, chaque colonne une variable de la fiche.
+          <EmptyState title="Aucun dossier pour l’instant">
+            Déposez vos premiers dossiers dans la zone ci-dessus : un dossier par patient, ou toute la cohorte d’un coup.
           </EmptyState>
         ) : filtered.length === 0 ? (
           <EmptyState title="Aucun résultat">
@@ -475,15 +473,18 @@ export function DossiersPage() {
         )}
         <Pager total={filtered.length} pageSize={PAGE_SIZE} page={current} onPage={setPage} label="Pages de la liste des dossiers" noun="Dossiers" />
       </Panel>
-
-      {showImport && (
-        <Modal title="Importer des dossiers patients" onClose={() => setShowImport(false)} width={860}>
-          <FolderUploader onDone={() => void load()} />
-        </Modal>
       )}
 
       {showTable && template && (
-        <TableImportModal template={template} onClose={() => setShowTable(false)} onDone={() => void load()} />
+        <TableImportModal
+          template={template}
+          initialFile={tableFile}
+          onClose={() => {
+            setShowTable(false);
+            setTableFile(null);
+          }}
+          onDone={() => void load()}
+        />
       )}
 
       {showCreate && (

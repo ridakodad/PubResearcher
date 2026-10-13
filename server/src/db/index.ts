@@ -128,9 +128,40 @@ export interface Statement {
   all(...params: unknown[]): unknown[];
 }
 
+/** Requêtes préparées, une fois par base et par texte SQL. */
+const prepared = new WeakMap<DatabaseSync, Map<string, Statement>>();
+
+function statementFor(sql: string): Statement {
+  const connection = currentProject().connection;
+  let cache = prepared.get(connection);
+  if (!cache) {
+    cache = new Map();
+    prepared.set(connection, cache);
+  }
+  let statement = cache.get(sql);
+  if (!statement) {
+    statement = connection.prepare(sql) as unknown as Statement;
+    cache.set(sql, statement);
+  }
+  return statement;
+}
+
 export const db = {
+  /**
+   * Requête préparée qui s'exécute toujours dans le projet en cours **au moment de l'appel**.
+   *
+   * Plusieurs dépôts préparent leurs requêtes une fois, au chargement du module. Liée à la connexion de ce
+   * moment-là, une telle requête écrirait à jamais dans le projet principal, quel que soit le projet de la requête
+   * (défaut corrigé en 1.7.1). La base est donc résolue à chaque exécution, et la requête réelle mise en cache par base.
+   */
   prepare(sql: string): Statement {
-    return currentProject().connection.prepare(sql) as unknown as Statement;
+    // Préparée tout de suite dans la base en cours : une erreur de syntaxe se voit au même endroit qu'avant.
+    statementFor(sql);
+    return {
+      run: (...params: unknown[]) => statementFor(sql).run(...params),
+      get: (...params: unknown[]) => statementFor(sql).get(...params),
+      all: (...params: unknown[]) => statementFor(sql).all(...params),
+    };
   },
 
   exec(sql: string): void {

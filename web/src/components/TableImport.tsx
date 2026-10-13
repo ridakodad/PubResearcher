@@ -51,10 +51,13 @@ export function TableImportModal({
   template,
   onClose,
   onDone,
+  initialFile,
 }: {
   template: TemplateWithFields;
   onClose: () => void;
   onDone: () => void;
+  /** Fichier déjà choisi (déposé dans la zone d'import des dossiers) : il est lu d'emblée. */
+  initialFile?: File | null;
 }) {
   const toast = useToast();
   const [step, setStep] = useState<Step>('file');
@@ -95,6 +98,15 @@ export function TableImportModal({
   function fail(err: unknown) {
     setError(err instanceof ApiError ? err.message : String(err));
   }
+
+  const started = useRef(false);
+  useEffect(() => {
+    if (initialFile && !started.current) {
+      started.current = true;
+      void receive(initialFile);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialFile]);
 
   async function receive(file: File) {
     setBusy(true);

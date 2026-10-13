@@ -140,6 +140,62 @@ describe('projets de recherche', () => {
     assert.ok(main >= before);
   });
 
+  test('extraction, tableau et tri bibliographique écrivent dans le projet visé, jamais dans le principal', async () => {
+    const { DatabaseSync } = await import('node:sqlite');
+    const count = (dbFile: string, sql: string) => {
+      const conn = new DatabaseSync(dbFile, { readOnly: true });
+      try {
+        return (conn.prepare(sql).get() as { n: number }).n;
+      } finally {
+        conn.close();
+      }
+    };
+    const mainDb = path.join(tmpDir, 'research-tool.db');
+    const projDb = path.join(tmpDir, 'projects', second, 'research-tool.db');
+    const before = {
+      values: count(mainDb, 'SELECT COUNT(*) AS n FROM record_values'),
+      events: count(mainDb, 'SELECT COUNT(*) AS n FROM value_events'),
+      runs: count(mainDb, 'SELECT COUNT(*) AS n FROM extraction_runs'),
+    };
+
+    // Extraction (les requêtes préparées au chargement des modules visaient le principal : défaut de la 1.7.0).
+    const run = await api<any>('POST', '/api/records/extraction/run', { mode: 'rules' }, second);
+    assert.equal(run.status, 200, JSON.stringify(run.data));
+    assert.ok(run.data.totals.extracted > 0, 'le compte rendu importé donne des valeurs');
+    assert.ok(count(projDb, 'SELECT COUNT(*) AS n FROM record_values') > 0, 'valeurs écrites dans le projet');
+
+    // Import d'un tableau de cohorte.
+    const csv = 'code;age\nTAB-1;61\nTAB-2;47\n';
+    const form = new FormData();
+    form.append('file', new Blob([csv], { type: 'text/csv' }), 'cohorte.csv');
+    const up = await fetch(`${baseUrl}/api/table-imports`, { method: 'POST', body: form, headers: { 'X-Project': second } });
+    assert.equal(up.status, 201, await up.clone().text());
+    const draft = ((await up.json()) as any).import.id;
+    const tpl = (await api<any>('GET', '/api/templates', undefined, second)).data.active;
+    const age = tpl.fields.find((f: any) => f.type === 'number' || f.type === 'integer');
+    assert.ok(age, 'une variable numérique reste dans la fiche');
+    const commit = await api<any>(
+      'POST',
+      `/api/table-imports/${draft}/commit`,
+      { sheet: null, headerRow: 1, codeColumn: 0, mapping: [{ column: 1, fieldId: age.id }], options: { createPatients: true, overwriteExtracted: false, overwriteManual: false } },
+      second,
+    );
+    assert.ok(commit.status < 300, JSON.stringify(commit.data));
+    const list = JSON.stringify((await api<any>('GET', '/api/patients', undefined, second)).data);
+    assert.ok(list.includes('TAB-1'));
+
+    // Rien de tout cela n'a touché le projet principal.
+    assert.deepEqual(
+      {
+        values: count(mainDb, 'SELECT COUNT(*) AS n FROM record_values'),
+        events: count(mainDb, 'SELECT COUNT(*) AS n FROM value_events'),
+        runs: count(mainDb, 'SELECT COUNT(*) AS n FROM extraction_runs'),
+      },
+      before,
+    );
+    assert.equal(JSON.stringify((await api<any>('GET', '/api/patients')).data).includes('TAB-1'), false);
+  });
+
   test('projet inconnu : refus explicite, pas de repli silencieux sur le principal', async () => {
     const res = await api<any>('GET', '/api/patients', undefined, 'nexiste-pas');
     assert.equal(res.status, 404);

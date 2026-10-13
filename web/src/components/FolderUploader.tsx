@@ -3,6 +3,7 @@ import { api, ApiError } from '../lib/api';
 import { formatBytes, plural } from '../lib/format';
 import { detectStructure, groupItems, type Layout } from '../lib/grouping';
 import { useToast } from './ui';
+import { readSetting, writeSetting } from '../lib/storage';
 import { AnonymisationGate } from './AnonymisationGate';
 import { IconAlert } from './icons';
 import type { UploadOutcome } from '../lib/types';
@@ -48,11 +49,19 @@ export function FolderUploader(props: UploaderProps) {
 
 interface UploaderProps {
   onDone: () => void;
+  /** Un tableau de cohorte (Excel, CSV) déposé ici est confié à l'import de tableau. */
+  onTableFile?: (file: File) => void;
+  /** La fiche a des variables : l'extraction peut suivre l'import. */
+  canExtract?: boolean;
   /** Impose un dossier de destination (import depuis la fiche d'un patient). */
   fixedPatient?: { id: number; code: string };
 }
 
-function FolderUploaderBody({ onDone, fixedPatient }: UploaderProps) {
+const TABLE_FILE = /\.(xlsx|xlsm|xls|csv|tsv)$/i;
+const AUTO_EXTRACT_KEY = 'import:auto-extract';
+
+function FolderUploaderBody({ onDone, fixedPatient, onTableFile, canExtract = false }: UploaderProps) {
+  const [autoExtract, setAutoExtract] = useState(() => readSetting(AUTO_EXTRACT_KEY) !== '0');
   const toast = useToast();
   const [picked, setPicked] = useState<PickedFile[]>([]);
   const [looseCode, setLooseCode] = useState('');
@@ -60,6 +69,8 @@ function FolderUploaderBody({ onDone, fixedPatient }: UploaderProps) {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [results, setResults] = useState<GroupResult[] | null>(null);
+  const [extracting, setExtracting] = useState(false);
+  const [showAll, setShowAll] = useState(false);
 
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
@@ -78,7 +89,16 @@ function FolderUploaderBody({ onDone, fixedPatient }: UploaderProps) {
   const looseGroup = groups.find((g) => g.code === '');
   const totalBytes = picked.reduce((sum, p) => sum + p.file.size, 0);
 
-  function addFiles(files: PickedFile[]) {
+  function addFiles(all: PickedFile[]) {
+    // Un tableau de cohorte n'est pas un document de patient : il part vers l'import de tableau.
+    const tables = onTableFile ? all.filter((f) => TABLE_FILE.test(f.file.name)) : [];
+    const files = all.filter((f) => !tables.includes(f));
+    if (tables.length > 0 && files.length === 0) {
+      onTableFile!(tables[0]!.file);
+      if (tables.length > 1) toast.info('Un seul tableau à la fois : le premier a été ouvert.');
+      return;
+    }
+    if (tables.length > 0) toast.info(`${plural(tables.length, 'tableau Excel/CSV ignoré', 'tableaux Excel/CSV ignorés')} : déposez-le seul pour l’importer comme tableau de cohorte.`);
     setResults(null);
     setPicked((current) => {
       const seen = new Set(current.map((c) => `${c.path}:${c.file.size}`));
@@ -202,6 +222,20 @@ function FolderUploaderBody({ onDone, fixedPatient }: UploaderProps) {
         );
       }
       if (errors > 0) toast.error(`${plural(errors, 'fichier non analysé', 'fichiers non analysés')}.`);
+      // L'extraction suit l'import : les dossiers arrivent remplis, sans étape à lancer à part.
+      if (imported > 0 && autoExtract && canExtract && !fixedPatient) {
+        setProgress(null);
+        setExtracting(true);
+        try {
+          const ids = await Promise.all(collected.map(async (r) => (await api.ensurePatient(r.code)).patient.id));
+          const run = await api.runExtraction({ patientIds: ids, mode: 'rules' });
+          toast.success(`Extraction faite : ${plural(run.totals.extracted, 'valeur trouvée', 'valeurs trouvées')} dans ${plural(run.patientsProcessed, 'dossier')}.`);
+        } catch (err) {
+          toast.error(`Import fait, mais l’extraction a échoué : ${err instanceof ApiError ? err.message : String(err)}. Relancez-la depuis « Extraction ».`);
+        } finally {
+          setExtracting(false);
+        }
+      }
       onDone();
     } finally {
       setBusy(false);
@@ -246,8 +280,8 @@ function FolderUploaderBody({ onDone, fixedPatient }: UploaderProps) {
           </button>
         </div>
         <div className="small muted" style={{ marginTop: 10 }}>
-          Formats acceptés : PDF, Word (.docx), images (JPEG, PNG, TIFF) et DICOM. Un tableau de cohorte (Excel,
-          CSV) s’importe avec « Importer un tableau », sur la page Dossiers patients.
+          PDF, Word (.docx), images (JPEG, PNG, TIFF) et DICOM.
+          {onTableFile && ' Un tableau de la cohorte (Excel, CSV) ? Déposez-le seul : chaque ligne devient un dossier.'}
         </div>
 
         <input
@@ -290,12 +324,29 @@ function FolderUploaderBody({ onDone, fixedPatient }: UploaderProps) {
               <button className="btn-sm" onClick={() => setPicked([])} disabled={busy}>
                 Vider
               </button>
-              <button className="btn-sm btn-primary" onClick={upload} disabled={busy}>
-                {busy ? 'Import en cours…' : 'Importer'}
+              <button className="btn-sm btn-primary" onClick={upload} disabled={busy || extracting}>
+                {extracting ? 'Extraction…' : busy ? 'Import en cours…' : autoExtract && canExtract && !fixedPatient ? 'Importer et extraire' : 'Importer'}
               </button>
             </div>
           </div>
           <div className="card-body">
+            {!fixedPatient && (
+              <label className="checkbox" style={{ marginBottom: 12 }}>
+                <input
+                  type="checkbox"
+                  checked={autoExtract && canExtract}
+                  disabled={!canExtract || busy}
+                  onChange={(e) => {
+                    setAutoExtract(e.target.checked);
+                    writeSetting(AUTO_EXTRACT_KEY, e.target.checked ? '1' : '0');
+                  }}
+                />
+                <span>
+                  Remplir la fiche aussitôt après l’import (extraction par les règles)
+                  {!canExtract && <span className="muted"> — la fiche n’a pas encore de variable</span>}
+                </span>
+              </label>
+            )}
             {progress && (
               <div className="small secondary" style={{ marginBottom: 12 }}>
                 Dossier {progress.done} sur {progress.total} — l’analyse des documents a lieu à
@@ -355,7 +406,7 @@ function FolderUploaderBody({ onDone, fixedPatient }: UploaderProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {groups.map((group) => (
+                  {(showAll ? groups : groups.slice(0, 6)).map((group) => (
                     <tr key={group.code || '__racine__'}>
                       <td>
                         {group.code === '' ? (
@@ -387,6 +438,11 @@ function FolderUploaderBody({ onDone, fixedPatient }: UploaderProps) {
                 </tbody>
               </table>
             </div>
+            {groups.length > 6 && (
+              <button className="btn-sm btn-quiet" style={{ marginTop: 8 }} onClick={() => setShowAll((v) => !v)}>
+                {showAll ? 'Réduire la liste' : `Voir les ${groups.length} dossiers`}
+              </button>
+            )}
           </div>
         </div>
       )}

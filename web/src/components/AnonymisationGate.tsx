@@ -34,15 +34,6 @@ export function AnonymisationGate({ children }: { children: ReactNode }) {
 
   const remaining = CHARTER_ITEMS.length - CHARTER_ITEMS.filter((item) => checked.has(item.id)).length;
 
-  function toggle(id: string) {
-    setChecked((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
   function confirm() {
     if (!allConfirmed(checked)) return;
     writeSetting(ACK_KEY, serialiseAcknowledgement(new Date()));
@@ -62,15 +53,22 @@ export function AnonymisationGate({ children }: { children: ReactNode }) {
           </div>
         </div>
 
-        <fieldset className="charter-list">
-          <legend className="sr-only">Mes engagements avant l’import</legend>
+        <ul className="charter-points">
           {CHARTER_ITEMS.map((item) => (
-            <label className="charter-item" key={item.id}>
-              <input type="checkbox" checked={checked.has(item.id)} onChange={() => toggle(item.id)} />
-              <span>{item.text}</span>
-            </label>
+            <li key={item.id}>{item.text}</li>
           ))}
-        </fieldset>
+        </ul>
+
+        <label className="charter-attest">
+          <input
+            type="checkbox"
+            checked={remaining === 0}
+            onChange={(e) => setChecked(e.target.checked ? new Set(CHARTER_ITEMS.map((i) => i.id)) : new Set())}
+          />
+          <span>
+            <strong>Je confirme ces {CHARTER_ITEMS.length} engagements</strong> pour les documents que j’importe.
+          </span>
+        </label>
 
         <p className="small muted">
           {CHARTER_DISCLAIMER}{' '}
@@ -82,12 +80,10 @@ export function AnonymisationGate({ children }: { children: ReactNode }) {
 
         <div className="row">
           <button className="btn-primary" onClick={confirm} disabled={remaining > 0} aria-describedby={hintId}>
-            Je confirme et je continue
+            Continuer
           </button>
           <span className="small muted" id={hintId} aria-live="polite">
-            {remaining > 0
-              ? `${remaining} engagement${remaining > 1 ? 's' : ''} à cocher pour continuer.`
-              : 'Merci : vous pouvez continuer.'}
+            {remaining > 0 ? 'Cochez la case ci-dessus pour continuer.' : 'Merci : vous pouvez continuer.'}
           </span>
         </div>
       </section>
