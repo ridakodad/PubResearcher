@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '../lib/api';
 import { formatBytes, plural } from '../lib/format';
 import { detectStructure, groupItems, type Layout } from '../lib/grouping';
@@ -78,6 +78,10 @@ function FolderUploaderBody({ onDone, fixedPatient, onTableFile, canExtract = fa
   /** Lecture choisie quand un seul dossier contenant des sous-dossiers a été déposé (voir `lib/grouping.ts`). */
   const [layout, setLayout] = useState<Layout>('cohort');
   const structure = useMemo(() => (fixedPatient ? null : detectStructure(picked)), [picked, fixedPatient]);
+  // Nouvelle sélection : la lecture proposée est celle que la forme du dossier suggère.
+  useEffect(() => {
+    if (structure) setLayout(structure.suggested);
+  }, [structure?.root, structure?.suggested]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const groups = useMemo<Group[]>(() => {
     if (fixedPatient) {
@@ -356,8 +360,12 @@ function FolderUploaderBody({ onDone, fixedPatient, onTableFile, canExtract = fa
             {structure && (
               <fieldset className="layout-choice">
                 <legend>
-                  « {structure.root} » contient {structure.subfolders.length} sous-dossiers : que représentent-ils ?
+                  Vous avez déposé le dossier « {structure.root} »
+                  {structure.subfolders.length > 0 ? ` (${plural(structure.subfolders.length, 'sous-dossier')}` : ' ('}
+                  {structure.subfolders.length > 0 && structure.direct > 0 ? ', ' : ''}
+                  {structure.direct > 0 ? plural(structure.direct, 'fichier') : ''}) : qu’est-ce qu’un patient ?
                 </legend>
+{structure.subfolders.length > 0 && (
                 <label className="radio">
                   <input
                     type="radio"
@@ -372,6 +380,17 @@ function FolderUploaderBody({ onDone, fixedPatient, onTableFile, canExtract = fa
                     {structure.subfolders.length > 4 ? ', …' : ''})
                   </span>
                 </label>
+                )}
+                {structure.direct > 0 && (
+                  <label className="radio">
+                    <input type="radio" name="layout" checked={layout === 'files'} onChange={() => setLayout('files')} disabled={busy} />
+                    <span>
+                      <strong>Chaque fichier est un patient</strong> — le nom du fichier devient le code du dossier (
+                      {plural(structure.direct, 'fichier')} posé{structure.direct > 1 ? 's' : ''} dans « {structure.root} »)
+                    </span>
+                  </label>
+                )}
+
                 <label className="radio">
                   <input
                     type="radio"
@@ -389,7 +408,7 @@ function FolderUploaderBody({ onDone, fixedPatient, onTableFile, canExtract = fa
                   <div className="notice notice-warn">
                     <IconAlert size={18} />
                     <div>
-                      Les documents de {structure.subfolders.length} sous-dossiers seront rassemblés dans{' '}
+                      Tous les documents seront rassemblés dans{' '}
                       <strong>un seul</strong> dossier patient. Si ce sont des patients différents, leurs données seront mêlées.
                     </div>
                   </div>

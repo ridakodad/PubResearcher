@@ -33,6 +33,10 @@ Le format suit l'ordre des versions, de la plus récente à la plus ancienne ; l
 
 **Relecture d'un dossier**
 - La fiche et le document d'origine sont séparés par une poignée qu'on fait glisser, ou qu'on déplace aux flèches du clavier ; un double-clic la réinitialise. La largeur choisie est retenue.
+- **Les PDF s'affichent partout.** Ils sont dessinés par l'application (pdf.js), et non plus par le lecteur du navigateur, souvent absent ou désactivé (« Ce navigateur n'affiche pas les PDF »). Le zoom est réglable, et cliquer sur un extrait amène à sa page, encadrée.
+
+**Import des dossiers**
+- Un seul dossier déposé : sa lecture est toujours demandée, avec trois choix : un sous-dossier = un patient, un fichier = un patient (code tiré du nom du fichier), ou tout le dossier = un patient. Avant, un dossier « cohorte » ne contenant qu'un patient, ou des PDF posés à plat, devenait un seul dossier nommé « cohorte ». La lecture proposée par défaut dépend de la forme du dossier et de son nom.
 
 ## 1.7.1 — 13 octobre 2026
 

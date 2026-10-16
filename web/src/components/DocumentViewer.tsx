@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { PdfPages } from './PdfPages';
 import { api, ApiError } from '../lib/api';
 import { formatBytes } from '../lib/format';
 import { ConfirmButton, ErrorPanel, Modal, Spinner, onTabKeyDown, useToast } from './ui';
@@ -332,28 +333,14 @@ function ViewerBody({
 }) {
   if (mode === 'apercu' && hasNativePreview(doc)) {
     if (isPdf(doc)) {
-      /* `object` plutôt que `iframe` : quand le navigateur ne sait pas rendre
-         le PDF, il affiche le contenu de repli au lieu d'un cadre vide. */
+      // Rendu par l'application (pdf.js) : le lecteur PDF du navigateur manque ou est désactivé chez beaucoup.
       return (
-        <object
-          className="doc-frame"
-          data={api.documentFileUrl(doc.id)}
-          type="application/pdf"
-          aria-label={`Aperçu de ${doc.filename}`}
-        >
-          <div style={{ padding: 16 }}>
-            <div className="notice notice-info">
-              <IconAlert size={18} />
-              <div>
-                Ce navigateur n’affiche pas les PDF dans la page.{' '}
-                <a href={api.documentFileUrl(doc.id)} target="_blank" rel="noreferrer">
-                  Ouvrir le fichier dans un onglet
-                </a>
-                , ou consultez le texte extrait.
-              </div>
-            </div>
-          </div>
-        </object>
+        <PdfPages
+          url={api.documentFileUrl(doc.id)}
+          label={doc.filename}
+          snippet={focus && focus.documentId === doc.id ? focus.evidence.snippet : null}
+          nonce={focus?.nonce}
+        />
       );
     }
     return <ImagePreview doc={doc} />;

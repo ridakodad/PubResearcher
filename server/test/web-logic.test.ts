@@ -91,8 +91,26 @@ describe('regroupement des fichiers déposés', () => {
 
   test('un dossier patient avec un seul sous-dossier n’est pas pris pour une cohorte', () => {
     const items = files(['PAT-001/scans/a.pdf', 'PAT-001/scans/b.pdf', 'PAT-001/cr.pdf']);
-    assert.equal(detectStructure(items), null);
-    assert.deepEqual(groupItems(items, null, 'cohort').map((g) => [g.code, g.files.length]), [['PAT-001', 3]]);
+    // La question est posée, mais la lecture proposée est « un seul patient ».
+    const structure = detectStructure(items)!;
+    assert.equal(structure.suggested, 'single');
+    assert.deepEqual(groupItems(items, structure, structure.suggested).map((g) => [g.code, g.files.length]), [['PAT-001', 3]]);
+  });
+
+  test('une cohorte d’un seul patient ne devient pas un dossier nommé « cohorte »', () => {
+    const items = files(['cohorte/PAT-001/cr.pdf', 'cohorte/PAT-001/bio.docx']);
+    const structure = detectStructure(items)!;
+    assert.equal(structure.suggested, 'cohort');
+    assert.deepEqual(groupItems(items, structure, structure.suggested).map((g) => g.code), ['PAT-001']);
+  });
+
+  test('des PDF posés dans un dossier « cohorte » : un fichier = un patient, nommé d’après le fichier', () => {
+    const items = files(['cohorte/PAT-001.pdf', 'cohorte/PAT-002.pdf', 'cohorte/PAT-003.pdf']);
+    const structure = detectStructure(items)!;
+    assert.equal(structure.suggested, 'files');
+    assert.deepEqual(groupItems(items, structure, 'files').map((g) => g.code), ['PAT-001', 'PAT-002', 'PAT-003']);
+    // Et l'utilisateur peut toujours choisir « un seul patient ».
+    assert.deepEqual(groupItems(items, structure, 'single').map((g) => g.code), ['cohorte']);
   });
 
   test('un fichier déposé seul (sans dossier) reste hors dossier', () => {

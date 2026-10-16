@@ -2009,3 +2009,13 @@ tr.is-selected td { background: var(--brand-soft); }
 .tpl-import-off td:not(:first-child) { opacity: 0.5; }
 .tpl-import-warnings { margin: var(--s1) 0 0; padding-left: 1.2em; }
 /* --- fin import de fiche --- */
+
+/* --- aperçu PDF dessiné par l'application (pdf.js) ----------------------- */
+.pdf-viewer { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.pdf-toolbar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+.pdf-toolbar .btn-sm { min-width: 32px; padding: 4px 8px; }
+.pdf-pages { flex: 1; overflow: auto; padding: 12px; display: grid; gap: 12px; justify-items: center; background: var(--surface-2); min-height: 420px; max-height: calc(100vh - 260px); }
+.pdf-page { position: relative; background: #fff; box-shadow: var(--shadow-1); border-radius: 4px; overflow: hidden; outline: 3px solid transparent; transition: outline-color 0.2s; }
+.pdf-page.is-hit { outline-color: var(--brand); }
+.pdf-page canvas { display: block; }
+.pdf-page-no { position: absolute; right: 8px; bottom: 6px; font-size: 0.7rem; color: #555; background: rgba(255,255,255,0.85); padding: 1px 6px; border-radius: 6px; }

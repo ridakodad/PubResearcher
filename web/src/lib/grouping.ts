@@ -12,7 +12,8 @@ export interface PathItem {
   path: string;
 }
 
-export type Layout = 'cohort' | 'single';
+/** cohort : un sous-dossier = un patient ; files : un fichier = un patient ; single : tout le dossier = un patient. */
+export type Layout = 'cohort' | 'files' | 'single';
 
 export interface Structure {
   /** Le seul dossier de premier niveau : la racine déposée. */
@@ -21,12 +22,17 @@ export interface Structure {
   subfolders: string[];
   /** Fichiers posés directement dans la racine. */
   direct: number;
+  /** Lecture proposée par défaut. */
+  suggested: Layout;
 }
+
+/** Nom de dossier qui désigne un ensemble de patients plutôt qu'un patient. */
+const COHORT_NAME = /cohort|patients|dossiers|etude|study|serie|inclus/i;
 
 const segmentsOf = (path: string): string[] => path.split('/').filter(Boolean);
 
 /**
- * La forme ambiguë : un seul dossier de premier niveau, contenant au moins deux sous-dossiers de fichiers.
+ * La forme ambiguë : un seul dossier de premier niveau, avec au moins un sous-dossier ou au moins deux fichiers.
  * `null` dans tous les autres cas (plusieurs dossiers déposés = autant de patients, sans ambiguïté).
  */
 export function detectStructure(items: PathItem[]): Structure | null {
@@ -45,7 +51,16 @@ export function detectStructure(items: PathItem[]): Structure | null {
     if (s.length === 2) direct++;
     else if (s.length >= 3) sub.add(s[1]!);
   }
-  return sub.size >= 2 ? { root, subfolders: [...sub].sort((a, b) => a.localeCompare(b, 'fr', { numeric: true })), direct } : null;
+  // Un seul dossier déposé : sa lecture est toujours demandée dès qu'elle est ambiguë. Avec un seul sous-dossier, ou
+  // seulement des fichiers, le dossier lui-même devenait le patient — « cohorte » se retrouvait code de dossier.
+  if (sub.size === 0 && direct < 2) return null;
+  const plainName = root.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const cohortName = COHORT_NAME.test(plainName);
+  // Plusieurs sous-dossiers, ou un seul sans fichier à côté (« cohorte/PAT-001/… ») : des patients. Un sous-dossier à
+  // côté de fichiers (« PAT-001/scans/ » et « PAT-001/cr.pdf ») : un seul patient, sauf nom de cohorte explicite.
+  const suggested: Layout =
+    sub.size >= 2 || (sub.size === 1 && (direct === 0 || cohortName)) ? 'cohort' : sub.size === 0 && cohortName ? 'files' : 'single';
+  return { root, subfolders: [...sub].sort((a, b) => a.localeCompare(b, 'fr', { numeric: true })), direct, suggested };
 }
 
 /**
@@ -54,6 +69,10 @@ export function detectStructure(items: PathItem[]): Structure | null {
 export function patientCodeOf(path: string, structure: Structure | null, layout: Layout): string {
   const s = segmentsOf(path);
   if (structure && layout === 'cohort' && s[0] === structure.root) return s.length >= 3 ? s[1]! : '';
+  // Un fichier = un patient : son nom sans extension est le code (« PAT-001.pdf » → « PAT-001 »).
+  if (structure && layout === 'files' && s[0] === structure.root) {
+    return s.length === 2 ? s[1]!.replace(/\.[^.]+$/, '') : s[1]!;
+  }
   return s.length > 1 ? s[0]! : '';
 }
 
