@@ -1,7 +1,7 @@
 {
   "name": "@pubresearcher/landing",
   "private": true,
-  "version": "1.7.1",
+  "version": "1.8.0",
   "description": "Page d'accueil publique de PubResearcher : présentation, inscription (Google ou e-mail), parcours d'accueil et charte d'anonymisation. Se déploie seule (Vercel) ; ne contient aucune donnée de patient.",
   "type": "module",
   "engines": {

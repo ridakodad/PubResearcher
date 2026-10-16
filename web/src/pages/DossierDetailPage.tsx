@@ -4,6 +4,7 @@ import { api, ApiError } from '../lib/api';
 import { displayValue, formatDateTime, plural } from '../lib/format';
 import { FolderUploader } from '../components/FolderUploader';
 import { DocumentViewer, type ViewerFocus } from '../components/DocumentViewer';
+import { SplitPane } from '../components/SplitPane';
 import { SourceBadge, ValueEditor } from '../components/ValueEditor';
 import { ErrorPanel, LoadingPanel, Modal, Spinner, useToast } from '../components/ui';
 import { IconAlert, IconInfo } from '../components/icons';
@@ -336,7 +337,9 @@ export function DossierDetailPage() {
       {/* La relecture est un aller-retour entre la variable et le document
           qui la justifie : les deux restent donc côte à côte, et le lecteur
           de droite suit la fiche sans jamais la recouvrir. */}
-      <div className="relecture">
+      <SplitPane
+        left={
+          <>
         {/* ------------------------------------------------------- fiche */}
         <div className="stack">
           <div className="card">
@@ -534,7 +537,9 @@ export function DossierDetailPage() {
           ))}
         </div>
 
-        {/* --------------------------------------------------- documents */}
+          </>
+        }
+        right={
         <DocumentViewer
           documents={documents}
           focus={focus}
@@ -543,7 +548,8 @@ export function DossierDetailPage() {
           onDelete={(doc) => void removeDocument(doc)}
           onRenamed={() => void load()}
         />
-      </div>
+        }
+      />
 
       {edits.size > 0 && (
         <div className="savebar" role="region" aria-label="Corrections non enregistrées">

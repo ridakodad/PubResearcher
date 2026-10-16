@@ -1956,3 +1956,56 @@ tr.is-selected td { background: var(--brand-soft); }
   background: var(--brand-soft); border: 1px solid var(--border); cursor: pointer;
 }
 .charter-attest input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--brand); flex: none; }
+
+/* --- fiche : saisie rapide et démarrage ---------------------------------- */
+.quick-add { display: grid; gap: 10px; padding: 14px; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--border); }
+.quick-add-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: space-between; }
+.quick-add-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.quick-add-row .field { margin: 0; min-width: 120px; flex: 0 1 160px; }
+.quick-add-row .quick-label { flex: 3 1 260px; }
+.quick-add-row .quick-options { flex: 2 1 200px; }
+.quick-add-row .quick-unit { flex: 0 1 100px; min-width: 90px; }
+.seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: 10px; background: var(--surface-1); border: 1px solid var(--border); }
+.seg button { border: 0; box-shadow: none; background: transparent; padding: 5px 12px; min-height: 32px; border-radius: 8px; font-size: 0.82rem; }
+.seg button.is-on, .seg button.is-on:hover:not(:disabled) { background: var(--brand-soft); color: var(--brand-strong); font-weight: 600; box-shadow: none; }
+.start-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); }
+.start-card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; padding: 16px; min-height: 0;
+  border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-1); box-shadow: var(--shadow-1);
+  font: inherit; color: var(--text-primary); white-space: normal;
+}
+.start-card strong { font-size: 1rem; color: var(--brand-strong); }
+.start-card span { font-size: 0.85rem; color: var(--text-secondary); font-weight: 400; }
+.start-card:hover:not(:disabled) { border-color: var(--brand); background: var(--surface-1); }
+
+/* --- relecture : séparateur réglable entre fiche et document ------------- */
+.relecture-split { grid-template-columns: minmax(0, var(--split, 55%)) 14px minmax(320px, 1fr); gap: 0; }
+.split-left { min-width: 0; padding-right: var(--s2); }
+.split-right { min-width: 0; padding-left: var(--s2); align-self: stretch; }
+.split-handle {
+  align-self: stretch; cursor: col-resize; display: flex; justify-content: center; border-radius: 8px; touch-action: none;
+  position: sticky; top: calc(var(--topbar-height) + var(--s4)); height: calc(100vh - var(--topbar-height) - var(--s5) * 2);
+}
+.split-handle span { width: 4px; height: 100%; border-radius: 999px; background: var(--border); transition: background 0.15s; }
+.split-handle:hover span, .split-handle:focus-visible span { background: var(--brand); }
+.split-handle:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+@media (max-width: 1100px) {
+  .relecture-split { grid-template-columns: minmax(0, 1fr); gap: var(--s4); }
+  .split-handle { display: none; }
+  .split-left, .split-right { padding: 0; position: static; }
+}
+@media (prefers-reduced-motion: reduce) { .split-handle span { transition: none; } }
+
+/* --- import de fiche --- */
+.tpl-import-head { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s3) var(--s4); }
+.tpl-import-head .field { flex: 1 1 280px; margin-bottom: 0; }
+.tpl-import-head .field input { width: 100%; }
+.tpl-import-table { max-height: 55vh; overflow-y: auto; }
+.tpl-import-table table { width: 100%; }
+.tpl-import-table td { vertical-align: middle; }
+.tpl-import-table input[type='text'], .tpl-import-table select { width: 100%; min-width: 110px; }
+.tpl-import-table .tpl-import-unit { min-width: 70px; }
+.tpl-import-center { text-align: center; }
+.tpl-import-off td:not(:first-child) { opacity: 0.5; }
+.tpl-import-warnings { margin: var(--s1) 0 0; padding-left: 1.2em; }
+/* --- fin import de fiche --- */

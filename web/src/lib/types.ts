@@ -829,3 +829,33 @@ export interface TableImportReport {
   truncated: boolean;
   planHash: string;
 }
+
+// ------------------------------------------------------------- import de fiche
+
+/** Variable proposée par l'analyse d'une fiche existante (Word, Excel, CSV), avant relecture. */
+export interface DraftField {
+  label: string;
+  key: string;
+  type: FieldType;
+  section: string;
+  unit: string | null;
+  options: string[];
+  required: boolean;
+  description: string | null;
+}
+
+export interface TemplateImportDraft {
+  /** Nom proposé pour la fiche : celui du fichier, sans extension. */
+  name: string;
+  fields: DraftField[];
+  /** `claude` : lu par Claude ; `rules` : analyse par règles (sans clé, ou repli). */
+  method: 'claude' | 'rules';
+  warnings: string[];
+}
+
+export interface TemplateImportCommit {
+  name: string;
+  description?: string | null;
+  fields: DraftField[];
+  activate?: boolean;
+}

@@ -29,6 +29,7 @@ import {
 import { loadSourceDocs } from '../repo/documents.js';
 import { db } from '../db/index.js';
 import { extractFieldDetailed, type SourceDoc } from '../engine/rules.js';
+import { suggestExtraction } from '../engine/suggest-rules.js';
 import type { TemplateField } from '../domain/types.js';
 
 import { bulkIdsSchema } from '../lib/bulk.js';
@@ -146,6 +147,14 @@ templatesRouter.post(
     if (!getTemplate(templateId)) throw notFound("Fiche d'exploitation introuvable.");
     const input = fieldInputSchema.parse(req.body) as FieldInput;
     validateOptions(input);
+    // Variable créée sans règle (fiche saisie de zéro, importée d'un tableur) : des règles sont proposées d'office à
+    // partir du libellé, du type, des options et de l'unité. Des règles fournies ne sont jamais touchées.
+    if (!input.extraction || input.extraction.rules.length === 0) {
+      input.extraction = {
+        ...suggestExtraction({ label: input.label, type: input.type, options: input.options, unit: input.unit, key: input.key }),
+        ...(input.extraction ? { enabled: input.extraction.enabled } : {}),
+      };
+    }
     res.status(201).json({ field: createField(templateId, input) });
   }),
 );

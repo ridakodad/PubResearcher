@@ -40,6 +40,13 @@ Le rail de gauche présente en permanence tous les outils, groupés par nature d
 
 ## 2. Définir la fiche d'exploitation
 
+**Trois façons de commencer** (page Fiche d'exploitation) :
+- **De zéro** : tapez le libellé de la variable dans la barre « Ajouter des variables », vérifiez le type proposé, puis appuyez sur Entrée et passez à la suivante. Le mode « Coller une liste » accepte une variable par ligne (« Sexe : Homme / Femme », « CRP (mg/L) », « Diabète »).
+- **Importer votre fiche Word ou Excel** : les variables sont reconnues (zones à remplir, cases à cocher, sections, dictionnaire de données). Relisez-les dans le tableau, corrigez le type ou les modalités, décochez ce qui n'est pas une variable, puis créez la fiche.
+- **Éditeur complet** : une variable avec toutes ses options.
+
+Dans tous les cas, les règles d'extraction sont proposées à partir du libellé (synonymes et sigles médicaux). Le banc d'essai de l'éditeur permet de les vérifier sur une phrase avant de lancer l'extraction.
+
 La fiche est la liste des variables de l'étude, regroupées en sections. Une fiche générale (identité, antécédents, clinique, paraclinique, prise en charge, évolution — 22 variables) est fournie au premier démarrage : utilisez-la comme exemple, **dupliquez-la** (*Dupliquer*) avant de la modifier, ou créez la vôtre (*Nouvelle fiche*). Une seule fiche est *active* à la fois (*Définir comme active*) ; c'est elle qui sert aux extractions, aux résultats et aux exports.
 
 ![Fiche d'exploitation](img/fiche.png)

@@ -88,10 +88,10 @@ const UNCERTAIN_AFTER =
 
 /**
  * Hypothèse placée AVANT le terme, à trois mots au plus : « suspicion de diabète », « probable HTA », « recherche
- * d'un diabète ». Au-delà, l'hypothèse porte sur autre chose (« suspicion d'embolie chez un patient diabétique »).
+ * d'un diabète », « risque de décès », « prévention de la MTEV » (un risque ou une prévention ne sont pas l'événement). Au-delà, l'hypothèse porte sur autre chose (« suspicion d'embolie chez un patient diabétique »).
  */
 const UNCERTAIN_BEFORE =
-  /\b(?:suspicion|suspecte?|probable|possible|eventuel(?:le)?|hypothese|evocat(?:eur|rice)|evoquant|evoque|compatible avec|en faveur|recherche|depistage|doute)\b(?:\s*(?:d'|de |du |des |la |le |l'|un |une |avec )?\s*)(?:[a-z0-9'-]+\s+){0,3}$/;
+  /\b(?:suspicion|suspecte?|probable|possible|eventuel(?:le)?|hypothese|evocat(?:eur|rice)|evoquant|evoque|compatible avec|en faveur|recherche|depistage|doute|risques?|prevention|prophylaxie)\b(?:\s*(?:d'|de |du |des |la |le |l'|un |une |avec )?\s*)(?:[a-z0-9'-]+\s+){0,3}$/;
 
 /**
  * Absence actuelle établie, juste APRÈS le terme : « diabète éliminé », « tabagisme sevré », « tabac arrêté ».
@@ -118,6 +118,9 @@ const RESTRICTED_AFTER =
  */
 const PAST_EPISODE =
   /\b(?:en (?:(?:janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre) )?(?:19|20)\d\d|il y a \d+ (?:ans?|mois|semaines?)|lors (?:de|d'|du|des)|dans l'enfance|dans (?:sa|son) (?:enfance|jeunesse)|pendant (?:sa|la) grossesse|resolutive?s?|resolue?s?|guerie?s?|regressive?s?|gravidiques?|gestationnel(?:le)?s?)\b/;
+
+/** Épisode clos par nature, quelle que soit la rubrique : « gestationnel », « gravidique », « résolutif », « guéri ». */
+const TRANSIENT = /\b(?:resolutive?s?|resolue?s?|guerie?s?|regressive?s?|gravidiques?|gestationnel(?:le)?s?)\b/;
 
 /** Ce qui fait d'une date le début d'un état toujours présent : « depuis 2010 », « découvert en 2015 ». */
 const ONGOING = /\b(?:depuis|decouverte?s?|diagnostiquee?s?|connue?s?|depistee?s?|actuellement|toujours|persistante?s?|chronique)\b/;
@@ -179,7 +182,14 @@ export function qualifyMention(folded: string, start: number, end: number, optio
 
   const pastAfter = PAST_EPISODE.test(after);
   const pastBefore = PAST_EPISODE.test(before) && !CURRENT_EPISODE.test(before);
-  if ((pastAfter || pastBefore) && !ONGOING.test(after) && !ONGOING.test(before)) return 'past';
+  if ((pastAfter || pastBefore) && !ONGOING.test(after) && !ONGOING.test(before)) {
+    // « ATCD : AVC en 2019 » : sous la rubrique des antécédents, un événement daté est précisément l'antécédent que
+    // la variable recueille — pour une règle qui compte les antécédents. Une forme transitoire par nature (« diabète
+    // gestationnel », « HTA gravidique », « résolutive ») reste un épisode clos.
+    const transient = TRANSIENT.test(after) || TRANSIENT.test(before);
+    if (!options.excludeHistory && !transient && underHistory(sentenceBefore(folded, start))) return 'affirmed';
+    return 'past';
+  }
   if (options.excludeHistory && underHistory(sentenceBefore(folded, start))) return 'history';
   return 'affirmed';
 }

@@ -1,7 +1,7 @@
 {
   "name": "pubresearcher",
   "private": true,
-  "version": "1.7.1",
+  "version": "1.8.0",
   "description": "PubResearcher : exploitation de dossiers patients (Word, PDF, images, DICOM) par fiche paramétrable, revue bibliographique (PubMed, Google Scholar), statistiques et export.",
   "homepage": "https://github.com/ridakodad/PubResearcher#readme",
   "repository": {

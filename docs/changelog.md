@@ -2,6 +2,38 @@
 
 Le format suit l'ordre des versions, de la plus récente à la plus ancienne ; l'historique git de ce dépôt commence à la 1.2.0, les versions antérieures n'y sont décrites qu'ici. Les numéros de version sont ceux de `package.json` ; le rapport « Méthodes et traçabilité » consigne la version qui a produit un jeu de données.
 
+## 1.8.0 — 16 octobre 2026
+
+**Construire sa fiche en quelques minutes, et une extraction qui lit plus de façons d'écrire.**
+
+**Fiche d'exploitation**
+- **Partir de zéro** :
+  - Une barre de saisie rapide : libellé, type, Entrée, puis la variable suivante.
+  - Le type est deviné à la frappe : « Sexe : Homme / Femme » donne un choix unique avec ses modalités, « CRP (mg/L) » un nombre avec son unité, « Diabète » un oui/non.
+  - Le mode « Coller une liste » crée toutes les variables d'un coup.
+  - Une fiche vide propose trois départs : de zéro, importer sa fiche, éditeur complet.
+- **Importer sa fiche Word ou Excel** : le document est lu, puis on relit les variables proposées dans un tableau modifiable avant de créer la fiche.
+  - Formats lus : zones à remplir (« Âge : ____ ans »), cases à cocher (« ☐ Oui ☐ Non », « ☐ Homme ☐ Femme »), titres de section, tableaux Word, dictionnaires de données Excel, feuilles de saisie vierges.
+  - Avec une clé API, Claude peut lire le document (texte pseudonymisé). En cas d'échec, l'analyse par règles prend le relais.
+- **Règles proposées automatiquement** : toute variable créée sans règle en reçoit à partir de son libellé, grâce à un lexique médical français d'environ 250 notions (synonymes et sigles : CRP, Hb, GB, HTA, DT2, ATCD, TDM…), avec négations, hypothèses et antécédents familiaux traités.
+
+**Extraction**
+- Mises en page lues :
+  - séparateurs « = », « | », « … », points de conduite et tirets ;
+  - lignes de tableau tabulées, libellés en capitales, puces ;
+  - unité entre parenthèses après le libellé (« CRP (mg/L) : 142 ») ;
+  - valeur à la ligne suivante pour les nombres et les dates ;
+  - mots coupés en fin de ligne dans les PDF ;
+  - espaces insécables.
+- **Plus précise** :
+  - Pour un choix unique, une option citée seulement pour être écartée ne l'emporte plus : « Évolution : favorable, sans complication » donne *Favorable*, et non *Complications*.
+  - Sans « : », une variable à choix n'est lue que si une modalité suit immédiatement son libellé : « Suites marquées par une complication » n'est plus une valeur.
+  - « CRP à contrôler dans 48 h » ne donne plus 48.
+- « risque de », « prévention » et « prophylaxie » comptent comme des hypothèses.
+
+**Relecture d'un dossier**
+- La fiche et le document d'origine sont séparés par une poignée qu'on fait glisser, ou qu'on déplace aux flèches du clavier ; un double-clic la réinitialise. La largeur choisie est retenue.
+
 ## 1.7.1 — 13 octobre 2026
 
 **Correctif important** — en 1.7.0, l'extraction lancée dans un projet autre que le principal écrivait ses valeurs dans **le projet principal** : des requêtes préparées au chargement du serveur restaient liées à sa base. Le dossier du projet recevait la passe, mais pas les valeurs, et celles du principal pouvaient être remplacées. Chaque requête vise désormais la base du projet au moment où elle s'exécute ; un test vérifie que l'extraction, l'import de tableau et le tri bibliographique n'écrivent que dans le projet visé. **Si vous avez extrait dans un second projet avec la 1.7.0, relancez l'extraction dans ce projet et dans le projet principal.**

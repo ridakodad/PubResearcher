@@ -29,6 +29,8 @@ import type {
   Template,
   TemplateField,
   TemplateWithFields,
+  TemplateImportCommit,
+  TemplateImportDraft,
   UploadResponse,
   ExclusionReason,
   ExtractionRun,
@@ -245,6 +247,17 @@ export const api = {
     form.append('file', file, file.name);
     return request<TableUploadResponse>('/table-imports', { method: 'POST', body: form });
   },
+  // ------------------------------------------------- import d'une fiche existante
+  /** Analyse un document Word ou un classeur et propose ses variables, sans rien écrire. */
+  importTemplateDocument: async (file: File, useClaude: boolean): Promise<TemplateImportDraft> => {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    if (useClaude) form.append('useClaude', '1');
+    return request<TemplateImportDraft>('/templates/import-document', { method: 'POST', body: form }, { timeoutMs: 0 });
+  },
+  /** Crée la fiche et ses variables relues, en une fois. */
+  commitTemplateDocument: (body: TemplateImportCommit) =>
+    post<{ template: TemplateWithFields }>('/templates/import-document/commit', body),
   tableColumns: (id: number, body: { sheet: string | null; headerRow: number; templateId?: number }) =>
     post<TableColumnsResponse>(`/table-imports/${id}/columns`, body),
   tableDryRun: (id: number, body: TableImportRequest) =>

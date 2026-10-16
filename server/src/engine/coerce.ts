@@ -419,6 +419,27 @@ function optionsCited(raw: string, options: string[], map: Record<string, string
   return [...cited];
 }
 
+/** L'option (ou une de ses écritures) figure dans le texte, mais seulement précédée d'une négation. */
+function optionOnlyNegated(raw: string, option: string, options: string[], map: Record<string, string> | undefined): boolean {
+  const s = fold(cleanText(raw));
+  const terms = [option, ...Object.entries(map ?? {}).filter(([, to]) => fold(to) === fold(option)).map(([from]) => from)]
+    .map((t) => fold(t).trim())
+    .filter((t) => t.length >= 3);
+  let seen = false;
+  for (const f of terms) {
+    let from = 0;
+    for (;;) {
+      const at = findTerm(s, f, from);
+      if (at === -1) break;
+      from = at + f.length;
+      seen = true;
+      if (!OPTION_NEGATED.test(s.slice(Math.max(0, at - 20), at))) return false;
+    }
+  }
+  void options;
+  return seen;
+}
+
 export function coerce(
   raw: FieldValue,
   type: FieldType,
@@ -502,11 +523,17 @@ export function coerce(
           reason: `plusieurs options citées (${cited.join(', ')}) dans « ${text} » : à trancher à la main`,
         };
       }
+      // Une seule option affirmée (les mentions niées, « sans complication », sont déjà écartées) : c'est elle.
+      // Sans ce raccourci, « favorable, sans complication » se lisait « Complications », l'option la plus longue citée.
+      if (cited.length === 1) return { ok: true, value: cited[0]! };
       const mapped = applyValueMap(text, post?.valueMap);
       // Le mapping peut déjà renvoyer une option canonique.
       const direct = options.find((o) => fold(o) === fold(mapped));
-      if (direct) return { ok: true, value: direct };
-      const opt = matchOption(mapped, options);
+      const opt = direct ?? matchOption(mapped, options);
+      // Une option qui n'est citée que niée (« pas de complication ») n'est pas une réponse.
+      if (opt && optionOnlyNegated(text, opt, options, post?.valueMap)) {
+        return { ok: false, reason: `« ${text} » ne cite « ${opt} » que pour l’écarter` };
+      }
       return opt
         ? { ok: true, value: opt }
         : { ok: false, reason: `« ${text} » ne correspond à aucune option` };

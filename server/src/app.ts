@@ -18,6 +18,7 @@ import { biblioRouter } from './routes/biblio.js';
 import { llmRouter } from './routes/llm.js';
 import { importsRouter } from './routes/imports.js';
 import { projectsRouter } from './routes/projects.js';
+import { templateImportRouter } from './routes/template-import.js';
 import { projectScope } from './lib/project-scope.js';
 
 export interface AppOptions {
@@ -86,6 +87,8 @@ export function createApp(options: AppOptions = {}): Express {
   app.use('/api/patients', patientsRouter);
   app.use('/api', documentsRouter);
   app.use('/api/table-imports', importsRouter);
+  // Avant `/api/templates` : « import-document » serait sinon lu comme un identifiant de fiche.
+  app.use('/api/templates/import-document', templateImportRouter);
   app.use('/api/templates', templatesRouter);
   app.use('/api/records', recordsRouter);
   app.use('/api/analytics', analyticsRouter);

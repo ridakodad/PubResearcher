@@ -12,7 +12,7 @@ import type {
   Rejection,
   TemplateField,
 } from '../domain/types.js';
-import { coerce, ocrSuspect, unitFollowing } from './coerce.js';
+import { canonicalUnit, coerce, ocrSuspect, unitFollowing } from './coerce.js';
 import { describeStatus, laterInStay, qualifyMention, type MentionStatus } from './qualifiers.js';
 import {
   escapeRegex,
@@ -191,30 +191,134 @@ function buildLabelPattern(label: string): string {
 const SENTENCE_END = /[.!?](?=\s|$)/;
 
 /**
+ * Espace horizontale : espaces, tabulations, insécables (U+00A0, U+202F, U+2009…), jamais un saut de ligne. Un tableau
+ * copié depuis Word ou un PDF sépare ses cellules par des tabulations ou par plusieurs espaces, et l'OCR double
+ * volontiers une espace : tout cela vaut une seule séparation.
+ */
+const HSPACE = '[^\\S\\r\\n]';
+
+/**
+ * Unité entre parenthèses accolée au libellé, comme dans un en-tête de colonne : « CRP (mg/L) : 142 »,
+ * « Leucocytes (/mm3) 9 800 ». Elle est lue à part (groupe 1), pour être replacée après la valeur.
+ */
+const LABEL_UNIT = `(?:${HSPACE}*\\(([^()\\n]{1,24})\\))?`;
+
+/**
+ * Séparateurs entre un libellé et sa valeur, du plus fiable au moins sûr.
+ *
+ * Passe 0 — séparateur explicite : « : », « = », « ： » (deux-points pleine chasse d'un PDF), points de conduite
+ * d'un sommaire (« CRP ........ 142 », « Hb…… 12 »), barre de tableau (« CRP | 142 »), tiret entouré d'espaces
+ * (« CRP – 142 », « Hb - 12,4 »). Passe 1 — simple espace ou tabulation (repli).
+ */
+const LABEL_SEPARATORS_BY_PASS = [
+  `(?:\\s*[:=\\uff1a]|${HSPACE}*(?:[.\\u2026\\u00b7_]{3,}|\\u2026+)${HSPACE}*[:=]?|${HSPACE}*\\|(?!\\|)|${HSPACE}+[-\\u2013\\u2014](?=\\s))\\s*`,
+  `${HSPACE}+`,
+];
+
+/**
+ * Début de ligne, puce comprise (« - », « • », « * », « ▪ », « ➢ »…) : un libellé seul sur sa ligne, dont la valeur
+ * occupe la ligne suivante (« CRP⏎142 mg/L »), comme dans un tableau dont les cellules sont sorties une par ligne.
+ */
+const LINE_START = `(?:^|\\n)${HSPACE}*(?:[-\\u2013\\u2022*\\u25aa\\u25cf\\u25e6\\u27a2>\\u2192]${HSPACE}*)?`;
+
+/**
+ * Unité accolée au libellé, à replacer après la valeur numérique : seulement une écriture d'unité reconnaissable
+ * (« mg/L », « /mm3 », « % », « °C », « g/dL »). « Créatinine (N < 110) » ou « Hb (J0) » ne sont pas des unités.
+ */
+function headerUnit(unit: string | undefined): string | null {
+  if (!unit) return null;
+  const u = unit.trim();
+  if (!/^[a-zµμ%°/][a-zµμ0-9³²/%°.^\s-]{0,23}$/iu.test(u)) return null;
+  return canonicalUnit(u) || /[/%°]/.test(u) ? u : null;
+}
+
+/**
+ * Coupure de mot en fin de ligne d'un PDF (« créati-⏎nine », « hémo-⏎globine ») : le trait d'union et le saut de
+ * ligne sont retirés, pour la seule recherche des libellés — une table de correspondance garde les positions
+ * d'origine, l'extrait cité reste exact. Ne s'applique qu'entre deux minuscules : « Hb -⏎12 » ou une liste à puces
+ * ne sont pas touchées. Les mots-clés gardent le texte tel quel : « grand-⏎mère » doit rester « grand-mère ».
+ */
+const SOFT_HYPHEN_BREAK = /(?<=\p{Ll})-[^\S\r\n]*\r?\n[^\S\r\n]*(?=\p{Ll})/gu;
+
+function dehyphenated(ft: FoldedText): FoldedText {
+  if (!ft.folded.includes('-\n') && !/-[^\S\n]+\n|-\r\n/.test(ft.folded)) return ft;
+  // Le texte replié est en minuscules : la casse se lit dans le texte d'origine.
+  const keep: number[] = [];
+  let out = '';
+  let last = 0;
+  SOFT_HYPHEN_BREAK.lastIndex = 0;
+  for (let m = SOFT_HYPHEN_BREAK.exec(ft.folded); m !== null; m = SOFT_HYPHEN_BREAK.exec(ft.folded)) {
+    const before = ft.original[ft.map[m.index - 1] ?? -1] ?? '';
+    const after = ft.original[ft.map[m.index + m[0].length] ?? -1] ?? '';
+    if (!/\p{Ll}/u.test(before) || !/\p{Ll}/u.test(after)) continue;
+    out += ft.folded.slice(last, m.index);
+    for (let k = last; k < m.index; k++) keep.push(ft.map[k]!);
+    last = m.index + m[0].length;
+  }
+  if (last === 0) return ft;
+  out += ft.folded.slice(last);
+  for (let k = last; k < ft.folded.length; k++) keep.push(ft.map[k]!);
+  return { folded: out, map: Uint32Array.from(keep), original: ft.original };
+}
+
+/**
+ * Entre un libellé et un nombre, des mots qui disent que ce nombre n'est pas la valeur : un délai (« dans 48 h »,
+ * « depuis 3 jours »), un examen à venir (« à contrôler », « prévue »), une absence (« non dosée », « pas fait »).
+ */
+const NOT_A_VALUE_GAP =
+  /\b(?:dans|depuis|pendant|il y a|apres|avant|toutes? les|tous les|a controler|a refaire|a recontroler|prevue?s?|programmee?s?|non|pas)\b/;
+
+/** Texte replié des libellés : coupures de mot de fin de ligne recousues, calculé une fois par document. */
+const labelFolded = new WeakMap<FoldedText, FoldedText>();
+function labelHaystack(ft: FoldedText): FoldedText {
+  let out = labelFolded.get(ft);
+  if (!out) {
+    out = dehyphenated(ft);
+    labelFolded.set(ft, out);
+  }
+  return out;
+}
+
+/**
  * Toutes les mentions « libellé : valeur » d'un document, dans l'ordre du texte.
  *
  * Deux passes : avec séparateur explicite (fiable), puis simple espace (repli) ; l'appelant ne lit les secondes que
  * si les premières n'ont rien donné d'utilisable dans le document. Une même mention n'est lue qu'une fois : « Durée de
  * séjour : 8 » répond aux libellés « Durée de séjour » et « Séjour », et « Délai de consultation : 5 » aux libellés
  * « Délai de consultation » et « Délai ».
+ *
+ * Mises en page tolérées : libellé en capitales, puce, unité entre parenthèses (« CRP (mg/L) : 142 »), points de
+ * conduite, cellules séparées par des tabulations ou des espaces multiples, espaces insécables, coupure de mot en
+ * fin de ligne. Pour un nombre ou une date, la valeur peut aussi occuper la ligne suivante d'un libellé seul sur la
+ * sienne (« CRP⏎142 mg/L ») — en repli seulement, et à condition que cette ligne commence par un chiffre.
  */
-function applyLabelRule(rule: LabelRule, doc: SourceDoc, typed: boolean): RuleMatch[] {
-  const ft = haystack(doc, rule.source);
-  if (!ft) return [];
+function applyLabelRule(rule: LabelRule, doc: SourceDoc, typed: boolean, numeric = false, dated = false): RuleMatch[] {
+  const base = haystack(doc, rule.source);
+  if (!base) return [];
+  const ft = labelHaystack(base);
   const max = Math.min(Math.max(rule.maxLength ?? 120, 1), 500);
   const found: RuleMatch[] = [];
   /** Étendues déjà lues (libellé compris), pour ne pas compter deux fois la même mention. */
   const taken: { start: number; end: number }[] = [];
 
-  const separators = ['\\s*[:=]\\s*', '[  \\t]+'];
-  for (let pass = 0; pass < separators.length; pass++) {
+  const value = `([^\\n\\r;]{1,${max}})`;
+  const patterns: { pass: 0 | 1; build: (lab: string) => string }[] = [
+    { pass: 0, build: (lab) => `(?:^|[^\\p{L}\\p{N}])${lab}${LABEL_UNIT}${LABEL_SEPARATORS_BY_PASS[0]}${value}` },
+    { pass: 1, build: (lab) => `(?:^|[^\\p{L}\\p{N}])${lab}${LABEL_UNIT}${LABEL_SEPARATORS_BY_PASS[1]}${value}` },
+  ];
+  if (numeric || dated) {
+    patterns.push({
+      pass: 1,
+      build: (lab) => `${LINE_START}${lab}${LABEL_UNIT}${HSPACE}*\\r?\\n${HSPACE}*(?=[-+]?\\d)${value}`,
+    });
+  }
+  for (const { pass, build } of patterns) {
     for (const label of rule.labels) {
-      const lab = buildLabelPattern(label);
-      const re = compile(`(?:^|[^\\p{L}\\p{N}])${lab}${separators[pass]}([^\\n\\r;]{1,${max}})`, 'gu');
+      const re = compile(build(buildLabelPattern(label)), 'gu');
       if (!re) continue;
       let m: RegExpExecArray | null;
       while ((m = re.exec(ft.folded)) !== null && found.length < MAX_MENTIONS_PER_DOC) {
-        let captured = m[1];
+        let captured = m[2];
         if (captured === undefined || captured.trim().length === 0) continue;
         // Une variable typée (nombre, date, oui/non, choix) ne lit pas au-delà de la
         // phrase : « Âge : NR. Patient âgé de 61 ans » ne doit pas livrer « 6 », le
@@ -224,16 +328,29 @@ function applyLabelRule(rule: LabelRule, doc: SourceDoc, typed: boolean): RuleMa
           if (cut) captured = captured.slice(0, cut.index);
           if (captured.trim().length === 0) continue;
         }
-        const start = m.index + m[0].length - m[1]!.length;
+        const start = m.index + m[0].length - m[2]!.length;
         const end = start + captured.length;
         // La capture brute peut avoir englouti la phrase suivante (« Hb : 12,6 à l'entrée. Hb : 8,1 à J3 ») :
         // la recherche reprend là où la valeur, coupée, s'arrête.
         re.lastIndex = Math.max(m.index + 1, end);
         if (taken.some((t) => m!.index < t.end && end > t.start)) continue;
-        const raw = originalSlice(ft, start, end);
+        let raw: FieldValue = originalSlice(ft, start, end);
         if (raw.length === 0) continue;
+        // « CRP (mg/L) : 142 » : l'unité de l'en-tête rejoint la valeur, pour que le contrôle d'unité s'applique.
+        const unit = numeric ? headerUnit(m[1]) : null;
+        if (unit && !/\d\s*(?:[a-zµμ%°]|\/)/iu.test(raw)) {
+          const first = /^[\s:=.-]*-?\d[\d\s\u00a0\u202f.,]*/u.exec(raw);
+          raw = first ? `${first[0].trim()} ${unit}${raw.slice(first[0].length)}` : raw;
+        }
+        // « CRP à contrôler dans 48 h », « CRP : non dosée, à refaire dans 48 h » : le nombre qui suit n'est pas la
+        // valeur du libellé. La mention reste lue — sans nombre, elle est écartée et signalée, et le repli suivant
+        // n'est pas tenté dans ce document, comme pour « Âge : NR ».
+        if (numeric) {
+          const gap = /^[^\d]*/.exec(fold(raw))![0];
+          if (NOT_A_VALUE_GAP.test(gap)) raw = gap.trim() || raw;
+        }
         taken.push({ start: m.index, end });
-        found.push({ raw, start, end, haystack: ft, pass: pass === 0 ? 0 : 1, labelStart: m.index });
+        found.push({ raw, start, end, haystack: ft, pass, labelStart: m.index });
       }
     }
   }
@@ -683,6 +800,27 @@ function resolveMentions(field: TemplateField, candidates: Candidate[]): Resolut
  * aux règles suivantes — et reste consignée dans `rejected`, pour que le
  * chercheur sache qu'elle existait au lieu de croire la variable absente.
  */
+/**
+ * Sans séparateur (« Évolution favorable »), le libellé peut être un mot de la phrase : « Suites marquées par une
+ * complication infectieuse » n'est pas « Évolution : complications ». Pour une variable à choix, la valeur n'est lue
+ * dans ce cas que si une modalité (ou une de ses écritures) ouvre le texte qui suit le libellé ; une modalité enfouie
+ * plus loin dans la phrase ne compte pas.
+ */
+function choiceLeads(field: TemplateField, match: RuleMatch): boolean {
+  if (field.type !== 'enum' && field.type !== 'multi' && field.type !== 'boolean') return true;
+  const head = stripDiacritics(String(match.raw ?? ''))
+    .toLowerCase()
+    .replace(/^[\s:=\-–—.,;]+/, '');
+  if (!head) return false;
+  const choices = [
+    ...(field.type === 'boolean' ? ['oui', 'non', 'positif', 'negatif', 'present', 'absent'] : field.options),
+    ...Object.keys(field.extraction.postProcess?.valueMap ?? {}),
+  ]
+    .map((c) => stripDiacritics(c).toLowerCase().trim())
+    .filter(Boolean);
+  return choices.some((c) => head === c || (head.startsWith(c) && !/[\p{L}\p{N}]/u.test(head.charAt(c.length))));
+}
+
 export function extractFieldDetailed(field: TemplateField, docs: SourceDoc[]): FieldExtraction {
   const { extraction } = field;
   const rejected: Rejection[] = [];
@@ -722,8 +860,8 @@ export function extractFieldDetailed(field: TemplateField, docs: SourceDoc[]): F
       try {
         switch (rule.kind) {
           case 'label': {
-            const all = applyLabelRule(rule, doc, field.type !== 'text');
-            groups = [all.filter((m) => m.pass === 0), all.filter((m) => m.pass === 1)];
+            const all = applyLabelRule(rule, doc, field.type !== 'text', numeric, field.type === 'date');
+            groups = [all.filter((m) => m.pass === 0), all.filter((m) => m.pass === 1 && choiceLeads(field, m))];
             break;
           }
           case 'regex':
@@ -774,8 +912,19 @@ export function extractFieldDetailed(field: TemplateField, docs: SourceDoc[]): F
       }
 
       if (pooled && rule.kind === 'keyword') {
-        groups = groups.map((g) => g.filter((m) => !isCovered(docIndex, m.start, m.end)));
-        flagged = flagged.filter((f) => !isCovered(docIndex, f.start, f.end));
+        // Étendues comparées dans le texte d'origine : un libellé se lit dans un texte aux coupures de mot recousues.
+        const inOriginal = (m: { start: number; end: number; haystack: FoldedText | null }) =>
+          m.haystack ? toOriginalRange(m.haystack, m.start, m.end) : m;
+        groups = groups.map((g) =>
+          g.filter((m) => {
+            const r = inOriginal(m);
+            return !isCovered(docIndex, r.start, r.end);
+          }),
+        );
+        flagged = flagged.filter((f) => {
+          const r = inOriginal(f);
+          return !isCovered(docIndex, r.start, r.end);
+        });
       }
 
       // Hypothèse, « non renseigné », négation contredite : trouvé, mais rien d'assez sûr pour être retenu.
@@ -814,7 +963,7 @@ export function extractFieldDetailed(field: TemplateField, docs: SourceDoc[]): F
           candidates.push({ value: typed.value, doc, docIndex, position: match.start, ruleIndex: i, rule, evidence });
           if (pooled && rule.kind !== 'keyword' && match.haystack) {
             const spans = covered.get(docIndex) ?? [];
-            spans.push({ start: match.labelStart ?? match.start, end: match.end });
+            spans.push(toOriginalRange(match.haystack, match.labelStart ?? match.start, match.end));
             covered.set(docIndex, spans);
           }
         }

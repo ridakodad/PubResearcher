@@ -1,6 +1,6 @@
 # Documentation
 
-Version 1.7.1 · octobre 2026 · en français, comme l'interface.
+Version 1.8.0 · octobre 2026 · en français, comme l'interface.
 
 | Document | Pour qui | Contenu |
 |---|---|---|

@@ -5,9 +5,10 @@ import { plural } from '../lib/format';
 import { FIELD_TYPE_LABELS } from '../lib/types';
 import type { PatientSummary, Template, TemplateField, TemplateWithFields } from '../lib/types';
 import { FieldEditor } from '../components/FieldEditor';
+import { QuickAddFields } from '../components/QuickAddFields';
+import { TemplateImportModal } from '../components/TemplateImportModal';
 import {
   ConfirmButton,
-  EmptyState,
   ErrorPanel,
   LoadingPanel,
   Modal,
@@ -23,6 +24,11 @@ export function FichePage() {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ field: TemplateField | null } | null>(null);
   const [showNew, setShowNew] = useState(false);
+  const [showDocImport, setShowDocImport] = useState(false);
+  const [llmReady, setLlmReady] = useState(false);
+  useEffect(() => {
+    api.capabilities().then((c) => setLlmReady(c.llm.available), () => setLlmReady(false));
+  }, []);
   const importInput = useRef<HTMLInputElement>(null);
 
   const loadTemplate = useCallback(async (id: number) => {
@@ -220,7 +226,10 @@ export function FichePage() {
               e.target.value = '';
             }}
           />
-          <button onClick={() => importInput.current?.click()}>Importer une fiche</button>
+          <button onClick={() => setShowDocImport(true)}>Importer une fiche (Word, Excel)</button>
+          <button className="btn-quiet" onClick={() => importInput.current?.click()} title="Fiche exportée depuis PubResearcher">
+            Importer (JSON)
+          </button>
           <button className="btn-primary" onClick={() => setShowNew(true)}>
             Nouvelle fiche
           </button>
@@ -309,18 +318,30 @@ export function FichePage() {
           </div>
 
           {template.fields.length === 0 ? (
-            <EmptyState
-              title="Aucune variable"
-              action={
-                <button className="btn-primary" onClick={() => setEditing({ field: null })}>
-                  Ajouter une variable
+            <div className="card-body stack">
+              <div className="start-grid">
+                <button className="start-card" onClick={() => document.getElementById('quick-add-anchor')?.querySelector('input')?.focus()}>
+                  <strong>Partir de zéro</strong>
+                  <span>Tapez vos variables une à une, ou collez-en la liste : le type et les règles d’extraction sont proposés.</span>
                 </button>
-              }
-            >
-              Une fiche d’exploitation est une liste de variables : ce que vous voulez recueillir
-              pour chaque patient, et comment le retrouver dans les documents.
-            </EmptyState>
+                <button className="start-card" onClick={() => setShowDocImport(true)}>
+                  <strong>Importer ma fiche (Word, Excel)</strong>
+                  <span>Votre fiche existe déjà ? Elle est lue{llmReady ? ' (avec Claude si vous le souhaitez)' : ''}, vous relisez les variables proposées, et c’est prêt.</span>
+                </button>
+                <button className="start-card" onClick={() => setEditing({ field: null })}>
+                  <strong>Éditeur complet</strong>
+                  <span>Une variable avec toutes ses options : règles, synonymes, choix entre mentions, banc d’essai.</span>
+                </button>
+              </div>
+              <div id="quick-add-anchor">
+                <QuickAddFields templateId={template.id} fields={template.fields} onAdded={() => loadTemplate(template.id)} />
+              </div>
+            </div>
           ) : (
+            <>
+            <div className="card-body" style={{ paddingBottom: 0 }}>
+              <QuickAddFields templateId={template.id} fields={template.fields} onAdded={() => loadTemplate(template.id)} />
+            </div>
             <div className="card-body stack">
               <BulkBar
                 count={checked.size}
@@ -448,6 +469,7 @@ export function FichePage() {
                 </details>
               ))}
             </div>
+            </>
           )}
         </div>
       )}
@@ -463,6 +485,17 @@ export function FichePage() {
           onSaved={() => {
             setEditing(null);
             void loadTemplate(template.id);
+          }}
+        />
+      )}
+
+      {showDocImport && (
+        <TemplateImportModal
+          llmAvailable={llmReady}
+          onClose={() => setShowDocImport(false)}
+          onImported={(id) => {
+            setShowDocImport(false);
+            void load().then(() => selectTemplate(id));
           }}
         />
       )}
