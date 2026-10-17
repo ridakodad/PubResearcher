@@ -87,7 +87,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           tag="v$(node -p "require('./package.json').version")"
+          echo "Tag : $tag ; sha : $GITHUB_SHA"
+          echo "--- contenu de out/ (download-artifact dépose chaque artefact dans un sous-dossier) ---"
           ls -la out
-          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "PubResearcher ${tag#v}" --notes "Archives prêtes à l'emploi (non signées)." --target "$GITHUB_SHA"
-          gh release upload "$tag" out/PubResearcher-* --clobber
+          # merge-multiple=true met tout à plat ; par sécurité on remonte les fichiers des éventuels sous-dossiers.
+          find out -mindepth 2 -maxdepth 2 -type f -name 'PubResearcher-*' -exec mv -n -t out {} +
+          ls -la out
+          files=(out/PubResearcher-*)
+          [ -e "${files[0]}" ] || { echo "::error title=Version::Aucun fichier à joindre."; exit 1; }
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --title "PubResearcher ${tag#v}" --notes "Archives prêtes à l'emploi (non signées)." --target "$GITHUB_SHA"
+          fi
+          gh release upload "$tag" "${files[@]}" --clobber
