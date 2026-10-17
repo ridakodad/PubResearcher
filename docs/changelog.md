@@ -2,6 +2,26 @@
 
 Le format suit l'ordre des versions, de la plus récente à la plus ancienne ; l'historique git de ce dépôt commence à la 1.2.0, les versions antérieures n'y sont décrites qu'ici. Les numéros de version sont ceux de `package.json` ; le rapport « Méthodes et traçabilité » consigne la version qui a produit un jeu de données.
 
+## 1.9.0 — 17 octobre 2026
+
+**Recherche bibliographique en langage naturel, et modèles ouverts à la place de Claude pour chaque tâche.**
+
+**Bibliographie — question en français**
+- À côté de l'équation experte, un onglet « Question » : on écrit la demande comme on la poserait à un collègue (« essais récents sur la pneumonie à SARM, 2020–2026, adultes »), le modèle construit l'équation PubMed, chiffre le nombre de résultats avant la recherche et consigne chaque étape dans le journal PRISMA-S.
+- La requête peut être relue et modifiée avant exécution ; les filtres (date, type d'étude, population) restent explicites.
+
+**Modèles ouverts (Ollama) par tâche**
+- Nouvelle page **Modèles locaux** : pour chaque tâche (extraction, pseudonymisation, construction de requête, résumé, rédaction), on choisit le fournisseur et le modèle.
+- Catalogue intégré de modèles recommandés avec leur précision mesurée sur le corpus interne (`qwen2.5:4b` : 100 % de précision, 99 % de rappel sur 24 dossiers de démonstration).
+- Téléchargement, test et bascule depuis l'interface ; aucune donnée patient ne sort du poste quand un modèle local est choisi.
+- Repli configurable sur Claude par tâche si le modèle local n'est pas prêt.
+- Les modèles locaux restent accessibles uniquement en boucle locale par défaut (`LOCAL_MODEL_ALLOW_REMOTE=1` pour exposer).
+
+**Application de bureau**
+- Les archives prêtes à l'emploi pour Windows, macOS (Intel et Apple Silicon) et Linux sont publiées avec cette version : Node.js embarqué, lanceur `.cmd` / `.command` / `.sh`, base locale, pas d'installeur à exécuter.
+- Chaque archive est construite et essayée sur son propre système (démarrage, `/api/health`, import d'un PDF scanné lu par l'OCR hors ligne, arrêt propre) avant publication, avec son fichier `.sha256`.
+- Téléchargeables depuis la page des versions GitHub (`v1.9.0`), ou reconstructibles localement par `npm run package`.
+
 ## 1.8.2 — 17 octobre 2026
 
 Lancement sous Windows plus fiable : le navigateur s'ouvre par la commande `start` du système (l'ancienne méthode, `rundll32`, échouait parfois sans rien dire), l'adresse à ouvrir à la main est toujours affichée, et si l'application ne répond pas après deux minutes, la fenêtre le dit au lieu de rester muette.
