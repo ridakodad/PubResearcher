@@ -2,6 +2,10 @@
 
 Le format suit l'ordre des versions, de la plus récente à la plus ancienne ; l'historique git de ce dépôt commence à la 1.2.0, les versions antérieures n'y sont décrites qu'ici. Les numéros de version sont ceux de `package.json` ; le rapport « Méthodes et traçabilité » consigne la version qui a produit un jeu de données.
 
+## 1.8.1 — 17 octobre 2026
+
+Archives prêtes à l'emploi reconstruites avec deux correctifs : les PDF s'affichent dans tous les navigateurs (rendu pdf.js), et un dossier « cohorte » déposé ne devient plus un patient nommé « cohorte » (détail dans la 1.8.0 ci-dessous).
+
 ## 1.8.0 — 16 octobre 2026
 
 **Construire sa fiche en quelques minutes, et une extraction qui lit plus de façons d'écrire.**
