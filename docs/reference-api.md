@@ -592,12 +592,35 @@ Réglage du poste, **hors projet** (pas d'en-tête `X-Project` requis). Détails
 
 `GET /api/documents-capabilities` renvoie en outre `llm.provider` (`anthropic` ou `local`) : avec un modèle local, `llm.available` est vrai sans clé Anthropic, et le coût estimé (`/api/llm/estimate`) vaut 0.
 
+### Veille PubDaily
+
+Appels au MCP public `pubdaily.app/api/mcp` (lecture seule, données publiques, aucune authentification). URL configurable par `PUBDAILY_MCP_URL` (seules les URLs https sont acceptées, hors loopback) ; `PUBDAILY_DISABLED=1` désactive l'intégration entière.
+
+| Méthode | Chemin | Réponse |
+|---|---|---|
+| `GET` | `/api/biblio/pubdaily/specialties` | `{ specialties: [{ name, topicCount }] }` |
+| `GET` | `/api/biblio/pubdaily/trends?specialty=…&limit=…` | `{ specialty, topics: [{ topic, trend_score, papers_last_12_months, growth_vs_previous_12_months_pct, new_trials_last_12_months, pubmed_search, page }] }` |
+| `GET` | `/api/biblio/pubdaily/find-trend?q=…` | `{ found, topic?, specialty? }` |
+| `GET` | `/api/biblio/pubdaily/papers?specialty=…&limit=…&summarized_only=…` | `{ specialty, papers: [...] }` |
+| `GET` | `/api/biblio/pubdaily/search-papers?q=…[&specialty=…][&limit=…]` | `{ papers: [...] }` |
+| `GET` | `/api/biblio/pubdaily/topics/:slug/papers?pubmed_search=…` | `{ slug, term, totalCount, pmids: [...], papers: [{ pmid, title, journal, year, authors, abstract, publicationTypes, alreadyImported }] }` — projet-scopé (lit les PMIDs déjà présents) |
+| `POST` | `/api/biblio/pubdaily/import` | `{ specialty, topic, page, pmids: number[] }` → `{ search, imported, duplicates }` ; projet-scopé, source `pubdaily` persistée, dédoublonnage comme pour toute passe |
+
+Un cache mémoire de 10 minutes évite d'interroger PubDaily deux fois pour le même couple (outil, arguments). Les erreurs du MCP sont converties en 502/503/504 avec un code `pubdaily_<kind>` lisible (`config`, `network`, `timeout`, `protocol`, `tool`, `parse`).
+
+L'assistant de recherche (`POST /api/biblio/assistant/build`) complète en outre sa stratégie, lorsque PubDaily répond dans un budget de 6 s, par deux champs optionnels :
+- `pubdaily?: { topic, specialty, score, growthPct, page, pubmedSearch }` quand `find_trend` repère une tendance ;
+- `pubdaily_papers?: [{ pmid, title, journal, year, pubdailyScore, pubmed }]` (jusqu'à 5) quand `search_papers` renvoie des articles proches.
+
+Ces appels sont additifs ; en cas d'erreur ou de dépassement, un avertissement est consigné dans `warnings` et les champs restent absents. Dans le mode « règles » (hors ligne), ils sont désactivés sauf si `PUBDAILY_ENABLE_RULES_FALLBACK=1`.
+
 ## Rédaction assistée
 
 | Méthode | Chemin | Corps | Réponse |
 |---|---|---|---|
 | `GET` | `/api/redaction/status` | — | `{ "available": false }` tant qu'aucune clé d'API Anthropic n'est disponible (ni saisie, ni `ANTHROPIC_API_KEY`) |
 | `POST` | `/api/redaction/message` | `{ "templateId"?, "messages": [{ "role": "user"\|"assistant", "content" }] }` (1 à 60 messages de 40 000 caractères au plus) | `text/event-stream` |
+| `POST` | `/api/redaction/pubdaily-suggest` | `{ "snippet": "…", "specialty"?, "limit"? }` (les 400 derniers caractères sont utilisés) | `{ "papers": [{ pmid, title, journal, year, pubdaily_score, pubmed }] }` ; `[]` si `PUBDAILY_DISABLED=1` |
 
 Le contexte transmis au modèle ne contient que des **agrégats** : nom et objet de la fiche, effectifs, complétude, indicateurs ou modalités de chaque variable avec leurs effectifs, définitions des variables. Les variables en texte libre ne donnent que leurs effectifs (« valeurs non transmises ») : aucune ligne de patient, aucun code de dossier, aucun nom de fichier. Le flux émet des événements `delta` (`{ "text" }`), puis `done` (`{ "usage", "costUsd" }` : jetons consommés et leur prix en dollars, ou `null` hors barème), ou `error` (`{ "message" }`) — l'en-tête HTTP étant déjà parti, une erreur en cours de route voyage dans le flux.
 

@@ -3,6 +3,7 @@ import { generateStructured, ModelCallError, routeFor, taskAvailable } from '../
 import { z } from 'zod';
 import { pseudonymize } from '../engine/pseudonymize.js';
 import { EutilsClient, EutilsError, eutilsConfig } from './eutils.js';
+import { getPubdailyClient, PubdailyError, type PubdailyClient } from './pubdaily.js';
 
 /**
  * Recherche bibliographique en langage naturel : d'une question (« chez l'adulte avec une pneumopathie
@@ -62,6 +63,24 @@ export interface StrategyConcept {
   block: string;
 }
 
+/** Tendance curatée PubDaily rattachée à la question, surfacée dans la stratégie. */
+export interface StrategyPubdaily {
+  topic: string;
+  specialty: string | null;
+  score: number | null;
+  growthPct: number | null;
+  page: string | null;
+  pubmedSearch: string | null;
+}
+export interface StrategyPubdailyPaper {
+  pmid: string | null;
+  title: string;
+  journal: string | null;
+  year: string | null;
+  pubdailyScore: number | null;
+  pubmed: string | null;
+}
+
 export interface SearchStrategy {
   question: string;
   pico: Pico;
@@ -73,6 +92,10 @@ export interface SearchStrategy {
   warnings: string[];
   model: string | null;
   method: 'llm' | 'rules';
+  /** Tendance curatée PubDaily rattachée à la question (optionnelle, additive). */
+  pubdaily?: StrategyPubdaily;
+  /** Articles curatés PubDaily rattachés à la question (jusqu'à 5). */
+  pubdaily_papers?: StrategyPubdailyPaper[];
 }
 
 export interface BuildInput {
@@ -609,7 +632,85 @@ export async function buildStrategy(input: BuildInput, counter: PubmedCounter = 
     };
   }
   const verified = await verifyStrategy(draft, { ...input, studyTypes }, counter);
-  return { question, ...verified, model, method };
+  const strategy: SearchStrategy = { question, ...verified, model, method };
+
+  // Enrichissement PubDaily : additif, borné dans le temps, silencieux sur erreur.
+  // Jamais appelé dans le repli règles (hors ligne par principe) sauf si l'opérateur l'autorise.
+  const allowInRules = process.env.PUBDAILY_ENABLE_RULES_FALLBACK === '1';
+  const disabled = process.env.PUBDAILY_DISABLED === '1';
+  if (!disabled && (method === 'llm' || allowInRules)) {
+    try {
+      const enriched = await enrichWithPubdaily(question, 6_000);
+      if (enriched.pubdaily) strategy.pubdaily = enriched.pubdaily;
+      if (enriched.pubdaily_papers && enriched.pubdaily_papers.length > 0) {
+        strategy.pubdaily_papers = enriched.pubdaily_papers;
+      }
+      strategy.warnings = [...strategy.warnings, ...enriched.warnings];
+    } catch (error) {
+      strategy.warnings = [
+        ...strategy.warnings,
+        `Enrichissement PubDaily ignoré (${error instanceof Error ? error.message : String(error)}).`,
+      ];
+    }
+  }
+  return strategy;
+}
+
+/** Repère une expression candidate à `find_trend` : la plus longue séquence de mots « médicaux ». */
+export function pubdailyCandidate(question: string): string {
+  // On garde une séquence de 2 à 6 mots, hors mots outils, pour éviter d'envoyer la question entière.
+  const stop = /^(le|la|les|des|de|du|un|une|chez|et|ou|dans|sur|pour|est|sont|il|elle|the|and|or|of|in|on|for|with|to)$/i;
+  const words = question.replace(/[.,;:!?()"']/g, ' ').split(/\s+/).filter((w) => w.length >= 3 && !stop.test(w));
+  // Fenêtre glissante : on prend la plus longue (jusqu'à 6 mots).
+  const span = words.slice(0, 6);
+  return span.join(' ').trim();
+}
+
+/**
+ * Appel PubDaily dans un budget de temps : `find_trend` + `search_papers`.
+ * Toute erreur, tout dépassement → avertissement, pas d'arrêt.
+ */
+export async function enrichWithPubdaily(
+  question: string,
+  budgetMs: number,
+  client: PubdailyClient = getPubdailyClient(),
+): Promise<{ pubdaily?: StrategyPubdaily; pubdaily_papers?: StrategyPubdailyPaper[]; warnings: string[] }> {
+  const warnings: string[] = [];
+  const candidate = pubdailyCandidate(question);
+  if (!candidate) return { warnings };
+
+  const budget = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new PubdailyError('timeout', `PubDaily n’a pas répondu en ${budgetMs} ms.`)), budgetMs),
+  );
+  const result: { pubdaily?: StrategyPubdaily; pubdaily_papers?: StrategyPubdailyPaper[] } = {};
+  const findTrend = client.findTrend(candidate).then((r) => {
+    if (r.found && r.topic) {
+      result.pubdaily = {
+        topic: r.topic.topic,
+        specialty: r.specialty ?? null,
+        score: r.topic.trend_score ?? null,
+        growthPct: r.topic.growth_vs_previous_12_months_pct ?? null,
+        page: r.topic.page ?? null,
+        pubmedSearch: r.topic.pubmed_search ?? null,
+      };
+    }
+  });
+  const searchPapers = client.searchPapers(candidate, { limit: 5 }).then((r) => {
+    result.pubdaily_papers = r.papers.slice(0, 5).map((p) => ({
+      pmid: p.pmid,
+      title: p.title,
+      journal: p.journal ?? null,
+      year: p.published ?? null,
+      pubdailyScore: p.pubdaily_score ?? null,
+      pubmed: p.pubmed ?? null,
+    }));
+  });
+  try {
+    await Promise.race([Promise.allSettled([findTrend, searchPapers]), budget]);
+  } catch (error) {
+    warnings.push(error instanceof Error ? error.message : String(error));
+  }
+  return { ...result, warnings };
 }
 
 /** Compte une équation (et, en option, chacun de ses blocs) : après une retouche à la main. */

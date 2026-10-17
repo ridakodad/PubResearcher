@@ -16,6 +16,7 @@ import { exportRouter } from './routes/export.js';
 import { redactionRouter } from './routes/redaction.js';
 import { biblioRouter } from './routes/biblio.js';
 import { biblioAssistantRouter } from './routes/biblio-assistant.js';
+import { biblioPubdailyImportRouter, biblioPubdailyRouter } from './routes/biblio-pubdaily.js';
 import { llmRouter } from './routes/llm.js';
 import { importsRouter } from './routes/imports.js';
 import { projectsRouter } from './routes/projects.js';
@@ -86,8 +87,12 @@ export function createApp(options: AppOptions = {}): Express {
   app.use('/api/projects', projectsRouter);
   // Modèles d'IA : réglage du poste, commun à tous les projets.
   app.use('/api/models', modelsRouter);
+  // Veille PubDaily : données publiques, hors projet.
+  app.use('/api/biblio/pubdaily', biblioPubdailyRouter);
   // Tout le reste de l'API travaille dans le projet de la requête (en-tête X-Project).
   app.use('/api', projectScope);
+  // Import PubDaily et détail d'un sujet : écrivent/lisent dans le projet.
+  app.use('/api/biblio/pubdaily', biblioPubdailyImportRouter);
   app.use('/api/patients', patientsRouter);
   app.use('/api', documentsRouter);
   app.use('/api/table-imports', importsRouter);

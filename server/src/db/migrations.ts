@@ -182,6 +182,27 @@ export const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    version: 5,
+    name: 'Revue bibliographique : traçabilité des imports PubDaily',
+    up(connection) {
+      /*
+       * Les imports venus de PubDaily (via l'onglet Veille) gardent le sujet, la
+       * spécialité et l'URL de la page de la veille d'origine : c'est ce qui
+       * permet de dire d'où vient une référence et de rouvrir la veille au besoin.
+       */
+      const cols: [string, string][] = [
+        ['pubdaily_topic', 'TEXT'],
+        ['pubdaily_specialty', 'TEXT'],
+        ['pubdaily_page', 'TEXT'],
+      ];
+      for (const [name, type] of cols) {
+        if (!hasColumn(connection, 'biblio_searches', name)) {
+          connection.exec(`ALTER TABLE biblio_searches ADD COLUMN ${name} ${type}`);
+        }
+      }
+    },
+  },
 ];
 
 /** Version la plus récente que ce code sait produire. */

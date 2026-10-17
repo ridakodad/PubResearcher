@@ -3,6 +3,7 @@ import type { BiblioDecision, BiblioRef, BiblioSource } from '../../lib/types';
 export const SOURCE_LABELS: Record<BiblioSource, string> = {
   pubmed: 'PubMed',
   scholar: 'Google Scholar',
+  pubdaily: 'PubDaily',
   embase: 'Embase',
   central: 'Cochrane CENTRAL',
   scopus: 'Scopus',

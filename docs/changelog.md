@@ -2,6 +2,14 @@
 
 Le format suit l'ordre des versions, de la plus récente à la plus ancienne ; l'historique git de ce dépôt commence à la 1.2.0, les versions antérieures n'y sont décrites qu'ici. Les numéros de version sont ceux de `package.json` ; le rapport « Méthodes et traçabilité » consigne la version qui a produit un jeu de données.
 
+## 1.10.0 — 17 octobre 2026
+
+**Bibliographie — veille sur ce qui monte, et enrichissement de l'assistant de recherche**
+- Nouvel onglet **Veille PubDaily** sur la page Bibliographie : parcourt les sujets qui montent dans la spécialité choisie (données du MCP public `pubdaily.app`, mises à jour quotidiennement), affiche croissance, nombre d'articles et d'essais sur 12 mois, et importe en un clic les PMIDs sélectionnés — la source `pubdaily` est consignée dans la bibliothèque, avec le sujet et la spécialité.
+- L'assistant « Question en langage naturel » appelle en plus `find_trend` et `search_papers` ; quand une tendance correspond, une carte s'affiche au-dessus de l'équation, et jusqu'à cinq articles curatés sont proposés sous l'équation. Appels additifs, budget de 6 s, erreur ou dépassement silencieux.
+- Panneau **Suggestions PubDaily** dans la Rédaction : propose à la demande des citations à partir des 400 derniers caractères écrits.
+- Désactivable par `PUBDAILY_DISABLED=1` ; URL remplaçable par `PUBDAILY_MCP_URL=https://…`.
+
 ## 1.9.0 — 17 octobre 2026
 
 **Recherche bibliographique en langage naturel, et modèles ouverts à la place de Claude pour chaque tâche.**

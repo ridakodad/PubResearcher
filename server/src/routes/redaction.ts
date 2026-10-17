@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { idNumber } from '../lib/schemas.js';
-import { asyncHandler, notFound } from '../lib/http.js';
+import { asyncHandler, notFound, HttpError } from '../lib/http.js';
+import { PubdailyError, getPubdailyClient } from '../biblio/pubdaily.js';
 import { getActiveTemplate, getTemplate } from '../repo/templates.js';
 import { buildDataset, buildFieldStats } from './analytics.js';
 import { ChatError, chatAvailable, chatModel, streamReply, type CohortContext } from '../engine/chat.js';
@@ -111,6 +112,48 @@ redactionRouter.post(
       if (!closed) send('error', { message });
     } finally {
       res.end();
+    }
+  }),
+);
+
+/**
+ * Panneau latéral « Suggestions PubDaily » dans la Rédaction : un extrait du
+ * texte en cours part dans `search_papers` (via le MCP public PubDaily) et les
+ * articles curatés les plus proches reviennent avec leurs PMIDs — un clic
+ * suffit à les citer. Le flux d'écriture n'est pas touché.
+ */
+const suggestSchema = z.object({
+  snippet: z.string().trim().min(10, 'Trop court pour chercher.').max(2000),
+  specialty: z.string().trim().max(120).optional(),
+  limit: z.number().int().min(1).max(10).optional(),
+});
+
+redactionRouter.post(
+  '/redaction/pubdaily-suggest',
+  asyncHandler(async (req, res) => {
+    if (process.env.PUBDAILY_DISABLED === '1') {
+      res.json({ papers: [] });
+      return;
+    }
+    const input = suggestSchema.parse(req.body);
+    const snippet = input.snippet.slice(-400);
+    try {
+      const r = await getPubdailyClient().searchPapers(snippet, { specialty: input.specialty, limit: input.limit ?? 5 });
+      res.json({
+        papers: r.papers.map((p) => ({
+          pmid: p.pmid,
+          title: p.title,
+          journal: p.journal ?? null,
+          year: p.published ?? null,
+          pubdaily_score: p.pubdaily_score ?? null,
+          pubmed: p.pubmed ?? null,
+        })),
+      });
+    } catch (error) {
+      if (error instanceof PubdailyError) {
+        throw new HttpError(502, `Suggestions PubDaily indisponibles : ${error.message}`, undefined, `pubdaily_${error.kind}`);
+      }
+      throw error;
     }
   }),
 );

@@ -1,4 +1,24 @@
 # Revue bibliographique
+## Veille PubDaily — ce qui monte dans ma spécialité
+
+Un troisième onglet, **Veille PubDaily**, parcourt les sujets qui montent dans la spécialité choisie (cardiologie, oncologie, pneumologie…) et importe en un clic les articles curatés qui s'y rapportent, avec leur PMID. Les données viennent du serveur **MCP public** `pubdaily.app/api/mcp` (aucune authentification, aucune donnée de projet ne sort — seuls les termes envoyés aux outils `find_trend` / `search_papers` quittent le poste).
+
+Comment les sujets et les articles sont choisis :
+
+- Les **tendances** s'appuient sur une mesure de croissance 12 mois / 12 mois précédents du nombre d'articles indexés dans PubMed et d'essais déclarés sur ClinicalTrials.gov. Chaque sujet a une page sur `pubdaily.app/trends/<slug>` et une équation PubMed vérifiable.
+- Les **articles** sont ceux que la ligne éditoriale de PubDaily juge marquants, avec un score et, pour certains, un résumé relu par l'équipe médicale ; voir [la politique éditoriale](https://pubdaily.app/editorial-policy) et [la revue médicale](https://pubdaily.app/medical-review).
+- L'import effectif passe par les E-utilities du NCBI (comme pour la recherche PubMed classique) : les métadonnées complètes (titre, auteurs, journal, résumé, types de publication) viennent de PubMed, pas de PubDaily.
+- Les références importées portent la source `pubdaily` et conservent le sujet, la spécialité et l'URL de la page d'origine — c'est ce qui permet de retrouver la veille et de l'ouvrir à nouveau.
+- Dans l'onglet « Question en langage naturel », l'assistant interroge aussi `find_trend` et `search_papers` : si un sujet correspond à la question, une carte « Tendance PubDaily » s'affiche au-dessus de l'équation, et jusqu'à cinq articles curatés sont proposés sous l'équation avec un bouton « + Importer ». Ces appels sont **additifs** : ils ne remplacent jamais la vérification PubMed, et en cas d'erreur ou de dépassement du budget de 6 secondes ils sont ignorés silencieusement (un avertissement l'indique dans la stratégie).
+- Dans la **Rédaction assistée**, un panneau « Suggestions PubDaily » propose à la demande quelques articles curatés à partir des 400 derniers caractères écrits — rien n'est envoyé à l'assistant Claude ni à OpenAI.
+
+Confidentialité et désactivation :
+
+- PubDaily est public : son MCP n'authentifie pas et ne garde pas d'historique rattaché à l'utilisateur.
+- Pour désactiver totalement l'intégration (institution qui préfère n'interroger que PubMed), posez `PUBDAILY_DISABLED=1` dans l'environnement : l'onglet se grise, les routes répondent 503, et l'assistant n'enrichit plus la stratégie.
+- Pour pointer vers une instance interne : `PUBDAILY_MCP_URL=https://mcp.example.org/mcp` (les URLs non https hors loopback sont refusées).
+- Par défaut, le mode « règles » (hors ligne, sans clé Anthropic) **n'appelle pas** PubDaily — on garde la recherche de secours entièrement locale. Pour l'autoriser dans ce mode, posez `PUBDAILY_ENABLE_RULES_FALLBACK=1`.
+
 
 Page **Littérature › Revue bibliographique**. Elle est indépendante des dossiers patients : elle a ses propres tables et ne lit aucune donnée de patient.
 

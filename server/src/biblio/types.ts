@@ -14,6 +14,7 @@ export type SearchableSource = (typeof SEARCHABLE_SOURCES)[number];
 export const BIBLIO_SOURCES = [
   'pubmed',
   'scholar',
+  'pubdaily',
   'embase',
   'central',
   'scopus',
@@ -31,6 +32,7 @@ export type BiblioSource = (typeof BIBLIO_SOURCES)[number];
 export const SOURCE_LABELS: Record<BiblioSource, string> = {
   pubmed: 'PubMed',
   scholar: 'Google Scholar',
+  pubdaily: 'PubDaily',
   embase: 'Embase',
   central: 'Cochrane CENTRAL',
   scopus: 'Scopus',
@@ -54,6 +56,7 @@ export type PrismaCategory = 'database' | 'register' | 'other';
 export const SOURCE_CATEGORY: Record<BiblioSource, PrismaCategory> = {
   pubmed: 'database',
   scholar: 'other',
+  pubdaily: 'other',
   embase: 'database',
   central: 'database',
   scopus: 'database',
@@ -183,6 +186,12 @@ export interface BiblioSearch {
   fileName: string | null;
   /** Nom libre de la source, pour « Autre ». */
   sourceLabel: string | null;
+  /** Sujet de la veille PubDaily, quand l'import vient de l'onglet « Veille PubDaily ». */
+  pubdailyTopic: string | null;
+  /** Spécialité médicale PubDaily d'origine. */
+  pubdailySpecialty: string | null;
+  /** URL de la page PubDaily du sujet, pour pouvoir y revenir. */
+  pubdailyPage: string | null;
   yearFrom: number | null;
   yearTo: number | null;
   maxResults: number;

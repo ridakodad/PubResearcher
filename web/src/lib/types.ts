@@ -467,6 +467,7 @@ export type BiblioSearchableSource = 'pubmed' | 'scholar';
 /** Toutes les sources d'une référence, bases importées comprises. */
 export type BiblioSource =
   | BiblioSearchableSource
+  | 'pubdaily'
   | 'embase'
   | 'central'
   | 'scopus'
@@ -1004,4 +1005,39 @@ export interface ModelTestResult {
   unverified?: number;
   checks: { key: string; expected: unknown; got: unknown; ok: boolean }[];
   details: string | null;
+}
+
+/* ------------------------------------------------- veille PubDaily */
+
+export interface PubdailySpecialtyBrief {
+  name: string;
+  topicCount: number | null;
+}
+export interface PubdailyTopicBrief {
+  topic: string;
+  trend_score: number | null;
+  papers_last_12_months: number | null;
+  growth_vs_previous_12_months_pct: number | null;
+  new_trials_last_12_months: number | null;
+  pubmed_search: string | null;
+  page: string | null;
+  slug?: string | null;
+}
+export interface PubdailyPaperBrief {
+  pmid: string | null;
+  title: string;
+  journal: string | null;
+  year: number | null;
+  authors: string[];
+  abstract: string | null;
+  publicationTypes: string[];
+  alreadyImported: boolean;
+}
+export interface PubdailySearchPaperBrief {
+  pmid: string | null;
+  title: string;
+  journal: string | null;
+  published: string | null;
+  pubdaily_score: number | null;
+  pubmed: string | null;
 }

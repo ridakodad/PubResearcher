@@ -182,16 +182,23 @@ describe('mode modèle de langage (simulé)', () => {
   });
 });
 
-describe('migration 4 sur une base en version 3', () => {
-  test('ajoute question et stratégie sans rien perdre', () => {
+describe('migrations successives sur une base en version 3', () => {
+  test('ajoute question, stratégie et traçabilité PubDaily sans rien perdre', () => {
     const conn = new DatabaseSync(':memory:');
     conn.exec(SCHEMA);
     for (const m of MIGRATIONS.filter((m) => m.version <= 3)) m.up(conn);
     conn.exec('PRAGMA user_version = 3');
     conn.prepare("INSERT INTO biblio_searches (source, actor, query, max_results, queried_at) VALUES ('pubmed', 'x', 'asthma', 0, '2026-01-01')").run();
-    assert.deepEqual(migrate(conn), { from: 3, to: 4 });
+    const r = migrate(conn);
+    assert.equal(r.from, 3);
+    assert.ok(r.to >= 4);
     const row = conn.prepare('SELECT query, nl_question, strategy FROM biblio_searches').get() as Record<string, unknown>;
     assert.deepEqual({ ...row }, { query: 'asthma', nl_question: null, strategy: null });
+    // v5 : les colonnes de traçabilité PubDaily sont ajoutées, vides.
+    const cols = (conn.prepare('PRAGMA table_info(biblio_searches)').all() as { name: string }[]).map((c) => c.name);
+    assert.ok(cols.includes('pubdaily_topic'));
+    assert.ok(cols.includes('pubdaily_specialty'));
+    assert.ok(cols.includes('pubdaily_page'));
     conn.close();
   });
 });
@@ -269,5 +276,90 @@ describe('routes', () => {
   test('refuse une question vide et une stratégie mal formée', async () => {
     assert.equal((await post('/api/biblio/assistant/build', { question: '' })).status, 400);
     assert.equal((await post('/api/biblio/searches', { query: 'x y', sources: ['pubmed'], strategy: { method: 'magic' } })).status, 400);
+  });
+});
+
+/* ─────────────────── Enrichissement PubDaily (feature 2) ───────────────── */
+
+const { enrichWithPubdaily, pubdailyCandidate } = qb;
+const pdMod = await import('../src/biblio/pubdaily.js');
+
+/** Faux client PubDaily minimal — on couvre `findTrend` et `searchPapers`. */
+function fakePubdailyClient(opts: { topic?: string | null; papers?: { title: string; pmid: string }[]; delayMs?: number; throws?: boolean }) {
+  const client: Partial<InstanceType<typeof pdMod.PubdailyClient>> = {
+    async findTrend(_q: string) {
+      if (opts.delayMs) await new Promise((r) => setTimeout(r, opts.delayMs));
+      if (opts.throws) throw new pdMod.PubdailyError('tool', 'boum');
+      return opts.topic
+        ? { found: true, topic: { topic: opts.topic, trend_score: 42, pubmed_search: 'https://pubmed.ncbi.nlm.nih.gov/?term=x', growth_vs_previous_12_months_pct: 50, page: 'https://pubdaily.app/trends/x/' }, specialty: 'Cardiology' }
+        : { found: false, topic: null, specialty: null };
+    },
+    async searchPapers(_q: string, _o: object) {
+      if (opts.delayMs) await new Promise((r) => setTimeout(r, opts.delayMs));
+      if (opts.throws) throw new pdMod.PubdailyError('tool', 'boum');
+      return {
+        papers: (opts.papers ?? []).map((p) => ({ title: p.title, pmid: p.pmid, journal: 'NEJM', published: '2025', type: null, specialty: null, pubdaily_score: 7, pubmed: null, summary: null, page: null })),
+      };
+    },
+  };
+  return client as InstanceType<typeof pdMod.PubdailyClient>;
+}
+
+describe('enrichissement PubDaily (query-builder)', () => {
+  test('pubdailyCandidate garde une séquence courte', () => {
+    const c = pubdailyCandidate('Chez l’adulte diabétique, metformine et mortalité ?');
+    assert.ok(c.length > 0);
+    assert.ok(c.split(/\s+/).length <= 6);
+  });
+
+  test('surface les champs pubdaily et pubdaily_papers quand le client répond', async () => {
+    const client = fakePubdailyClient({ topic: 'Tirzepatide', papers: [{ title: 'Trial', pmid: '42' }] });
+    const r = await enrichWithPubdaily('tirzepatide cardiovascular', 1000, client);
+    assert.equal(r.pubdaily?.topic, 'Tirzepatide');
+    assert.equal(r.pubdaily?.growthPct, 50);
+    assert.equal(r.pubdaily_papers?.length, 1);
+    assert.equal(r.pubdaily_papers?.[0]?.pmid, '42');
+  });
+
+  test('erreur silencieuse — pas d’exception, un warning dans la stratégie', async () => {
+    const client = fakePubdailyClient({ throws: true });
+    const r = await enrichWithPubdaily('question', 1000, client);
+    assert.equal(r.pubdaily, undefined);
+  });
+
+  test('respect du budget : dépassement → avertissement, pas de pubdaily', async () => {
+    const client = fakePubdailyClient({ delayMs: 200, topic: 'Trop lent' });
+    const r = await enrichWithPubdaily('question', 50, client);
+    assert.equal(r.pubdaily, undefined);
+    assert.ok(r.warnings.length >= 1);
+  });
+
+  test('repli règles : par défaut, aucun appel PubDaily (sauf flag d’opt-in)', async () => {
+    // On vérifie en remplaçant le client partagé par un espion.
+    let called = 0;
+    const spy = {
+      findTrend: async () => {
+        called++;
+        return { found: false, topic: null, specialty: null };
+      },
+      searchPapers: async () => {
+        called++;
+        return { papers: [] };
+      },
+    } as unknown as InstanceType<typeof pdMod.PubdailyClient>;
+    pdMod.setPubdailyClient(spy);
+    qb.setQueryModelCaller(null); // repli règles
+    delete process.env.PUBDAILY_ENABLE_RULES_FALLBACK;
+    const s = await qb.buildStrategy({ question: "Chez l'adulte diabétique, metformine et mortalité" }, async () => ({ count: 10, warnings: [] }));
+    assert.equal(s.method, 'rules');
+    assert.equal(called, 0, 'aucun appel PubDaily depuis le repli règles');
+    assert.equal(s.pubdaily, undefined);
+
+    // Avec le flag opt-in : les appels passent (question avec concepts reconnus par les règles).
+    process.env.PUBDAILY_ENABLE_RULES_FALLBACK = '1';
+    await qb.buildStrategy({ question: "Chez l'adulte diabétique, metformine et mortalité" }, async () => ({ count: 10, warnings: [] }));
+    assert.ok(called >= 1, `attendu >=1 appels, obtenu ${called}`);
+    delete process.env.PUBDAILY_ENABLE_RULES_FALLBACK;
+    pdMod.setPubdailyClient(null);
   });
 });

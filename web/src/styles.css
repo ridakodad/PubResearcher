@@ -2063,3 +2063,23 @@ tr.is-selected td { background: var(--brand-soft); }
 @media (max-width: 600px) {
   .models-installed th:nth-child(3), .models-installed td:nth-child(3) { display: none; }
 }
+
+/* --- veille PubDaily --- */
+.pubdaily-tab { gap: 0.75rem; }
+.pubdaily-row { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+.pubdaily-source { color: var(--text-muted, #666); font-size: 0.85em; }
+.pubdaily-error { background: #fee; color: #a00; padding: 0.5rem 0.75rem; border-radius: 4px; }
+.pubdaily-trends { width: 100%; border-collapse: collapse; }
+.pubdaily-trends th, .pubdaily-trends td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border, #e5e7eb); vertical-align: middle; }
+.pubdaily-trends th { font-weight: 600; font-size: 0.9em; }
+.pubdaily-score-bar { display: inline-block; vertical-align: middle; width: 80px; height: 6px; background: #eee; border-radius: 3px; margin-right: 0.4rem; overflow: hidden; }
+.pubdaily-score-bar > div { height: 100%; background: linear-gradient(90deg, #22c55e, #ef4444); border-radius: 3px; }
+.pubdaily-papers { padding: 0.75rem 0; }
+.pubdaily-papers ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+.pubdaily-papers li { padding: 0.4rem 0; border-bottom: 1px solid var(--border, #e5e7eb); }
+.pubdaily-papers li.is-already { opacity: 0.55; }
+.pubdaily-paper-meta { font-size: 0.85em; color: var(--text-muted, #666); margin-top: 0.15rem; }
+.pubdaily-import-row { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.5rem; }
+.pubdaily-search { margin-top: 1rem; padding-top: 0.75rem; border-top: 1px dashed var(--border, #e5e7eb); }
+.pubdaily-search input[type=search] { flex: 1; min-width: 220px; padding: 0.3rem 0.5rem; }
+.badge.badge-pubdaily { background: #ede9fe; color: #5b21b6; }

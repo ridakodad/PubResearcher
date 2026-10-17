@@ -522,6 +522,32 @@ export const api = {
   biblioExportUrl: (format: BiblioExportFormat, decision?: BiblioDecision) =>
     `/api/biblio/export?format=${format}${decision ? `&decision=${decision}` : ''}`,
 
+  // ------------------------------------------- veille PubDaily
+  pubdailySpecialties: () =>
+    get<{ specialties: import('./types').PubdailySpecialtyBrief[] }>('/biblio/pubdaily/specialties'),
+  pubdailyTrends: (specialty: string, limit?: number) =>
+    get<{ specialty: string; topics: import('./types').PubdailyTopicBrief[] }>(
+      `/biblio/pubdaily/trends?specialty=${encodeURIComponent(specialty)}${limit ? `&limit=${limit}` : ''}`,
+    ),
+  pubdailyFindTrend: (q: string) =>
+    get<{ found: boolean; topic: import('./types').PubdailyTopicBrief | null; specialty: string | null }>(
+      `/biblio/pubdaily/find-trend?q=${encodeURIComponent(q)}`,
+    ),
+  pubdailyTopPapers: (specialty: string, opts: { limit?: number; summarizedOnly?: boolean } = {}) =>
+    get<{ specialty: string; papers: import('./types').PubdailySearchPaperBrief[] }>(
+      `/biblio/pubdaily/papers?specialty=${encodeURIComponent(specialty)}${opts.limit ? `&limit=${opts.limit}` : ''}${opts.summarizedOnly ? '&summarized_only=1' : ''}`,
+    ),
+  pubdailySearchPapers: (q: string, opts: { specialty?: string; limit?: number } = {}) =>
+    get<{ papers: import('./types').PubdailySearchPaperBrief[] }>(
+      `/biblio/pubdaily/search-papers?q=${encodeURIComponent(q)}${opts.specialty ? `&specialty=${encodeURIComponent(opts.specialty)}` : ''}${opts.limit ? `&limit=${opts.limit}` : ''}`,
+    ),
+  pubdailyTopicPapers: (slug: string, pubmedSearch: string) =>
+    get<{ slug: string; term: string; totalCount: number; pmids: string[]; papers: import('./types').PubdailyPaperBrief[] }>(
+      `/biblio/pubdaily/topics/${encodeURIComponent(slug)}/papers?pubmed_search=${encodeURIComponent(pubmedSearch)}`,
+    ),
+  pubdailyImport: (body: { specialty?: string; topic?: string; page?: string; pmids: (string | number)[] }) =>
+    post<{ search: BiblioSearch; imported: number; duplicates: number }>('/biblio/pubdaily/import', body, { timeoutMs: 0 }),
+
   // ------------------------------------------------------------------ export
   csvUrl: (
     templateId: number,

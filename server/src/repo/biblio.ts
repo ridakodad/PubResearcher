@@ -83,6 +83,9 @@ interface SearchRow {
   source_label: string | null;
   warnings: string;
   total_count: number | null;
+  pubdaily_topic: string | null;
+  pubdaily_specialty: string | null;
+  pubdaily_page: string | null;
 }
 
 const isSource = isBiblioSource;
@@ -145,6 +148,9 @@ function toSearch(row: SearchRow): BiblioSearch {
     strategy: parseStrategy(row.strategy ?? null),
     fileName: row.file_name,
     sourceLabel: row.source_label,
+    pubdailyTopic: row.pubdaily_topic ?? null,
+    pubdailySpecialty: row.pubdaily_specialty ?? null,
+    pubdailyPage: row.pubdaily_page ?? null,
     yearFrom: row.year_from,
     yearTo: row.year_to,
     maxResults: row.max_results,
@@ -176,6 +182,9 @@ export function createSearch(input: {
   strategy?: GeneratedStrategy | null;
   fileName?: string | null;
   sourceLabel?: string | null;
+  pubdailyTopic?: string | null;
+  pubdailySpecialty?: string | null;
+  pubdailyPage?: string | null;
   yearFrom: number | null;
   yearTo: number | null;
   maxResults: number;
@@ -184,8 +193,10 @@ export function createSearch(input: {
   const result = db
     .prepare(
       `INSERT INTO biblio_searches
-         (kind, source, actor, query, sent_query, nl_question, strategy, file_name, source_label, year_from, year_to, max_results, sort, status, queried_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?)`,
+         (kind, source, actor, query, sent_query, nl_question, strategy, file_name, source_label,
+          pubdaily_topic, pubdaily_specialty, pubdaily_page,
+          year_from, year_to, max_results, sort, status, queried_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?)`,
     )
     .run(
       input.kind ?? 'search',
@@ -197,6 +208,9 @@ export function createSearch(input: {
       input.strategy ? JSON.stringify(input.strategy) : null,
       input.fileName ?? null,
       input.sourceLabel ?? null,
+      input.pubdailyTopic ?? null,
+      input.pubdailySpecialty ?? null,
+      input.pubdailyPage ?? null,
       input.yearFrom,
       input.yearTo,
       input.maxResults,
@@ -463,6 +477,17 @@ export const addRefsFromSearch = db.transaction(
     return { added, duplicates };
   },
 );
+
+/** PMIDs déjà présents dans la bibliothèque — utile pour marquer « déjà importé » dans l'onglet Veille. */
+export function listExistingPmids(pmids: string[]): string[] {
+  const clean = pmids.map((p) => String(p).trim()).filter(Boolean);
+  if (clean.length === 0) return [];
+  const placeholders = clean.map(() => '?').join(',');
+  const rows = db
+    .prepare(`SELECT pmid FROM biblio_refs WHERE pmid IN (${placeholders})`)
+    .all(...clean) as { pmid: string | null }[];
+  return rows.map((r) => r.pmid ?? '').filter(Boolean);
+}
 
 /* ─────────────────────────────── Références ─────────────────────────────── */
 

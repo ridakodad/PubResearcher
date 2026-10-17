@@ -10,6 +10,7 @@ import { PrismaFlow } from '../components/biblio/PrismaFlow';
 import { RefCard, type DecidePatch } from '../components/biblio/RefCard';
 import { SearchHistory } from '../components/biblio/SearchHistory';
 import { ImportForm } from '../components/biblio/ImportForm';
+import { VeillePubdaily } from '../components/biblio/VeillePubdaily';
 import {
   SearchForm,
   restoreForm,
@@ -87,14 +88,15 @@ export function BibliographiePage() {
   const [report, setReport] = useState<BiblioSearch[] | null>(null);
   const reportRef = useRef<HTMLDivElement | null>(null);
   const elapsed = useElapsed(running);
-  const [searchMode, setSearchMode] = useState<'nl' | 'expert'>(() => {
+  const [searchMode, setSearchMode] = useState<'nl' | 'expert' | 'pubdaily'>(() => {
     try {
-      return window.localStorage.getItem(MODE_KEY) === 'expert' ? 'expert' : 'nl';
+      const v = window.localStorage.getItem(MODE_KEY);
+      return v === 'expert' || v === 'pubdaily' ? v : 'nl';
     } catch {
       return 'nl';
     }
   });
-  const chooseMode = (mode: 'nl' | 'expert') => {
+  const chooseMode = (mode: 'nl' | 'expert' | 'pubdaily') => {
     setSearchMode(mode);
     try {
       window.localStorage.setItem(MODE_KEY, mode);
@@ -394,8 +396,13 @@ export function BibliographiePage() {
             <button type="button" className={searchMode === 'expert' ? 'is-on' : ''} aria-pressed={searchMode === 'expert'} onClick={() => chooseMode('expert')}>
               Équation experte
             </button>
+            <button type="button" className={searchMode === 'pubdaily' ? 'is-on' : ''} aria-pressed={searchMode === 'pubdaily'} onClick={() => chooseMode('pubdaily')}>
+              Veille PubDaily
+            </button>
           </div>
-          {searchMode === 'nl' ? (
+          {searchMode === 'pubdaily' ? (
+            <VeillePubdaily />
+          ) : searchMode === 'nl' ? (
             <NaturalSearch
               form={form}
               onYears={(yearFrom, yearTo) => setForm((current) => current && { ...current, yearFrom, yearTo })}
