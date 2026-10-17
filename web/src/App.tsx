@@ -13,6 +13,7 @@ import {
   IconForm,
   IconGauge,
   IconKey,
+  IconChip,
   IconSidebar,
   IconWrite,
   IconTable,
@@ -22,6 +23,7 @@ import { WorkspaceProvider, useWorkspace } from './lib/workspace';
 import { readSetting, writeSetting } from './lib/storage';
 import { BibliographiePage } from './pages/BibliographiePage';
 import { ClaudePage } from './pages/ClaudePage';
+import { ModelesPage } from './pages/ModelesPage';
 import { DossiersPage } from './pages/DossiersPage';
 import { DossierDetailPage } from './pages/DossierDetailPage';
 import { FichePage } from './pages/FichePage';
@@ -107,7 +109,13 @@ function ToolRail({ collapsed }: { collapsed: boolean }) {
         },
         { to: '/extraction', label: 'Extraction', short: 'Extraction', icon: IconExtract, matchPrefix: '/extraction' },
         { to: '/redaction', label: 'Rédaction', short: 'Rédaction', icon: IconWrite, matchPrefix: '/redaction' },
+      ],
+    },
+    {
+      label: 'Modèles d’IA',
+      tools: [
         { to: '/claude', label: claudeOn ? 'Claude' : 'Activer Claude', short: 'Claude', icon: IconKey, matchPrefix: '/claude' },
+        { to: '/modeles', label: 'Modèles locaux', short: 'Modèles', icon: IconChip, matchPrefix: '/modeles' },
       ],
     },
     {
@@ -221,6 +229,7 @@ const TITLES: [prefix: string, title: string][] = [
   ['/extraction', 'Extraction'],
   ['/redaction', 'Rédaction assistée'],
   ['/claude', 'Activer Claude'],
+  ['/modeles', 'Modèles d’IA'],
   ['/projets', 'Projets de recherche'],
   ['/resultats', 'Résultats'],
 ];
@@ -322,6 +331,7 @@ export function App() {
                 <Route path="/extraction" element={<ExtractionPage />} />
                 <Route path="/redaction" element={<RedactionPage />} />
                 <Route path="/claude" element={<ClaudePage />} />
+                <Route path="/modeles" element={<ModelesPage />} />
                 <Route path="/projets" element={<ProjetsPage />} />
                 <Route path="/resultats" element={<ResultatsPage />} />
                 <Route path="/index.html" element={<Navigate to="/" replace />} />

@@ -205,6 +205,16 @@ export function refsToCsv(refs: BiblioRef[]): string {
  * chaîne exacte, ce que la source en a compris, le nombre total de résultats
  * et le nombre récupéré ; pour chaque import, la base et le fichier.
  */
+/** Comment l'équation a été élaborée, pour le journal : modèle ou règles, et la validation de l'utilisateur. */
+export function strategyNote(s: BiblioSearch): string | null {
+  if (!s.strategy) return null;
+  const how =
+    s.strategy.method === 'llm'
+      ? `Équation générée à partir de la question par un modèle de langage (${s.strategy.model ?? 'modèle non précisé'})`
+      : 'Équation générée à partir de la question par règles (dictionnaire, sans modèle de langage)';
+  return `${how}, vérifiée sur les nombres de résultats PubMed, puis relue et validée par l’utilisateur avant la recherche.`;
+}
+
 export function searchesToCsv(searches: BiblioSearch[]): string {
   const headers = [
     'Date',
@@ -224,6 +234,8 @@ export function searchesToCsv(searches: BiblioSearch[]): string {
     'Statut',
     'Avertissements',
     'Erreur',
+    'Question en langage naturel',
+    'Élaboration de l’équation',
   ];
   const rows = [...searches]
     .sort((a, b) => a.id - b.id)
@@ -245,6 +257,8 @@ export function searchesToCsv(searches: BiblioSearch[]): string {
       s.status === 'ok' ? 'réussie' : s.status === 'running' ? 'en cours' : 'échec',
       s.warnings.join(' | '),
       s.error,
+      s.question,
+      strategyNote(s),
     ]);
   return toCsv(headers, rows, { delimiter: ';' });
 }

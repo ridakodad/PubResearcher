@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { api, ApiError } from '../lib/api';
 import { plural } from '../lib/format';
 import { EmptyState, ErrorPanel, LoadingPanel, useToast } from '../components/ui';
@@ -26,6 +26,10 @@ import type {
   BiblioSearch,
   BiblioSource,
   BiblioStatus,
+  BiblioAssistantSearchParams,
+  BiblioStrategy,
+  BiblioStrategyConcept,
+  BiblioStudyType,
 } from '../lib/types';
 
 /**
@@ -65,6 +69,9 @@ function useElapsed(active: boolean): number {
   return seconds;
 }
 
+/** Mode de saisie retenu (question ou équation experte), mémorisé sur ce poste. */
+const MODE_KEY = 'pubresearcher.biblio.searchMode';
+
 const messageOf = (err: unknown): string => (err instanceof ApiError ? err.message : String(err));
 
 export function BibliographiePage() {
@@ -80,6 +87,21 @@ export function BibliographiePage() {
   const [report, setReport] = useState<BiblioSearch[] | null>(null);
   const reportRef = useRef<HTMLDivElement | null>(null);
   const elapsed = useElapsed(running);
+  const [searchMode, setSearchMode] = useState<'nl' | 'expert'>(() => {
+    try {
+      return window.localStorage.getItem(MODE_KEY) === 'expert' ? 'expert' : 'nl';
+    } catch {
+      return 'nl';
+    }
+  });
+  const chooseMode = (mode: 'nl' | 'expert') => {
+    setSearchMode(mode);
+    try {
+      window.localStorage.setItem(MODE_KEY, mode);
+    } catch {
+      /* stockage indisponible : le choix vaut pour la visite */
+    }
+  };
 
   const [decisionFilter, setDecisionFilter] = useState<DecisionFilter>('all');
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
@@ -157,12 +179,25 @@ export function BibliographiePage() {
     return () => window.clearInterval(timer);
   }, [serverRunning, running, loadMeta, loadRefs]);
 
-  async function submit() {
-    if (!form || !status || validateForm(form, status)) return;
+  /**
+   * Lance la passe. Depuis l'assistant, `fromQuestion` porte l'équation validée, la question et la stratégie :
+   * le journal de recherche les consigne (PRISMA-S : comment la stratégie a été élaborée).
+   */
+  async function submit(fromQuestion?: { equation: string; question: string; strategy: BiblioStrategy }) {
+    if (!form || !status) return;
+    const effective = fromQuestion ? { ...form, query: fromQuestion.equation } : form;
+    if (validateForm(effective, status)) {
+      if (fromQuestion) toast.error(validateForm(effective, status) ?? 'Recherche impossible.');
+      return;
+    }
     setRunning(true);
     setReport(null);
     try {
-      const result = await api.biblioSearch(toParams(form));
+      const params = toParams(effective);
+      const body: BiblioAssistantSearchParams = fromQuestion
+        ? { ...params, question: fromQuestion.question, strategy: fromQuestion.strategy }
+        : params;
+      const result = await api.biblioSearch(body);
       setReport(result.searches);
       const failed = result.searches.filter((s) => s.status === 'error');
       const added = result.searches.reduce((sum, s) => sum + s.added, 0);
@@ -232,6 +267,8 @@ export function BibliographiePage() {
 
   function reuse(search: BiblioSearch) {
     if (!status) return;
+    // Reprendre une passe, c'est reprendre son équation : elle se relit dans le formulaire expert.
+    chooseMode('expert');
     setForm((current) =>
       current && {
         ...current,
@@ -349,15 +386,37 @@ export function BibliographiePage() {
               : form.sources.map((s) => SOURCE_LABELS[s]).join(' + ')}
           </span>
         </div>
-        <div className="card-body">
-          <SearchForm
-            status={status}
-            form={form}
-            onChange={setForm}
-            onSubmit={() => void submit()}
-            running={inProgress}
-            elapsed={elapsed}
-          />
+        <div className="card-body stack">
+          <div className="seg" role="group" aria-label="Mode de saisie de la recherche">
+            <button type="button" className={searchMode === 'nl' ? 'is-on' : ''} aria-pressed={searchMode === 'nl'} onClick={() => chooseMode('nl')}>
+              Question en langage naturel
+            </button>
+            <button type="button" className={searchMode === 'expert' ? 'is-on' : ''} aria-pressed={searchMode === 'expert'} onClick={() => chooseMode('expert')}>
+              Équation experte
+            </button>
+          </div>
+          {searchMode === 'nl' ? (
+            <NaturalSearch
+              form={form}
+              onYears={(yearFrom, yearTo) => setForm((current) => current && { ...current, yearFrom, yearTo })}
+              running={inProgress}
+              elapsed={elapsed}
+              onLaunch={(launch) => void submit(launch)}
+              onEditAsExpert={(equation) => {
+                setForm((current) => current && { ...current, query: equation });
+                chooseMode('expert');
+              }}
+            />
+          ) : (
+            <SearchForm
+              status={status}
+              form={form}
+              onChange={setForm}
+              onSubmit={() => void submit()}
+              running={inProgress}
+              elapsed={elapsed}
+            />
+          )}
         </div>
       </section>
 
@@ -635,6 +694,382 @@ function ExportPanel({
         livre, chapitre…) et son PMCID ; la décision de tri, le motif d’exclusion et la note sont
         consignés dans le champ de note du RIS et dans les colonnes du CSV.
       </div>
+    </div>
+  );
+}
+
+/* ─────────────────────── Recherche en langage naturel ─────────────────────── */
+
+const STUDY_TYPE_CHOICES: [BiblioStudyType, string][] = [
+  ['rct', 'Essais randomisés'],
+  ['systematic_review', 'Revues systématiques'],
+  ['observational', 'Études observationnelles'],
+  ['diagnostic', 'Études diagnostiques'],
+];
+
+/* Mise en forme PubMed, la même que côté serveur (`biblio/query-builder.ts`) : un terme retouché ici donne le bloc
+ * que le serveur aurait produit. */
+const cleanTerm = (raw: string): string =>
+  raw
+    .replace(/\[[^\]]*\]/g, ' ')
+    .replace(/["“”«»()]/g, ' ')
+    .replace(/\b(AND|OR|NOT)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120);
+const meshTag = (t: string) => `"${cleanTerm(t)}"[Mesh]`;
+const tiabTag = (t: string) => {
+  const c = cleanTerm(t);
+  return /[\s-]/.test(c) ? `"${c}"[tiab]` : `${c}[tiab]`;
+};
+function conceptBlock(mesh: string[], freeText: string[]): string {
+  const parts = [
+    ...new Set([...mesh.map(cleanTerm).filter(Boolean).map(meshTag), ...freeText.map(cleanTerm).filter(Boolean).map(tiabTag)]),
+  ];
+  if (parts.length === 0) return '';
+  return parts.length === 1 ? parts[0]! : `(${parts.join(' OR ')})`;
+}
+
+const parseYearInput = (raw: string): number | undefined => {
+  const n = Number(raw.trim());
+  return raw.trim() && Number.isInteger(n) ? n : undefined;
+};
+
+const ROLE_LABELS: Record<BiblioStrategyConcept['role'], string> = {
+  population: 'Population',
+  intervention: 'Intervention',
+  comparison: 'Comparateur',
+  outcome: 'Critère de jugement',
+  other: 'Autre notion',
+};
+
+const countLabel = (n: number | null | undefined) => (n === null || n === undefined ? '—' : fmtCount(n));
+
+/** Une liste de termes en puces : chacune se retire, un champ en ajoute. */
+function TermChips({
+  label,
+  terms,
+  kind,
+  onChange,
+}: {
+  label: string;
+  terms: string[];
+  kind: 'mesh' | 'tiab';
+  onChange: (next: string[]) => void;
+}) {
+  const [draft, setDraft] = useState('');
+  const add = () => {
+    const t = cleanTerm(draft);
+    if (t && !terms.includes(t)) onChange([...terms, t]);
+    setDraft('');
+  };
+  return (
+    <div className="nl-chips" role="group" aria-label={label}>
+      <span className="nl-chips-label small secondary">{label}</span>
+      {terms.map((t) => (
+        <span key={t} className={`nl-chip nl-chip-${kind}`}>
+          <span className="mono">{t}</span>
+          <button type="button" className="nl-chip-remove" aria-label={`Retirer « ${t} »`} onClick={() => onChange(terms.filter((x) => x !== t))}>
+            ×
+          </button>
+        </span>
+      ))}
+      <input
+        className="nl-chip-input"
+        value={draft}
+        placeholder={kind === 'mesh' ? '+ descripteur MeSH' : '+ synonyme'}
+        aria-label={`Ajouter : ${label}`}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            add();
+          }
+        }}
+        onBlur={() => draft.trim() && add()}
+      />
+    </div>
+  );
+}
+
+/**
+ * La question en langage naturel : l'assistant la découpe (PICO), propose les blocs de termes et l'équation,
+ * vérifiées sur les nombres PubMed ; l'utilisateur retouche, recompte, puis lance — c'est sa validation.
+ */
+function NaturalSearch({
+  form,
+  onYears,
+  running,
+  elapsed,
+  onLaunch,
+  onEditAsExpert,
+}: {
+  form: SearchFormState;
+  onYears: (yearFrom: string, yearTo: string) => void;
+  running: boolean;
+  elapsed: number;
+  onLaunch: (launch: { equation: string; question: string; strategy: BiblioStrategy }) => void;
+  onEditAsExpert: (equation: string) => void;
+}) {
+  const toast = useToast();
+  const questionId = useId();
+  const equationId = useId();
+  const fromId = useId();
+  const toId = useId();
+  const [question, setQuestion] = useState('');
+  const [studyTypes, setStudyTypes] = useState<BiblioStudyType[]>([]);
+  const [building, setBuilding] = useState(false);
+  const [counting, setCounting] = useState(false);
+  const [strategy, setStrategy] = useState<BiblioStrategy | null>(null);
+  const [concepts, setConcepts] = useState<BiblioStrategyConcept[]>([]);
+  /** Les filtres de type d'étude, tels que le serveur les a ajoutés en fin d'équation. */
+  const [filterTail, setFilterTail] = useState<string[]>([]);
+  const [equation, setEquation] = useState('');
+  const [counts, setCounts] = useState<BiblioStrategy['counts'] | null>(null);
+  const [countWarnings, setCountWarnings] = useState<string[]>([]);
+  const [stale, setStale] = useState(false);
+
+  const years = { yearFrom: parseYearInput(form.yearFrom), yearTo: parseYearInput(form.yearTo) };
+
+  async function build() {
+    if (question.trim().length < 5 || building) return;
+    setBuilding(true);
+    try {
+      const result = await api.biblioAssistantBuild({
+        question: question.trim(),
+        ...(studyTypes.length ? { studyTypes } : {}),
+        ...(years.yearFrom !== undefined ? { yearFrom: years.yearFrom } : {}),
+        ...(years.yearTo !== undefined ? { yearTo: years.yearTo } : {}),
+      });
+      setStrategy(result);
+      setConcepts(result.concepts);
+      // Ni les blocs ni les filtres ne contiennent « AND » : ce qui suit les blocs, ce sont les filtres.
+      setFilterTail(result.equation ? result.equation.split(' AND ').slice(result.concepts.length) : []);
+      setEquation(result.equation);
+      setCounts(result.counts);
+      setCountWarnings([]);
+      setStale(false);
+    } catch (err) {
+      toast.error(messageOf(err));
+    } finally {
+      setBuilding(false);
+    }
+  }
+
+  function editConcept(index: number, patch: Partial<Pick<BiblioStrategyConcept, 'mesh' | 'freeText'>>) {
+    const next = concepts.map((c, i) => {
+      if (i !== index) return c;
+      const merged = { ...c, ...patch };
+      return { ...merged, block: conceptBlock(merged.mesh, merged.freeText) };
+    });
+    setConcepts(next);
+    setEquation([...next.map((c) => c.block).filter(Boolean), ...filterTail].join(' AND '));
+    setStale(true);
+  }
+
+  function removeConcept(index: number) {
+    const next = concepts.filter((_, i) => i !== index);
+    setConcepts(next);
+    setEquation([...next.map((c) => c.block).filter(Boolean), ...filterTail].join(' AND '));
+    setStale(true);
+  }
+
+  async function recount() {
+    if (!equation.trim() || counting) return;
+    setCounting(true);
+    try {
+      const result = await api.biblioAssistantCount({
+        equation: equation.trim(),
+        blocks: concepts.filter((c) => c.block).map((c) => ({ name: c.name, block: c.block })),
+        ...(years.yearFrom !== undefined ? { yearFrom: years.yearFrom } : {}),
+        ...(years.yearTo !== undefined ? { yearTo: years.yearTo } : {}),
+      });
+      setCounts({ total: result.total, perConcept: result.perConcept });
+      setCountWarnings(result.warnings);
+      setStale(false);
+    } catch (err) {
+      toast.error(messageOf(err));
+    } finally {
+      setCounting(false);
+    }
+  }
+
+  function launch() {
+    if (!strategy || !equation.trim()) return;
+    onLaunch({
+      equation: equation.trim(),
+      question: strategy.question,
+      // La stratégie consignée est celle que l'utilisateur a validée : ses retouches comprises.
+      strategy: { ...strategy, concepts, equation: equation.trim(), counts: counts ?? strategy.counts },
+    });
+  }
+
+  const perConcept = new Map((counts?.perConcept ?? []).map((c) => [c.name, c.count]));
+  const pico = strategy?.pico;
+
+  return (
+    <div className="stack nl-search">
+      <div className="field" style={{ marginBottom: 0 }}>
+        <label htmlFor={questionId}>Décrivez votre question de recherche</label>
+        <textarea
+          id={questionId}
+          className="nl-question"
+          rows={4}
+          maxLength={2000}
+          value={question}
+          placeholder="par exemple : Chez l’adulte avec une pneumopathie communautaire, une antibiothérapie courte (≤ 5 jours) est-elle aussi efficace qu’une antibiothérapie longue ? Essais randomisés."
+          onChange={(e) => setQuestion(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+              e.preventDefault();
+              void build();
+            }
+          }}
+        />
+        <div className="field-hint">
+          En français ou en anglais. L’assistant découpe la question en concepts (PICO), traduit les termes en anglais,
+          associe descripteurs MeSH et synonymes, puis vérifie l’équation sur les nombres de résultats PubMed. Vous la
+          relisez avant de lancer la recherche.
+        </div>
+      </div>
+
+      <div className="nl-options">
+        <div className="field" style={{ marginBottom: 0 }}>
+          <label htmlFor={fromId}>De l’année</label>
+          <input id={fromId} inputMode="numeric" value={form.yearFrom} placeholder="ex. 2010" onChange={(e) => onYears(e.target.value, form.yearTo)} />
+        </div>
+        <div className="field" style={{ marginBottom: 0 }}>
+          <label htmlFor={toId}>À l’année</label>
+          <input id={toId} inputMode="numeric" value={form.yearTo} placeholder="ex. 2026" onChange={(e) => onYears(form.yearFrom, e.target.value)} />
+        </div>
+        <fieldset className="nl-types">
+          <legend>Types d’études (filtre validé)</legend>
+          {STUDY_TYPE_CHOICES.map(([key, label]) => (
+            <label key={key} className="checkbox">
+              <input
+                type="checkbox"
+                checked={studyTypes.includes(key)}
+                onChange={() => setStudyTypes((cur) => (cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key]))}
+              />
+              <span>{label}</span>
+            </label>
+          ))}
+        </fieldset>
+      </div>
+
+      <div className="row">
+        <button type="button" className="btn-primary" disabled={question.trim().length < 5 || building} onClick={() => void build()}>
+          {building ? 'Construction et vérification…' : 'Construire la stratégie'}
+        </button>
+        {building && <span className="small secondary">Les nombres sont demandés à PubMed, à son rythme (3 requêtes par seconde sans clé).</span>}
+      </div>
+
+      {strategy && (
+        <div className="nl-result stack" aria-live="polite">
+          <div className="row" style={{ gap: 8 }}>
+            {strategy.method === 'llm' ? (
+              <span className="badge badge-llm">Modèle : {strategy.model ?? 'inconnu'}</span>
+            ) : (
+              <span className="badge badge-warn">Règles, sans modèle de langage</span>
+            )}
+            {strategy.filters.map((f) => (
+              <span key={f} className="badge badge-type">
+                Filtre : {f}
+              </span>
+            ))}
+            <span className="badge">
+              PubMed : <strong className="tabular">{countLabel(counts?.total)}</strong>&nbsp;article{counts?.total === 1 ? '' : 's'}
+              {stale ? ' (à recalculer)' : ''}
+            </span>
+          </div>
+
+          {[...strategy.warnings, ...countWarnings].length > 0 && (
+            <div className="notice notice-warn">
+              <ul className="nl-warnings">
+                {[...strategy.warnings, ...countWarnings].map((w) => (
+                  <li key={w}>{w}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {pico && (
+            <dl className="nl-pico">
+              {(
+                [
+                  ['P', 'Population', pico.population],
+                  ['I', 'Intervention', pico.intervention],
+                  ['C', 'Comparateur', pico.comparison],
+                  ['O', 'Critère de jugement', pico.outcome],
+                  ['S', 'Type d’étude', pico.studyDesign],
+                ] as const
+              ).map(([k, label, value]) => (
+                <div key={k}>
+                  <dt>
+                    <span className="nl-pico-key">{k}</span> {label}
+                  </dt>
+                  <dd>{value || <span className="muted">—</span>}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+
+          <div className="stack nl-concepts">
+            {concepts.map((c, i) => (
+              <div key={`${c.name}-${i}`} className="nl-concept">
+                <div className="nl-concept-head">
+                  <strong>{c.name}</strong>
+                  <span className="small secondary">{ROLE_LABELS[c.role]}</span>
+                  <span className="spacer" />
+                  <span className="small tabular">{countLabel(perConcept.get(c.name))} articles</span>
+                  <button type="button" className="btn-sm btn-quiet" onClick={() => removeConcept(i)}>
+                    Retirer le concept
+                  </button>
+                </div>
+                <TermChips label="MeSH" kind="mesh" terms={c.mesh} onChange={(mesh) => editConcept(i, { mesh })} />
+                <TermChips label="Texte libre [tiab]" kind="tiab" terms={c.freeText} onChange={(freeText) => editConcept(i, { freeText })} />
+              </div>
+            ))}
+          </div>
+
+          <div className="field" style={{ marginBottom: 0 }}>
+            <label htmlFor={equationId}>Équation PubMed (modifiable)</label>
+            <textarea
+              id={equationId}
+              className="mono"
+              rows={5}
+              maxLength={4000}
+              value={equation}
+              onChange={(e) => {
+                setEquation(e.target.value);
+                setStale(true);
+              }}
+            />
+            <div className="field-hint">
+              Les années ne figurent pas dans l’équation : elles sont transmises à PubMed à part et consignées au journal.
+              Retoucher une puce reconstruit l’équation à partir des blocs.
+            </div>
+          </div>
+
+          {strategy.rationale && (
+            <p className="small secondary nl-rationale">
+              <strong>Pourquoi cette équation :</strong> {strategy.rationale}
+            </p>
+          )}
+
+          <div className="row">
+            <button type="button" disabled={counting || !equation.trim()} onClick={() => void recount()}>
+              {counting ? 'Comptage…' : 'Recalculer le nombre'}
+            </button>
+            <button type="button" className="btn-primary" disabled={running || !equation.trim()} onClick={launch}>
+              {running ? `Recherche en cours… ${elapsed} s` : 'Lancer la recherche'}
+            </button>
+            <button type="button" className="btn-quiet" onClick={() => onEditAsExpert(equation)}>
+              Ouvrir dans l’équation experte
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

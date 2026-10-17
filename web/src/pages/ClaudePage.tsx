@@ -86,6 +86,10 @@ export function ClaudePage() {
             {active ? 'Claude est activé' : 'Activer Claude'}
           </h1>
           <p className="sub">{active ? GUIDE_WHAT : GUIDE_INTRO}</p>
+          <p className="small secondary">
+            Sans clé, ou pour que rien ne quitte ce poste : chaque tâche peut aussi être confiée à un modèle ouvert installé
+            sur l’ordinateur. <Link to="/modeles">Modèles d’IA</Link>
+          </p>
         </div>
       </div>
 

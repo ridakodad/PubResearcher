@@ -396,6 +396,8 @@ export interface Capabilities {
     keySource: 'app' | 'env' | null;
     /** Ses quatre derniers caractères (`…a1B2`). */
     keyHint: string | null;
+    /** Qui sert l'extraction : Claude, ou un modèle local (page « Modèles d'IA »). Absent d'un serveur ancien. */
+    provider?: ModelProvider;
   };
   maxUploadBytes: number;
 }
@@ -858,4 +860,148 @@ export interface TemplateImportCommit {
   description?: string | null;
   fields: DraftField[];
   activate?: boolean;
+}
+
+/* --- recherche en langage naturel --- */
+
+/** Types d'études pour lesquels l'assistant ajoute un filtre validé (essais randomisés : filtre Cochrane). */
+export type BiblioStudyType = 'rct' | 'systematic_review' | 'observational' | 'diagnostic';
+
+/** Un concept de la question : un bloc « OU » de descripteurs MeSH et de synonymes en texte libre. */
+export interface BiblioStrategyConcept {
+  name: string;
+  role: 'population' | 'intervention' | 'comparison' | 'outcome' | 'other';
+  /** 1 = indispensable, 3 = accessoire. */
+  importance: number;
+  mesh: string[];
+  freeText: string[];
+  block: string;
+}
+
+/** Stratégie proposée par `POST /api/biblio/assistant/build`, vérifiée sur les nombres PubMed. */
+export interface BiblioStrategy {
+  question: string;
+  pico: { population: string; intervention: string; comparison: string; outcome: string; studyDesign: string };
+  concepts: BiblioStrategyConcept[];
+  equation: string;
+  filters: string[];
+  counts: { total: number | null; perConcept: { name: string; count: number | null }[] };
+  rationale: string;
+  warnings: string[];
+  model: string | null;
+  method: 'llm' | 'rules';
+}
+
+export interface BiblioStrategyRequest {
+  question: string;
+  lang?: 'fr' | 'en';
+  yearFrom?: number;
+  yearTo?: number;
+  studyTypes?: BiblioStudyType[];
+}
+
+export interface BiblioCountResult {
+  total: number | null;
+  perConcept: { name: string; count: number | null }[];
+  warnings: string[];
+}
+
+/** Lancement d'une recherche issue de l'assistant : la question et la stratégie entrent au journal. */
+export interface BiblioAssistantSearchParams extends BiblioSearchParams {
+  question?: string;
+  strategy?: BiblioStrategy;
+}
+
+// --------------------------------------------------------------- modèles d'IA (Claude ou modèle local)
+
+export type ModelTask = 'extraction' | 'form-import' | 'writing' | 'search-query';
+export type ModelProvider = 'anthropic' | 'local';
+
+export interface CatalogModel {
+  tag: string;
+  family: string;
+  downloadGb: number;
+  ramGb: number;
+  licence: string;
+  licenceNote?: string;
+  french: 'excellent' | 'bon' | 'correct';
+  note: string;
+}
+
+export interface ModelEvaluation {
+  model: string;
+  provider: ModelProvider;
+  measuredAt: string;
+  corpus: string;
+  patients: number;
+  precision: number | null;
+  recall: number | null;
+  correct: number;
+  extracted: number;
+  expected: number;
+  invalidJsonRate: number;
+  unverifiedRate: number;
+  errors: number;
+  meanLatencyMs: number;
+}
+
+export interface InstalledModel {
+  name: string;
+  size: number;
+  modifiedAt: string | null;
+  parameterSize: string | null;
+  quantization: string | null;
+}
+
+export interface ModelTaskStatus {
+  task: ModelTask;
+  label: string;
+  provider: ModelProvider;
+  /** Modèle effectivement utilisé : `claude-…` ou `ollama:<étiquette>`. */
+  model: string;
+  /** Le modèle local de la tâche (choisi, ou recommandé). */
+  localModel: string;
+  localModelChosen: string | null;
+  available: boolean;
+  installed: boolean | null;
+  recommendation: { recommended: CatalogModel; light: CatalogModel; strong: CatalogModel; why: string };
+  evaluation: ModelEvaluation | null;
+}
+
+export interface ModelsStatus {
+  ollama: {
+    reachable: boolean;
+    version: string | null;
+    installed: InstalledModel[];
+    error: string | null;
+    url: string;
+    remote: boolean;
+    warning: string | null;
+    install: { url: string; steps: { windows: string; macos: string; linux: string } };
+  };
+  anthropic: { available: boolean; keyHint: string | null };
+  pseudonymizeLocal: boolean;
+  tasks: ModelTaskStatus[];
+  catalog: CatalogModel[];
+  evaluations: Record<string, ModelEvaluation>;
+  medicalNote: string;
+}
+
+export interface ModelPullProgress {
+  status?: string;
+  total?: number;
+  completed?: number;
+  digest?: string;
+  error?: string;
+}
+
+export interface ModelTestResult {
+  task: ModelTask;
+  model: string;
+  pass: boolean;
+  latencyMs: number;
+  validJson?: boolean;
+  unverified?: number;
+  checks: { key: string; expected: unknown; got: unknown; ok: boolean }[];
+  details: string | null;
 }

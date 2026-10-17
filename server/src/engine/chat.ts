@@ -5,6 +5,7 @@ import { numberOr } from '../lib/env-check.js';
 import { clientIdentity, clientOptions, keyStore } from './api-key.js';
 import { explainProblem, explainRefusedKey, problemOf } from './anthropic-errors.js';
 import { NO_KEY_REASON } from './llm.js';
+import { ModelCallError, routeFor, streamLocalChat, taskAvailable } from './model-router.js';
 
 /**
  * Assistant de rédaction scientifique.
@@ -51,7 +52,7 @@ function getClient(): Anthropic | null {
 }
 
 /** Le modèle de l'assistant (pour chiffrer une réponse). */
-export const chatModel = (): string => model;
+export const chatModel = (): string => (routeFor('writing').provider === 'local' ? routeFor('writing').label : model);
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -176,7 +177,8 @@ export class ChatError extends Error {
 }
 
 export function chatAvailable(): boolean {
-  return getClient() !== null;
+  const route = routeFor('writing');
+  return route.provider === 'local' ? taskAvailable('writing', route) : getClient() !== null;
 }
 
 /**
@@ -191,6 +193,24 @@ export async function streamReply(
   messages: ChatMessage[],
   onChunk: (text: string) => void,
 ): Promise<ChatUsage> {
+  const route = routeFor('writing');
+  if (route.provider === 'local') {
+    if (messages.length === 0) throw new ChatError('Aucun message à traiter.', false);
+    // Modèle local : même consigne (aucun chiffre inventé, agrégats seulement), diffusée de la même façon.
+    try {
+      const { usage } = await streamLocalChat({
+        route,
+        system: buildSystemPrompt(buildCohortBrief(context)),
+        messages,
+        maxTokens,
+        onChunk,
+      });
+      return usage;
+    } catch (error) {
+      if (error instanceof ModelCallError) throw new ChatError(error.message, error.retryable);
+      throw error;
+    }
+  }
   const anthropic = getClient();
   if (!anthropic) {
     throw new ChatError(NO_KEY_REASON, false);

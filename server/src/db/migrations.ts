@@ -165,6 +165,23 @@ export const MIGRATIONS: Migration[] = [
       connection.exec('CREATE INDEX IF NOT EXISTS idx_biblio_hits_ref ON biblio_hits(ref_id)');
     },
   },
+  {
+    version: 4,
+    name: 'Revue bibliographique : question en langage naturel et stratégie générée',
+    up(connection) {
+      /*
+       * Quand l'équation a été construite par l'assistant à partir d'une question, le journal garde la question
+       * telle qu'écrite et la stratégie (PICO, concepts, nombres, modèle ou règles) : PRISMA-S demande de dire
+       * comment la stratégie a été élaborée. Colonnes facultatives : une recherche saisie à la main les laisse vides.
+       */
+      if (!hasColumn(connection, 'biblio_searches', 'nl_question')) {
+        connection.exec('ALTER TABLE biblio_searches ADD COLUMN nl_question TEXT');
+      }
+      if (!hasColumn(connection, 'biblio_searches', 'strategy')) {
+        connection.exec('ALTER TABLE biblio_searches ADD COLUMN strategy TEXT');
+      }
+    },
+  },
 ];
 
 /** Version la plus récente que ce code sait produire. */

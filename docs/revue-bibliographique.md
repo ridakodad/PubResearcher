@@ -6,6 +6,23 @@ Page **Littérature › Revue bibliographique**. Elle est indépendante des doss
 
 *(Capture : références de démonstration, tri simulé.)*
 
+
+## Chercher en langage naturel
+
+Par défaut, la carte « Nouvelle recherche » demande une **question**, pas une équation : « Chez l’adulte avec une pneumopathie communautaire, une antibiothérapie courte (≤ 5 jours) est-elle aussi efficace qu’une antibiothérapie longue ? Essais randomisés. » Le bouton **Construire la stratégie** applique les règles d’une recherche systématique (Cochrane Handbook, chapitre 4 ; PRISMA-S) :
+
+1. **Découpage PICO** : population, intervention, comparateur, critère de jugement, type d’étude. Seuls les concepts utiles entrent dans l’équation — d’ordinaire la population et l’intervention : le comparateur et le critère de jugement sont mal décrits dans les résumés, et les ajouter fait perdre des articles.
+2. **Un bloc « OU » par concept** : descripteurs MeSH (`"Pneumonia"[Mesh]`) et synonymes en texte libre, en anglais (`antibiotic*[tiab]`, `"short-course"[tiab]`, acronymes, orthographes britannique et américaine), troncature quand elle est sûre, expressions entre guillemets.
+3. **Les blocs combinés par « ET »**, plus, si demandé (case cochée ou mots de la question), un **filtre validé** de type d’étude : filtre Cochrane très sensible pour les essais randomisés, `systematic[sb]` élargi aux méta-analyses pour les revues, blocs usuels pour les études observationnelles ou diagnostiques.
+4. **Les années restent hors de l’équation** : elles sont transmises à PubMed à part (`mindate`/`maxdate`), comme pour une équation experte.
+
+Puis vient la **vérification sur les vrais nombres PubMed** (trois tours au plus) : chaque descripteur MeSH est éprouvé — s’il ne rend aucun article, il devient un terme en texte libre —, chaque bloc et l’équation entière sont comptés ; si l’équation ne rend rien, le concept le moins important est retiré ; au-delà de 5 000 articles, un avertissement propose de resserrer. Ces comptages passent par le même client E-utilities et le même limiteur de débit que les recherches (3 requêtes par seconde sans clé NCBI) : comptez quelques secondes.
+
+Le résultat s’affiche pour relecture : PICO, concepts (puces MeSH et texte libre, chacune se retire, un champ en ajoute), nombre d’articles par concept et au total, équation modifiable, raisonnement, avertissements, et la méthode — **modèle** (Claude, avec la clé de l’application ; la question passe par la pseudonymisation avant l’envoi) ou **règles** (sans clé : petit dictionnaire médical français → anglais, de moindre qualité, signalé). « Recalculer le nombre » recompte après retouche ; « Lancer la recherche » lance la passe habituelle avec cette équation. L’interrupteur **Équation experte** rend le formulaire d’avant, inchangé.
+
+**Journal (PRISMA-S)** : une recherche lancée depuis l’assistant consigne, en plus de l’équation, la **question** telle qu’écrite et la **stratégie** validée (colonnes `nl_question` et `strategy`, migration 4). L’export « stratégies de recherche » (CSV) ajoute deux colonnes : la question, et une phrase prête pour la section Méthodes — « Équation générée à partir de la question par un modèle de langage (modèle), vérifiée sur les nombres de résultats PubMed, puis relue et validée par l’utilisateur avant la recherche. »
+
+Pour les développeurs : l’appel au modèle est isolé dans `callQueryModel(system, user, jsonSchema)` (`server/src/biblio/query-builder.ts`) ; c’est le seul point à remplacer pour changer de fournisseur (modèle local…). `setQueryModelCaller()` y substitue un faux modèle dans les tests.
 ## Les sources
 
 | Source | Par où | Ce qu'elle rend | Coût |

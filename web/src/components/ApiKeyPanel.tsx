@@ -60,6 +60,9 @@ export function ApiKeyPanel({ onChange }: { onChange?: (status: ApiKeyStatus) =>
             <button type="button" className="btn-quiet" onClick={() => setEditing((v) => !v)} aria-expanded={editing}>
               J’ai déjà une clé
             </button>
+            <Link className="btn btn-quiet" to="/modeles">
+              Ou un modèle local, sans clé
+            </Link>
           </div>
           {editing && <KeyForm onSaved={saved} onCancel={() => setEditing(false)} autoFocus />}
         </div>

@@ -12,7 +12,8 @@
     "test": "node --import tsx --test test/*.test.ts",
     "demo": "tsx scripts/generate-demo.ts",
     "backup": "tsx scripts/backup.ts",
-    "restore": "tsx scripts/restore.ts"
+    "restore": "tsx scripts/restore.ts",
+    "eval:models": "tsx scripts/eval-local-models.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

@@ -519,6 +519,8 @@ Indépendante des dossiers patients. PubMed passe par les E-utilities du NCBI (g
 | `GET` | `/api/biblio/status` | — | `{ configured, maxResults, running, pubmed: { service, apiKey, email, maxRecords, window }, sources: { pubmed, scholar }, importSources, importFormats, importMaxBytes, exclusionReasons }` — `configured` : jeton Apify présent (Scholar) ; `apiKey`, `email` : booléens. Ni le jeton ni la clé n'y figurent |
 | `GET` | `/api/biblio/overview` | — | `{ counts, prisma, searches }` |
 | `POST` | `/api/biblio/searches` | `{ "query", "sources", "pubmedMax"?, "maxResults"?, "yearFrom"?, "yearTo"?, "sort"? }` | `201 { searches, counts, prisma }` |
+| `POST` | `/api/biblio/assistant/build` | `{ "question", "lang"?, "yearFrom"?, "yearTo"?, "studyTypes"? }` | `200 { question, pico, concepts, equation, filters, counts, rationale, warnings, model, method }` — rien n'est écrit |
+| `POST` | `/api/biblio/assistant/count` | `{ "equation", "blocks"?, "yearFrom"?, "yearTo"? }` | `200 { total, perConcept, warnings }` |
 | `POST` | `/api/biblio/imports` | `multipart/form-data` : `file`, `source`, `sourceLabel`?, `format`? | `201 { search, counts, prisma }` |
 | `GET` | `/api/biblio/refs` | `decision` (`pending`, `include`, `maybe`, `exclude`), `source` (une source, ou `both` : trouvées par plusieurs sources), `q`, `sort` (`added`, `recent`, `cited`), `limit` (1–1000), `offset` | `{ refs, total }` |
 | `PATCH` | `/api/biblio/refs/:id` | `{ "decision"?, "exclusionReason"?, "note"? }` | `200 { ref, counts, prisma }` |
@@ -534,6 +536,12 @@ Chaque élément de `searches` (le journal de recherche) : `id`, `kind` (`search
 | `400` | `maxResults` au-dessus du plafond ; `pubmedMax` au-delà de 9 999 ; équation absente ; année de début après l'année de fin |
 | `409` | Scholar demandé sans `APIFY_TOKEN` ; **une recherche est déjà en cours** (une seule à la fois) |
 | `502` | **Toutes** les sources ont échoué (`code: "all_sources_failed"`) : le message donne le détail de chacune, `details` porte `{ searches, counts, prisma }` ; les passes restent consignées dans le journal |
+
+**`POST /api/biblio/assistant/build`** : recherche en langage naturel. `question` de 5 à 2 000 caractères (français ou anglais ; pseudonymisée avant tout envoi à un modèle) ; `lang` : `fr` ou `en` (détectée sinon) ; `studyTypes` : parmi `rct` (filtre Cochrane très sensible), `systematic_review`, `observational`, `diagnostic` — les mots de la question (« essais randomisés »…) en ajoutent aussi ; `yearFrom`/`yearTo` servent aux comptages et **n'entrent pas dans l'équation**. Réponse : `pico` (`population`, `intervention`, `comparison`, `outcome`, `studyDesign`), `concepts` (`name`, `role`, `importance` 1–3, `mesh[]`, `freeText[]`, `block`), `equation`, `filters` (libellés), `counts` (`total`, `perConcept[{ name, count }]` ; `null` quand PubMed n'a pas répondu), `rationale`, `warnings`, `model` (nom du modèle, `null` en mode règles), `method` (`llm` ou `rules`). Les comptages viennent de PubMed (E-utilities, même limiteur de débit que les recherches) : descripteurs MeSH éprouvés, blocs et équation comptés, concept accessoire retiré si l'équation ne rend rien (3 tours au plus), avertissement au-delà de 5 000 articles. Sans modèle disponible, ou si sa réponse n'est pas conforme, l'équation est construite par règles et un avertissement le dit.
+
+**`POST /api/biblio/assistant/count`** : recompte une équation retouchée (2 à 4 000 caractères) et, en option, jusqu'à 8 blocs `{ name, block }`.
+
+**`POST /api/biblio/searches`, champs de l'assistant** : `question` (2 000 caractères au plus) et `strategy` (l'objet rendu par `/assistant/build`, retouches comprises ; `method` et `model` obligatoires ; 50 000 caractères au plus) sont facultatifs. Ils sont consignés avec la passe (`search.question`, `search.strategy`) et repris par l'export `format=searches` (colonnes « Question en langage naturel » et « Élaboration de l’équation »).
 
 **`POST /api/biblio/imports`** : export d'une autre base. `source` : `pubmed`, `embase`, `central`, `scopus`, `wos`, `lissa`, `cinahl`, `psycinfo`, `clinicaltrials`, `ictrp`, `other_db`, `other` (ou `scholar`) — elle range les notices dans la colonne PRISMA (base de données, registre, autres méthodes) ; `sourceLabel` : nom libre (120 caractères) ; `format` : `ris`, `nbib`, `bibtex`, `csv` ou `auto` (défaut). UTF-8, UTF-16 ou Windows-1252, fins de ligne Windows tolérées. `413` au-delà de `BIBLIO_IMPORT_MAX_MB` (50 Mo) ; `422` (`import_unreadable`, `import_empty`) pour un fichier illisible, de plus de 50 000 notices, ou sans aucune notice lisible — rien n'est alors consigné. L'import est consigné comme une recherche (`kind: "import"`) et passe par le même dédoublonnage.
 
@@ -569,6 +577,20 @@ Chaque utilisateur paie l'IA avec sa propre clé : elle se saisit dans l'interfa
 - `low` / `high` : la longueur du raisonnement ne se prévoit pas, d'où une fourchette. En mode `hybrid`, les règles trouvent une partie des variables d'abord : la passe coûte moins que `high`. Le calcul est décrit dans l'[architecture](architecture.md#45-modèle-de-langage-enginellmts-llm-schemats-llm-verifyts).
 
 ---
+
+## Modèles d'IA (Claude ou modèle local)
+
+Réglage du poste, **hors projet** (pas d'en-tête `X-Project` requis). Détails : [Modèles d'IA locaux](modeles-locaux.md).
+
+| Route | Effet |
+|---|---|
+| `GET /api/models/status` | Ollama joignable ? version, adresse, modèles installés (`/api/tags`), avertissement d'adresse distante ; pour chaque tâche (`extraction`, `form-import`, `writing`, `search-query`) : fournisseur, modèle (`claude-…` ou `ollama:<étiquette>`), disponibilité, recommandations, précision mesurée ; catalogue ; instructions d'installation d'Ollama |
+| `PUT /api/models/settings` | `{ tasks?: { <tâche>: { provider?: 'anthropic' \| 'local', model?: string \| null } }, pseudonymizeLocal?: boolean, ollamaUrl?: string \| null }` ; 400 pour un nom de modèle invalide ou une adresse hors du poste non autorisée |
+| `POST /api/models/pull` | `{ model }` ; réponse **NDJSON** : une ligne par étape d'Ollama (`status`, `total`, `completed`), dernière ligne `{ "status": "success" }` ou `{ "error": … }` |
+| `DELETE /api/models/:model` | Supprime un modèle d'Ollama |
+| `POST /api/models/test` | `{ task, model? }` ; fait relever 4 valeurs d'un compte rendu fictif (tâches structurées) ou une phrase (rédaction) : `{ pass, latencyMs, validJson, checks[], details }` |
+
+`GET /api/documents-capabilities` renvoie en outre `llm.provider` (`anthropic` ou `local`) : avec un modèle local, `llm.available` est vrai sans clé Anthropic, et le coût estimé (`/api/llm/estimate`) vaut 0.
 
 ## Rédaction assistée
 

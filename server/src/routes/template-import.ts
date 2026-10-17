@@ -1,12 +1,10 @@
 import path from 'node:path';
-import Anthropic from '@anthropic-ai/sdk';
 import { suggestExtraction } from '../engine/suggest-rules.js';
 import { Router } from 'express';
 import multer from 'multer';
 import { z } from 'zod';
 import { db } from '../db/index.js';
 import { FIELD_TYPES, type FieldExtraction, type FieldType } from '../domain/types.js';
-import { clientOptions, keyStore } from '../engine/api-key.js';
 import {
   CLAUDE_FORM_PROMPT,
   DEFAULT_SECTION,
@@ -20,7 +18,8 @@ import {
   type DraftField,
   type ParsedForm,
 } from '../engine/form-parser.js';
-import { LlmError, extractionModel, llmStatus } from '../engine/llm.js';
+import { LlmError } from '../engine/llm.js';
+import { generateStructured, ModelCallError, routeFor, shouldPseudonymize, taskAvailable } from '../engine/model-router.js';
 import { pseudonymize } from '../engine/pseudonymize.js';
 import { parseIsolated, readTableIsolated } from '../extract/isolation.js';
 import { limits } from '../extract/limits.js';
@@ -84,37 +83,22 @@ export function setFormModelCaller(caller: FormModelCaller | null): void {
   callerOverride = caller;
 }
 
-const claudeAvailable = (): boolean => callerOverride !== null || llmStatus().available;
+const claudeAvailable = (): boolean => callerOverride !== null || taskAvailable('form-import');
 
-const callAnthropic: FormModelCaller = async (system, user, schema) => {
-  const active = keyStore.active();
-  if (!active) throw new LlmError('Aucune clé d’API Anthropic.', false);
-  const anthropic = new Anthropic(clientOptions(active));
-  let message: Anthropic.Beta.Messages.BetaMessage;
+/** Appel par l'aiguillage : Claude ou modèle local, selon la page « Modèles d'IA ». */
+const callRouted: FormModelCaller = async (system, user, schema) => {
   try {
-    message = await anthropic.beta.messages.create({
-      model: extractionModel(),
-      max_tokens: 16_000,
-      system,
-      messages: [{ role: 'user', content: user }],
-      output_config: { format: { type: 'json_schema', schema }, effort: 'medium' },
-    } as unknown as Anthropic.Beta.Messages.MessageCreateParamsNonStreaming);
+    return (await generateStructured({ task: 'form-import', system, user, schema, maxTokens: 16_000 })).text;
   } catch (error) {
-    const raw = error instanceof Error ? error.message : String(error);
-    throw new LlmError(keyStore.redact(raw).slice(0, 200), false);
+    if (error instanceof ModelCallError) throw new LlmError(error.message.slice(0, 300), error.retryable);
+    throw error;
   }
-  if (message.stop_reason === 'refusal') throw new LlmError('requête déclinée par le modèle', false);
-  if (message.stop_reason === 'max_tokens') throw new LlmError('réponse tronquée', false);
-  return message.content
-    .filter((b): b is Anthropic.Beta.Messages.BetaTextBlock => b.type === 'text')
-    .map((b) => b.text)
-    .join('');
 };
 
 async function parseWithClaude(text: string): Promise<ParsedForm> {
-  const masked = pseudonymize(text).text;
+  const masked = callerOverride !== null || shouldPseudonymize(routeFor('form-import')) ? pseudonymize(text).text : text;
   const body = masked.length > MAX_CLAUDE_CHARS ? `${masked.slice(0, MAX_CLAUDE_CHARS)}\n[document tronqué]` : masked;
-  const raw = await (callerOverride ?? callAnthropic)(CLAUDE_FORM_PROMPT, `<document>\n${body}\n</document>`, claudeOutputSchema);
+  const raw = await (callerOverride ?? callRouted)(CLAUDE_FORM_PROMPT, `<document>\n${body}\n</document>`, claudeOutputSchema);
   let json: unknown;
   try {
     json = JSON.parse(raw);
@@ -166,7 +150,7 @@ templateImportRouter.post(
     let method: 'claude' | 'rules' = 'rules';
     const wantsClaude = req.body?.useClaude === '1' || req.body?.useClaude === 'true';
     if (wantsClaude && !claudeAvailable()) {
-      warnings.push('Claude n’est pas activé (aucune clé d’API) : analyse par règles.');
+      warnings.push('Claude n’est pas activé (aucune clé d’API) et aucun modèle local n’est choisi pour l’import de fiche : analyse par règles.');
       result = rules();
     } else if (wantsClaude) {
       try {
@@ -174,7 +158,7 @@ templateImportRouter.post(
         method = 'claude';
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
-        warnings.push(`Claude n’a pas pu analyser le document (${reason}) : analyse par règles à la place.`);
+        warnings.push(`${routeFor('form-import').provider === 'local' ? 'Le modèle local' : 'Claude'} n’a pas pu analyser le document (${reason}) : analyse par règles à la place.`);
         result = rules();
       }
     } else {

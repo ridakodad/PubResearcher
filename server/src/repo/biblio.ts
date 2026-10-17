@@ -19,6 +19,7 @@ import {
   type SearchKind,
   type SearchSort,
   type SearchStatus,
+  type GeneratedStrategy,
 } from '../biblio/types.js';
 
 /* ───────────────────────────────── Lignes ──────────────────────────────── */
@@ -75,6 +76,8 @@ interface SearchRow {
   duration_ms: number | null;
   queried_at: string;
   sent_query: string | null;
+  nl_question: string | null;
+  strategy: string | null;
   query_translation: string | null;
   file_name: string | null;
   source_label: string | null;
@@ -119,6 +122,16 @@ function toRef(row: RefRow): BiblioRef {
   };
 }
 
+/** Stratégie consignée : illisible ou sans méthode connue → `null`, plutôt qu'un objet trompeur. */
+function parseStrategy(raw: string | null): GeneratedStrategy | null {
+  if (!raw) return null;
+  const value = parseJson<unknown>(raw, null);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const v = value as Record<string, unknown>;
+  if (v.method !== 'llm' && v.method !== 'rules') return null;
+  return { ...v, method: v.method, model: typeof v.model === 'string' ? v.model : null };
+}
+
 function toSearch(row: SearchRow): BiblioSearch {
   return {
     id: row.id,
@@ -128,6 +141,8 @@ function toSearch(row: SearchRow): BiblioSearch {
     query: row.query,
     sentQuery: row.sent_query,
     queryTranslation: row.query_translation,
+    question: row.nl_question ?? null,
+    strategy: parseStrategy(row.strategy ?? null),
     fileName: row.file_name,
     sourceLabel: row.source_label,
     yearFrom: row.year_from,
@@ -157,6 +172,8 @@ export function createSearch(input: {
   actor: string;
   query: string;
   sentQuery?: string | null;
+  question?: string | null;
+  strategy?: GeneratedStrategy | null;
   fileName?: string | null;
   sourceLabel?: string | null;
   yearFrom: number | null;
@@ -167,8 +184,8 @@ export function createSearch(input: {
   const result = db
     .prepare(
       `INSERT INTO biblio_searches
-         (kind, source, actor, query, sent_query, file_name, source_label, year_from, year_to, max_results, sort, status, queried_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?)`,
+         (kind, source, actor, query, sent_query, nl_question, strategy, file_name, source_label, year_from, year_to, max_results, sort, status, queried_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?)`,
     )
     .run(
       input.kind ?? 'search',
@@ -176,6 +193,8 @@ export function createSearch(input: {
       input.actor,
       input.query,
       input.sentQuery ?? null,
+      input.question ?? null,
+      input.strategy ? JSON.stringify(input.strategy) : null,
       input.fileName ?? null,
       input.sourceLabel ?? null,
       input.yearFrom,

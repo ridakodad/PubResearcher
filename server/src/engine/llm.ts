@@ -17,6 +17,8 @@ import {
   type LlmResponse,
 } from './llm-schema.js';
 import type { SourceDoc } from './rules.js';
+import { generateStructured, isLocalModel, ModelCallError, routeFor, shouldPseudonymize, taskAvailable, type TaskRoute } from './model-router.js';
+import type { ProviderId } from './model-settings.js';
 
 /**
  * Extraction assistée par Claude.
@@ -77,6 +79,8 @@ function getClient(): Anthropic | null {
 
 export interface LlmStatus {
   available: boolean;
+  /** Qui sert l'extraction : Claude, ou un modèle local (page « Modèles d'IA »). */
+  provider: ProviderId;
   model: string;
   effort: string;
   reason: string | null;
@@ -87,9 +91,14 @@ export interface LlmStatus {
 }
 
 export function llmStatus(): LlmStatus {
-  const ready = getClient() !== null;
   const key = keyStore.status();
-  return { available: ready, model, effort, reason: ready ? null : NO_KEY_REASON, keySource: key.source, keyHint: key.hint };
+  const route = routeFor('extraction');
+  // Modèle local choisi : l'extraction assistée est disponible sans clé Anthropic (Ollama est vérifié au premier appel).
+  if (route.provider === 'local') {
+    return { available: true, provider: 'local', model: route.label, effort: 'local', reason: null, keySource: key.source, keyHint: key.hint };
+  }
+  const ready = getClient() !== null;
+  return { available: ready, provider: 'anthropic', model, effort, reason: ready ? null : NO_KEY_REASON, keySource: key.source, keyHint: key.hint };
 }
 
 /** Le modèle utilisé pour l'extraction (celui que la clé doit pouvoir interroger). */
@@ -109,7 +118,7 @@ export function estimateExtraction(
     docs.reduce((sum, doc) => sum + Math.min(doc.text.trim().length, maxCharsPerDocument), 0),
   );
   return estimateCost({
-    model,
+    model: routeFor('extraction').label,
     charsPerPatient: charsPerPatient.filter((chars) => chars > 0),
     systemChars: system.length,
     fieldCount: fields.length,
@@ -168,25 +177,31 @@ export async function extractWithLlm(
   docs: SourceDoc[],
   templateName: string,
   dictionary: TemplateField[] = fields,
+  options: { route?: TaskRoute } = {},
 ): Promise<LlmExtraction> {
-  const anthropic = getClient();
-  if (!anthropic) throw new LlmError(NO_KEY_REASON, false);
+  const route = options.route ?? routeFor('extraction');
+  const local = route.provider === 'local';
+  const anthropic = local ? null : getClient();
+  if (!local && (!anthropic || !taskAvailable('extraction', route))) throw new LlmError(NO_KEY_REASON, false);
 
   const usable = docs.filter((doc) => doc.text.trim().length > 0);
   if (fields.length === 0 || usable.length === 0) {
-    return { values: [], notFound: fields.map((f) => f.key), unverified: [], invalid: [], usage: emptyUsage(), model };
+    return { values: [], notFound: fields.map((f) => f.key), unverified: [], invalid: [], usage: emptyUsage(), model: route.label };
   }
 
   // Le modèle ne voit ni le code du dossier ni les noms de fichiers : les documents lui sont présentés sous des alias.
   // Pseudonymisation locale avant tout envoi (LLM_PSEUDONYMIZE=0 la désactive) : le modèle ne lit que le texte masqué,
   // et ses citations sont vérifiées sur ce même texte avant d'être ramenées au document d'origine.
-  const masks: (Pseudonymized | null)[] = usable.map((d) => (pseudonymizeBeforeSending ? pseudonymize(d.text) : null));
+  // Modèle local : rien ne quitte le poste, la pseudonymisation n'est faite que si l'utilisateur la demande. Les
+  // citations sont ramenées au texte d'origine de la même façon dans les deux cas.
+  const masking = pseudonymizeBeforeSending && shouldPseudonymize(route);
+  const masks: (Pseudonymized | null)[] = usable.map((d) => (masking ? pseudonymize(d.text) : null));
   const sent = usable.map((d, i) => ({ ...d, text: masks[i]?.text ?? d.text }));
 
   const subset = fields.length < dictionary.length;
   const documents = buildUserPrompt(sent.map((d, i) => ({ name: documentAlias(i), text: d.text })), maxCharsPerDocument);
-  const response = await callModel(
-    anthropic,
+  const call = local ? (s: string, u: string, sc: Record<string, unknown>) => callLocal(route, s, u, sc) : (s: string, u: string, sc: Record<string, unknown>) => callModel(anthropic!, s, u, sc);
+  const response = await call(
     buildSystemPrompt(dictionary, templateName),
     subset
       ? `Variables à relever pour ce dossier (les autres sont déjà renseignées) : ${fields.map((f) => f.key).join(', ')}.
@@ -218,6 +233,26 @@ interface ModelCall {
   parsed: LlmResponse;
   usage: LlmUsage;
   model: string;
+}
+
+/** Même consigne, même schéma, même contrôle de la réponse : seul le transport change. */
+async function callLocal(route: TaskRoute, system: string, user: string, schema: Record<string, unknown>): Promise<ModelCall> {
+  let result;
+  try {
+    // Plafond de sortie proportionné à la fiche : un petit modèle qui s'emballe (citation répétée sans fin) s'arrête
+    // vite, au lieu d'occuper le processeur pendant des minutes pour une réponse de toute façon rejetée.
+    const fieldCount = Object.keys(((schema.properties as any)?.fields?.properties as object | undefined) ?? {}).length;
+    const budget = Math.min(maxTokens, 160 * Math.max(fieldCount, 1) + 512);
+    result = await generateStructured({ task: 'extraction', route, system, user, schema, maxTokens: budget });
+  } catch (error) {
+    if (error instanceof ModelCallError) throw new LlmError(error.message, error.retryable);
+    throw error;
+  }
+  const parsed = result.json as LlmResponse;
+  if (!parsed || typeof parsed.fields !== 'object' || parsed.fields === null) {
+    throw new LlmError('Réponse du modèle inattendue : champ « fields » absent.', true);
+  }
+  return { parsed, usage: result.usage, model: result.model };
 }
 
 async function callModel(
@@ -393,7 +428,7 @@ export function interpret(
         snippet: located.snippet,
         start: located.start,
         end: located.end,
-        rule: `Claude (${servedModel})`,
+        rule: isLocalModel(servedModel) ? `Modèle local (${servedModel})` : `Claude (${servedModel})`,
       },
     });
   }

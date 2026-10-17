@@ -33,6 +33,9 @@ export const PRICES: Readonly<Record<string, ModelPrice>> = {
   'claude-fable-5-1': price(10, 50, 0.25),
 };
 
+/** Un modèle local (`ollama:…`) ne coûte rien : les estimations et les coûts affichés valent 0. */
+export const LOCAL_PRICE: ModelPrice = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+
 export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
@@ -45,6 +48,8 @@ export interface TokenUsage {
  * il prend alors le tarif de l'identifiant le plus long dont il est la déclinaison.
  */
 export function priceOf(model: string): ModelPrice | null {
+  // Modèle ouvert servi par Ollama sur ce poste : rien n'est facturé.
+  if (model.startsWith('ollama:')) return LOCAL_PRICE;
   if (PRICES[model]) return PRICES[model]!;
   const base = Object.keys(PRICES)
     .filter((id) => model.startsWith(`${id}-`))

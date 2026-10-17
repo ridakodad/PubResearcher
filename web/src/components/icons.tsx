@@ -239,6 +239,17 @@ export function IconKey(props: IconProps) {
   );
 }
 
+/** Puce : un modèle d'IA qui tourne sur ce poste. */
+export function IconChip(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="6" y="6" width="12" height="12" rx="2" />
+      <rect x="9.5" y="9.5" width="5" height="5" rx="0.5" />
+      <path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3" />
+    </Svg>
+  );
+}
+
 /** Œil : afficher en clair ce que l'on vient de coller. */
 export function IconEye(props: IconProps) {
   return (

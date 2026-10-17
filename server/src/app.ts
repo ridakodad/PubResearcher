@@ -15,9 +15,11 @@ import { analyticsRouter } from './routes/analytics.js';
 import { exportRouter } from './routes/export.js';
 import { redactionRouter } from './routes/redaction.js';
 import { biblioRouter } from './routes/biblio.js';
+import { biblioAssistantRouter } from './routes/biblio-assistant.js';
 import { llmRouter } from './routes/llm.js';
 import { importsRouter } from './routes/imports.js';
 import { projectsRouter } from './routes/projects.js';
+import { modelsRouter } from './routes/models.js';
 import { templateImportRouter } from './routes/template-import.js';
 import { projectScope } from './lib/project-scope.js';
 
@@ -82,6 +84,8 @@ export function createApp(options: AppOptions = {}): Express {
   });
 
   app.use('/api/projects', projectsRouter);
+  // Modèles d'IA : réglage du poste, commun à tous les projets.
+  app.use('/api/models', modelsRouter);
   // Tout le reste de l'API travaille dans le projet de la requête (en-tête X-Project).
   app.use('/api', projectScope);
   app.use('/api/patients', patientsRouter);
@@ -93,6 +97,8 @@ export function createApp(options: AppOptions = {}): Express {
   app.use('/api/records', recordsRouter);
   app.use('/api/analytics', analyticsRouter);
   app.use('/api/export', exportRouter);
+  // Avant `/api/biblio` : l'assistant de recherche en langage naturel a son propre routeur.
+  app.use('/api/biblio/assistant', biblioAssistantRouter);
   app.use('/api/biblio', biblioRouter);
   app.use('/api/llm', llmRouter);
   app.use('/api', redactionRouter);

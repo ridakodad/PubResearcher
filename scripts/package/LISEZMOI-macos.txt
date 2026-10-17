@@ -4,7 +4,8 @@ PubResearcher {{VERSION}} pour macOS ({{TARGET}}) — version prête à l'emploi
 Rien à installer : le moteur Node.js ({{NODE_VERSION}}) est fourni dans le dossier « app ».
 Aucune connexion internet n'est nécessaire pour démarrer, importer des dossiers ni lire
 les documents scannés (la reconnaissance de texte fonctionne hors ligne). Internet ne sert
-qu'aux fonctions qui l'annoncent : remplissage par Claude, recherche bibliographique.
+qu'aux fonctions qui l'annoncent : remplissage par Claude, recherche bibliographique,
+téléchargement d'un modèle local (§ 4 bis).
 
 Choisir la bonne archive : « mac-arm64 » pour les Mac Apple (M1, M2, M3, M4…),
 « mac-x64 » pour les Mac Intel (menu Pomme › À propos de ce Mac › « Puce » ou « Processeur »).
@@ -80,6 +81,21 @@ Choisir la bonne archive : « mac-arm64 » pour les Mac Apple (M1, M2, M3, M4…
 
   Revenir à une version plus ancienne après une mise à niveau de la base n'est pas
   possible sans la sauvegarde faite avant : l'application le dit et refuse de démarrer.
+
+
+4 bis. Facultatif : une IA qui tourne sur ce poste (sans clé, rien ne sort)
+--------------------------------------------------------------------------
+
+  L'extraction assistée, l'import de fiche et la rédaction peuvent utiliser, au lieu de
+  Claude, un modèle ouvert qui tourne sur l'ordinateur grâce au logiciel libre Ollama.
+  Aucun texte ne quitte alors le poste, et rien n'est facturé.
+
+  1. Installez Ollama : téléchargez Ollama sur https://ollama.com/download/mac, glissez-le dans Applications, ouvrez-le
+  2. Dans PubResearcher, page « Modèles d'IA » : choisissez « Modèle local » pour une
+     tâche, cliquez « Télécharger » (de 3 à 15 Go selon le modèle), puis « Tester ».
+
+  Comptez 16 Go de mémoire pour le modèle recommandé (8 Go pour la variante légère).
+  Aucun modèle n'est inclus dans cette archive : ils se téléchargent à la demande.
 
 
 5. En cas de problème

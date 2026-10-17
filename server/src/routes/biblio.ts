@@ -133,6 +133,14 @@ const searchSchema = z
     yearFrom: optionalYear,
     yearTo: optionalYear,
     sort: z.enum(['relevance', 'date']).default('relevance'),
+    /** Question en langage naturel d'où l'assistant a tiré l'équation (journal PRISMA-S). */
+    question: z.string().trim().max(2000, 'La question est limitée à 2 000 caractères.').optional(),
+    /** Stratégie proposée par l'assistant et validée par l'utilisateur : consignée telle quelle, bornée en taille. */
+    strategy: z
+      .object({ method: z.enum(['llm', 'rules']), model: z.string().max(200).nullable() })
+      .passthrough()
+      .refine((v) => JSON.stringify(v).length <= 50_000, 'Stratégie trop volumineuse pour le journal.')
+      .optional(),
   })
   .refine((v) => v.yearFrom === undefined || v.yearTo === undefined || v.yearFrom <= v.yearTo, {
     message: "L'année de début dépasse l'année de fin.",
@@ -153,6 +161,8 @@ async function runSource(source: SearchableSource, input: SearchInput): Promise<
       yearTo: input.yearTo ?? null,
       maxResults: input.pubmedMax ?? 0,
       sort: input.sort,
+      question: input.question || null,
+      strategy: input.strategy ?? null,
     });
     try {
       const result = await searchPubmed(eutilsConfig(), {
@@ -203,6 +213,8 @@ async function runSource(source: SearchableSource, input: SearchInput): Promise<
     yearTo: input.yearTo ?? null,
     maxResults: input.maxResults,
     sort: input.sort,
+    question: input.question || null,
+    strategy: input.strategy ?? null,
   });
   try {
     if (sent.query.length < 2) {

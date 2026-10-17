@@ -4,7 +4,8 @@ PubResearcher {{VERSION}} pour Linux (x86-64, glibc) — version prête à l'emp
 Rien à installer : le moteur Node.js ({{NODE_VERSION}}) est fourni dans le dossier « app ».
 Aucune connexion internet n'est nécessaire pour démarrer, importer des dossiers ni lire
 les documents scannés (la reconnaissance de texte fonctionne hors ligne). Internet ne sert
-qu'aux fonctions qui l'annoncent : remplissage par Claude, recherche bibliographique.
+qu'aux fonctions qui l'annoncent : remplissage par Claude, recherche bibliographique,
+téléchargement d'un modèle local (§ 4 bis).
 
 Distributions récentes à glibc (Ubuntu 20.04+, Debian 11+, Fedora…). Alpine (musl) :
 utilisez la version depuis les sources.
@@ -63,6 +64,21 @@ utilisez la version depuis les sources.
 
   Revenir à une version plus ancienne après une mise à niveau de la base n'est pas
   possible sans la sauvegarde faite avant : l'application le dit et refuse de démarrer.
+
+
+4 bis. Facultatif : une IA qui tourne sur ce poste (sans clé, rien ne sort)
+--------------------------------------------------------------------------
+
+  L'extraction assistée, l'import de fiche et la rédaction peuvent utiliser, au lieu de
+  Claude, un modèle ouvert qui tourne sur l'ordinateur grâce au logiciel libre Ollama.
+  Aucun texte ne quitte alors le poste, et rien n'est facturé.
+
+  1. Installez Ollama : curl -fsSL https://ollama.com/install.sh | sh   (voir https://ollama.com/download)
+  2. Dans PubResearcher, page « Modèles d'IA » : choisissez « Modèle local » pour une
+     tâche, cliquez « Télécharger » (de 3 à 15 Go selon le modèle), puis « Tester ».
+
+  Comptez 16 Go de mémoire pour le modèle recommandé (8 Go pour la variante légère).
+  Aucun modèle n'est inclus dans cette archive : ils se téléchargent à la demande.
 
 
 5. En cas de problème

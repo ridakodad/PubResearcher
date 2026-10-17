@@ -222,6 +222,19 @@ La clé sert aussitôt, sans redémarrage. Elle est **commune à l'instance** : 
 >
 > L'API réelle d'Anthropic **n'a pas été appelée** par la validation de cette version (aucune clé ni crédit ; voir le [rapport de validation](validation.md)). Le SDK est exercé contre un faux serveur HTTP — vérification de la clé, requête, réponse structurée, erreurs, masquage de la clé — et ce qui l'entoure (schéma imposé, recherche des citations, typage, tri retenues/écartées, coût) est testé. Essayez d'abord sur quelques dossiers pseudonymisés.
 
+### 4.5 bis Modèles d'IA locaux (Ollama)
+
+Chaque tâche (extraction, import de fiche, rédaction, recherche bibliographique) peut être servie par un modèle ouvert qui tourne sur le poste, via [Ollama](https://ollama.com), au lieu de Claude : page **Modèles d'IA** (`/modeles`). Ollama s'installe à part (l'outil ne l'installe pas) ; les modèles se téléchargent depuis la page. Aucun poids de modèle n'est livré dans les archives.
+
+| Variable | Défaut | Effet |
+|---|---|---|
+| `OLLAMA_HOST` | `http://127.0.0.1:11434` | Adresse d'Ollama |
+| `LOCAL_MODEL_ALLOW_REMOTE` | non | `1` : accepte une adresse hors du poste (sinon refusée, retour à 127.0.0.1) ; la page avertit et la pseudonymisation est imposée |
+| `LOCAL_MODEL_TIMEOUT_MS` | `900000` | Délai d'une réponse locale |
+| `LOCAL_MODEL_MAX_CTX` | `32768` | Contexte maximal demandé à Ollama |
+
+Réglages par tâche : `DATA_DIR/model-settings.json` ; précision mesurée (`npm run eval:models --workspace server -- <modèle>`) : `DATA_DIR/model-evaluations.json`. Tous deux hors base et hors sauvegardes. Détails, choix des modèles et mesures : [Modèles d'IA locaux](modeles-locaux.md).
+
 ### 4.6 Revue bibliographique
 
 **PubMed fonctionne sans réglage** : il passe par l'API officielle et gratuite du NCBI (E-utilities), au plus 3 requêtes par seconde (10 avec une clé). Le poste doit pouvoir joindre `eutils.ncbi.nlm.nih.gov`.

@@ -175,6 +175,10 @@ export interface BiblioSearch {
   sentQuery: string | null;
   /** Traduction de l'équation par PubMed (termes MeSH développés, dates) : la chaîne qui a vraiment tourné. */
   queryTranslation: string | null;
+  /** Question en langage naturel d'où l'assistant a tiré l'équation ; `null` pour une équation saisie à la main. */
+  question: string | null;
+  /** Stratégie proposée par l'assistant (PICO, concepts, nombres, modèle ou règles), relue puis validée par l'utilisateur. */
+  strategy: GeneratedStrategy | null;
   /** Nom du fichier importé. */
   fileName: string | null;
   /** Nom libre de la source, pour « Autre ». */
@@ -238,4 +242,11 @@ export interface BiblioPrisma {
   maybe: number;
   pending: number;
   included: number;
+}
+
+/** Ce que le journal garde de la stratégie de l'assistant : au moins la méthode et le modèle, le reste tel quel. */
+export interface GeneratedStrategy {
+  method: 'llm' | 'rules';
+  model: string | null;
+  [key: string]: unknown;
 }

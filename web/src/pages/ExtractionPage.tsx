@@ -111,6 +111,10 @@ export function ExtractionPage() {
   if (!overview) return <LoadingPanel />;
 
   const llmReady = capabilities?.llm.available ?? false;
+  // Le modèle qui sert l'extraction : Claude, ou un modèle local choisi sur la page « Modèles d'IA ».
+  const localEngine = capabilities?.llm.provider === 'local';
+  const engine = localEngine ? `le modèle local ${capabilities?.llm.model.replace(/^ollama:/, '') ?? ''}` : 'Claude';
+  const engineShort = localEngine ? `modèle local (${capabilities?.llm.model.replace(/^ollama:/, '') ?? ''})` : 'Claude';
   const { rows, summary, template } = overview;
 
   if (rows.length === 0) {
@@ -157,10 +161,10 @@ export function ExtractionPage() {
           >
             <option value="rules">Règles seules — gratuit, reproductible</option>
             <option value="hybrid" disabled={!llmReady}>
-              Règles puis Claude — recommandé
+              Règles puis {engineShort} — recommandé
             </option>
             <option value="llm" disabled={!llmReady}>
-              Claude seul
+              {localEngine ? `${engineShort} seul` : 'Claude seul'}
             </option>
           </select>
           <button className="btn-primary" onClick={run} disabled={running}>
@@ -193,7 +197,19 @@ export function ExtractionPage() {
         />
       </div>
 
-      {(!llmReady || mode !== 'rules') && (
+      {localEngine && mode !== 'rules' && (
+        <div className="notice notice-info">
+          <IconInfo size={18} />
+          <div>
+            <strong>Extraction par {engine}, sur ce poste.</strong> Aucun coût, et aucun texte ne quitte l’ordinateur. Les
+            mêmes contrôles qu’avec Claude s’appliquent : chaque valeur doit être justifiée par une citation retrouvée
+            dans le document. Sans carte graphique, comptez de quelques secondes à quelques minutes par dossier.{' '}
+            <Link to="/modeles">Modèles d’IA</Link>
+          </div>
+        </div>
+      )}
+
+      {!localEngine && (!llmReady || mode !== 'rules') && (
         <ApiKeyPanel
           onChange={(key) => {
             // Une clé vient d'être enregistrée : on passe au mode recommandé, et l'estimation du coût s'affiche.
@@ -203,7 +219,7 @@ export function ExtractionPage() {
         />
       )}
 
-      {mode !== 'rules' && llmReady && estimate && estimate.patients > 0 && (
+      {!localEngine && mode !== 'rules' && llmReady && estimate && estimate.patients > 0 && (
         <div className="notice notice-info">
           <IconInfo size={18} />
           <div>

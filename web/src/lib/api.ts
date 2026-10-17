@@ -12,8 +12,16 @@ import type {
   BiblioSearchParams,
   BiblioSource,
   BiblioStatus,
+  BiblioStrategy,
+  BiblioStrategyRequest,
+  BiblioCountResult,
   BiblioDecision,
   Capabilities,
+  ModelPullProgress,
+  ModelProvider,
+  ModelTask,
+  ModelTestResult,
+  ModelsStatus,
   ExtractionMode,
   CompletenessField,
   DatasetRow,
@@ -337,6 +345,54 @@ export const api = {
     // Une passe sur des milliers de dossiers, ou avec un modèle, dure des minutes : pas de délai.
     post<ExtractionRunResult>('/records/extraction/run', body, { timeoutMs: 0 }),
 
+  // --------------------------------------------------------------- modèles d'IA (réglage du poste, hors projet)
+  modelsStatus: () => get<ModelsStatus>('/models/status'),
+  saveModelSettings: (body: {
+    tasks?: Partial<Record<ModelTask, { provider?: ModelProvider; model?: string | null }>>;
+    pseudonymizeLocal?: boolean;
+  }) => put<unknown>('/models/settings', body),
+  deleteModel: (model: string) => request<{ deleted: string }>(`/models/${encodeURIComponent(model)}`, { method: 'DELETE' }),
+  // Un modèle sur processeur peut mettre plusieurs minutes à répondre : pas de délai.
+  testModel: (task: ModelTask, model?: string) => post<ModelTestResult>('/models/test', model ? { task, model } : { task }, { timeoutMs: 0 }),
+  /** Téléchargement par Ollama : la progression arrive ligne à ligne (NDJSON). */
+  pullModel: async (model: string, signal: AbortSignal, onProgress: (event: ModelPullProgress) => void): Promise<void> => {
+    const res = await fetch('/api/models/pull', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model }),
+      signal,
+    });
+    if (!res.ok || !res.body) {
+      const text = await res.text().catch(() => '');
+      let message = `Téléchargement impossible (erreur ${res.status}).`;
+      try {
+        message = (JSON.parse(text) as { error?: string }).error ?? message;
+      } catch {
+        // texte brut
+      }
+      throw new ApiError(res.status, message);
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let newline = buffer.indexOf('\n');
+      while (newline !== -1) {
+        const line = buffer.slice(0, newline).trim();
+        buffer = buffer.slice(newline + 1);
+        if (line) {
+          const event = JSON.parse(line) as ModelPullProgress;
+          if (event.error) throw new ApiError(502, event.error);
+          onProgress(event);
+        }
+        newline = buffer.indexOf('\n');
+      }
+    }
+  },
+
   // --------------------------------------------------------------- rédaction
   redactionStatus: () => get<{ available: boolean }>('/redaction/status'),
 
@@ -432,6 +488,12 @@ export const api = {
       body,
       { timeoutMs: 0 },
     ),
+  /** Recherche en langage naturel : question → stratégie (PICO, concepts, équation, nombres PubMed). Rien n'est écrit. */
+  biblioAssistantBuild: (body: BiblioStrategyRequest) =>
+    post<BiblioStrategy>('/biblio/assistant/build', body, { timeoutMs: 0 }),
+  /** Recompte une équation retouchée à la main, et chacun de ses blocs. */
+  biblioAssistantCount: (body: { equation: string; blocks?: { name: string; block: string }[]; yearFrom?: number; yearTo?: number }) =>
+    post<BiblioCountResult>('/biblio/assistant/count', body, { timeoutMs: 0 }),
   /** Importe un export d'une autre base (RIS, MEDLINE/.nbib, BibTeX, CSV), déclaré comme venant de `source`. */
   biblioImport: (file: File, source: BiblioSource, sourceLabel?: string) => {
     const form = new FormData();
