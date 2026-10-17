@@ -49,12 +49,14 @@ function openBrowser() {
   if (!openBrowserWanted) return;
   const [command, args] =
     process.platform === 'win32'
-      ? ['rundll32.exe', ['url.dll,FileProtocolHandler', url]]
+      ? // « start » du shell Windows ouvre le navigateur par défaut ; rundll32 échouait parfois sans rien dire.
+        ['cmd.exe', ['/c', 'start', '""', url]]
       : process.platform === 'darwin'
         ? ['open', [url]]
         : ['xdg-open', [url]];
   try {
-    const child = spawn(command, args, { detached: true, stdio: 'ignore' });
+    // Arguments transmis tels quels à cmd.exe : sans cela, Node réécrit le « "" » (titre vide) attendu par start.
+    const child = spawn(command, args, { detached: true, stdio: 'ignore', windowsVerbatimArguments: process.platform === 'win32' });
     child.on('error', () => console.log(`Ouvrez votre navigateur à l'adresse ${url}`));
     child.unref();
   } catch {
@@ -83,6 +85,7 @@ await import(pathToFileURL(path.join(appDir, 'server', 'dist', 'index.js')).href
 
 // Le serveur démarre dans ce processus : on attend qu'il réponde (premier lancement : création de la base).
 const deadline = Date.now() + 120_000;
+let ready = false;
 while (Date.now() < deadline) {
   if ((await probe(1000)) === 'pubresearcher') {
     console.log(
@@ -90,7 +93,17 @@ while (Date.now() < deadline) {
         `Laissez cette fenêtre ouverte tant que vous travaillez ; fermez-la (ou Ctrl+C) pour arrêter PubResearcher.\n`,
     );
     openBrowser();
+    console.log(`Si le navigateur ne s’ouvre pas, copiez cette adresse dans Chrome, Edge ou Firefox : ${url}\n`);
+    ready = true;
     break;
   }
   await sleep(300);
+}
+if (!ready) {
+  // Rien ne répond après deux minutes : on le dit, au lieu de laisser une fenêtre muette.
+  console.log(
+    `\nPubResearcher ne répond pas encore sur ${url} après deux minutes.\n` +
+      `Essayez d’ouvrir cette adresse dans votre navigateur. Si la page ne s’affiche pas, fermez cette fenêtre,\n` +
+      `relancez PubResearcher.cmd, et envoyez une capture de cette fenêtre au support.\n`,
+  );
 }

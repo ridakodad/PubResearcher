@@ -2,6 +2,10 @@
 
 Le format suit l'ordre des versions, de la plus récente à la plus ancienne ; l'historique git de ce dépôt commence à la 1.2.0, les versions antérieures n'y sont décrites qu'ici. Les numéros de version sont ceux de `package.json` ; le rapport « Méthodes et traçabilité » consigne la version qui a produit un jeu de données.
 
+## 1.8.2 — 17 octobre 2026
+
+Lancement sous Windows plus fiable : le navigateur s'ouvre par la commande `start` du système (l'ancienne méthode, `rundll32`, échouait parfois sans rien dire), l'adresse à ouvrir à la main est toujours affichée, et si l'application ne répond pas après deux minutes, la fenêtre le dit au lieu de rester muette.
+
 ## 1.8.1 — 17 octobre 2026
 
 Archives prêtes à l'emploi reconstruites avec deux correctifs : les PDF s'affichent dans tous les navigateurs (rendu pdf.js), et un dossier « cohorte » déposé ne devient plus un patient nommé « cohorte » (détail dans la 1.8.0 ci-dessous).
